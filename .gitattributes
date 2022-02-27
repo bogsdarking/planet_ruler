@@ -1,0 +1,1 @@
+planet_ruler/benchmarks/images/pexels-*_exif.jpg filter=lfs diff=lfs merge=lfs -text
