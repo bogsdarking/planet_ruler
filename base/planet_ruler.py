@@ -1,12 +1,11 @@
-from scipy.optimize import differential_evolution, minimize
+from scipy.optimize import differential_evolution, shgo, minimize
 import yaml
-import numpy as np
 import matplotlib.pyplot as plt
 import sys
 sys.path.insert(0, 'utils')
 from plot import plot_image, plot_limb
-from image import load_image, detect_limb, smooth_limb
-from fit import CostFunction, unpack_parameters, pack_parameters, LimbArcABC, LimbArc
+from image import load_image, gradient_break, StringDrop, smooth_limb
+from fit import CostFunction, unpack_parameters, pack_parameters
 from geometry import limb_arc
 
 
@@ -18,7 +17,7 @@ class PlanetObservation:
         self._plot_functions = {}
         self._cwheel = ['y', 'b', 'r', 'orange', 'pink', 'black']
 
-    def plot(self, gradient=True, show=True):
+    def plot(self, gradient=False, show=True):
         plot_image(self.image, gradient=gradient, show=False)
         for i, feature in enumerate(self.features):
             self._plot_functions[feature](self.features[feature], show=False, c=self._cwheel[i])
@@ -33,6 +32,7 @@ class LimbObservation(PlanetObservation):
     def __init__(self, image_filepath,
                  fit_config='config/basic_resection.yaml',
                  model=limb_arc,
+                 limb_detection='string-drop',
                  minimizer=differential_evolution):
         super().__init__(image_filepath)
 
@@ -40,66 +40,54 @@ class LimbObservation(PlanetObservation):
             base_config = yaml.safe_load(f)
         self.free_parameters = base_config['free_parameters']
         self.init_parameter_values = base_config['init_parameter_values']
-        # self.free_parameters = {key: self.init_parameter_values[key] for key in base_config['free_parameters']}
         self.parameter_limits = base_config['parameter_limits']
-        self.parameter_priors = base_config['parameter_priors']
+        assert limb_detection in ['gradient-break', 'string-drop']
+        self.limb_detection = limb_detection
+        self._string_drop = None
         self.minimizer = minimizer  # todo awkward to have partially implemented choice of minimizer
         self.model = model
 
         self._raw_limb = None
         self.cost_function = None
         self.fit = None
-        self.abc_multifit = None
         self.best_parameters = None
+        self.fit_results = None
 
     def detect_limb(self, **kwargs):
-        self.features['limb'] = detect_limb(self.image, **kwargs)
+        if self.limb_detection == 'string-drop':
+            if self._string_drop is None:
+                self._string_drop = StringDrop(self.image)
+            print('computing gradient force map')
+            self._string_drop.compute_force_map(tilt=0.05, smoothing_window=50)
+            print('dropping horizon string')
+            self.features['limb'] = self._string_drop.drop_string(**kwargs)
+        elif self.limb_detection == 'gradient-break':
+            self.features['limb'] = gradient_break(self.image, **kwargs)
+
         self._raw_limb = self.features['limb'].copy()
         self._plot_functions['limb'] = plot_limb
 
     def smooth_limb(self, **kwargs):
         self.features['limb'] = smooth_limb(self._raw_limb, **kwargs)
 
-    def fit_limb(self, method='oneshot', init_parameters=None,
-                 backend=None, seed=1, n_samples=40, epsilon=100000):
-        assert method in ['oneshot', 'abc-multifit']
-
+    def fit_limb(self, init_parameters=None, l2=True):
         if init_parameters is None:
-            init_parameters = self.init_parameter_values
+            init_parameters = [self.init_parameter_values[key] for key in self.free_parameters]
 
-        if method == 'oneshot':
-            # target, function, parameters, free_parameters, init_parameter_values, name='LimbArc'
-            self.fit = LimbArc(self.features['limb'], self.model,
-                               self.free_parameters, self.init_parameter_values)
-            # self.cost_function = CostFunction(self.features['limb'], self.model,
-            #                                   self.free_parameters,
-            #                                   self.init_parameter_values)
-            print('fitting oneshot...')
-            # self.fit = self.minimize(self.cost_function.cost,
-            #                          np.array([init_parameters[key] for key in self.free_parameters]),
-            #                          method='Nelder-Mead',
-            #                          bounds=[self.parameter_limits[key] for key in self.free_parameters],
-            #                          options={'maxiter': 100000})
+        self.cost_function = CostFunction(self.features['limb'], self.model,
+                                          self.free_parameters,
+                                          self.init_parameter_values,
+                                          l2=l2)
+        print('diff what now brown cow', self.minimizer)
+        # 'rand1exp' and  Best/2 supposed to be good?  best2bin best2exp?  rand1bin?
+        strategy = 'best2bin'
+        # strategy = 'rand1exp'
+        results = self.minimizer(self.cost_function.cost,
+                                 [self.parameter_limits[key] for key in self.free_parameters],
+                                 workers=4, maxiter=100000, strategy=strategy, polish=True,
+                                 init='halton', updating='deferred', disp=True, x0=init_parameters)
+        self.fit_results = results
+        self.best_parameters = unpack_parameters(results.x, self.free_parameters)
 
-            results = self.minimizer(self.fit.cost_function.cost,
-                                     [self.parameter_limits[key] for key in self.free_parameters],
-                                     workers=4, maxiter=100000, polish=True,
-                                     init='halton', updating='deferred')
-
-            self.best_parameters = unpack_parameters(results.x, self.free_parameters)
-
-        elif method == 'abc-multifit':
-            self.fit = LimbArcABC(self.features['limb'], self.model,
-                                  self.free_parameters, self.init_parameter_values,
-                                  self.parameter_limits, self.parameter_priors,
-                                  seed=seed)
-            print('generating samples...')
-            self.fit.generate_samples(backend, n_samples, n_samples_per_param=1, epsilon=epsilon)
-            print('fitting accepted parameters...')
-            self.fit.fit_accepted(epsilon=epsilon)
-            self.best_parameters = self.fit.best_parameters
-
-        # self.features['fitted_limb'] = self.cost_function.evaluate(self.best_parameters)
-        y = self.fit.forward_simulate(pack_parameters(self.best_parameters, self.free_parameters), 1)[0][0]
-        self.features['fitted_limb'] = y
+        self.features['fitted_limb'] = self.cost_function.evaluate(self.best_parameters)
         self._plot_functions['fitted_limb'] = plot_limb

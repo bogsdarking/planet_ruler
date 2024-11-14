@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.interpolate import UnivariateSpline
 
 
 def intrinsic_transform(world_coords, f=1, px=1, py=1, x0=0, y0=0):
@@ -64,7 +65,7 @@ def extrinsic_transform(world_coords,
 
 def limb_arc(x, r, h=1,
              method='resection', screen_dist=1,
-             f=0.035, px=1, py=1, x0=0, y0=0,
+             f=0.035, pxy=1, px=1, py=1, x0=0, y0=0,
              theta_x=0, theta_y=0, theta_z=0,
              origin_x=0, origin_y=0, origin_z=0
              ):
@@ -94,9 +95,13 @@ def limb_arc(x, r, h=1,
         camera_coords = extrinsic_transform(world_coords,
                                             theta_x=theta_x, theta_y=theta_y, theta_z=theta_z,
                                             origin_x=origin_x, origin_y=origin_y, origin_z=origin_z)
-        camera_coords = intrinsic_transform(camera_coords, f=f, px=px, py=py,
+        camera_coords = intrinsic_transform(camera_coords, f=f, px=pxy*px, py=pxy*py,
                                             x0=x0, y0=y0)
-
+        x_camera = camera_coords[:, 0]
         y_camera = camera_coords[:, 1]
+        # spline needed to map back to pixel coordinates (and extrapolate to fill)
+        order = np.argsort(x_camera)  # spline requires monotonic increase
+        interp = UnivariateSpline(x_camera[order], y_camera[order])
+        y_camera = interp(x)
 
     return y_camera
