@@ -24,6 +24,8 @@ we save as pixels _really_ matters to what result we get. The current solution I
 I look for the planet dimensions. Unfortunately this is a fairly degenerate system and is therefore quite sensitive to the priors you put on said parameters (in English, 
 the results are not stable). But hey, it's still a fun idea.
 
+Check out [this notebook](https://github.com/bogsdarking/planet-ruler/blob/39b4bf0ae97b40e8936090acdab3ddfc523a98ac/notebooks/limb_demo-pluto-lite.ipynb) for a tour.
+
 # Where can I learn more?
 
 Here are a few references I used:
