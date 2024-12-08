@@ -2,7 +2,25 @@ import numpy as np
 from scipy.interpolate import UnivariateSpline
 
 
+def horizon_distance(r: float,
+                     h: float):
+    return r * np.arctan(np.sqrt(2 * r * h) / r)
+
+
 def intrinsic_transform(world_coords, f=1, px=1, py=1, x0=0, y0=0):
+    """
+    Transform from camera coordinates into
+
+    Args:
+        world_coords (np.ndarray):
+        f (float):
+        px (float):
+        py (float)
+        x0 (float):
+        y0 (float):
+    Returns:
+        playlist_ids (pd.DataFrame)
+    """
     Mi = np.array([
         [float(f)/px, 0, x0, 0],
         [0, float(f)/py, y0, 0],
@@ -101,7 +119,9 @@ def limb_arc(x, r, h=1,
         y_camera = camera_coords[:, 1]
         # spline needed to map back to pixel coordinates (and extrapolate to fill)
         order = np.argsort(x_camera)  # spline requires monotonic increase
-        interp = UnivariateSpline(x_camera[order], y_camera[order])
+        # print('x', min(x_camera), max(x_camera))
+        # print('y', min(y_camera), max(y_camera))
+        interp = UnivariateSpline(x_camera[order], y_camera[order]) #, ext='zeros') # ext='const')
         y_camera = interp(x)
 
     return y_camera
