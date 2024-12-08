@@ -2,10 +2,12 @@ free_parameters:
   - r
   - h
   - f
-  - py
+  - pxy
+  - x0
   - y0
   - theta_x
   - theta_z
+  - origin_x
   - origin_y
 
 init_parameter_values:

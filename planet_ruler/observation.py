@@ -1,12 +1,12 @@
 from scipy.optimize import differential_evolution, shgo, minimize
 import yaml
+import numpy as np
+import logging
 import matplotlib.pyplot as plt
-import sys
-sys.path.insert(0, 'utils')
-from plot import plot_image, plot_limb
-from image import load_image, gradient_break, StringDrop, smooth_limb
-from fit import CostFunction, unpack_parameters, pack_parameters
-from geometry import limb_arc
+from planet_ruler.plot import plot_image, plot_limb
+from planet_ruler.image import load_image, gradient_break, StringDrop, smooth_limb, fill_nans
+from planet_ruler.fit import CostFunction, unpack_parameters, pack_parameters
+from planet_ruler.geometry import limb_arc
 
 
 class PlanetObservation:
@@ -30,17 +30,16 @@ class PlanetObservation:
 
 class LimbObservation(PlanetObservation):
     def __init__(self, image_filepath,
-                 fit_config='config/basic_resection.yaml',
+                 fit_config,
                  model=limb_arc,
                  limb_detection='string-drop',
                  minimizer=differential_evolution):
         super().__init__(image_filepath)
 
-        with open(fit_config, 'r') as f:
-            base_config = yaml.safe_load(f)
-        self.free_parameters = base_config['free_parameters']
-        self.init_parameter_values = base_config['init_parameter_values']
-        self.parameter_limits = base_config['parameter_limits']
+        self.free_parameters = None
+        self.init_parameter_values = None
+        self.parameter_limits = None
+        self.load_fit_config(fit_config)
         assert limb_detection in ['gradient-break', 'string-drop']
         self.limb_detection = limb_detection
         self._string_drop = None
@@ -52,6 +51,20 @@ class LimbObservation(PlanetObservation):
         self.fit = None
         self.best_parameters = None
         self.fit_results = None
+
+    def load_fit_config(self, fit_config):
+        with open(fit_config, 'r') as f:
+            base_config = yaml.safe_load(f)
+
+        for p, v in base_config['init_parameter_values'].items():
+            assert v >= base_config['parameter_limits'][p][0],\
+                f"Initial value for parameter {p} violates stated lower limit."
+            assert v <= base_config['parameter_limits'][p][1], \
+                f"Initial value for parameter {p} violates stated upper limit."
+
+        self.free_parameters = base_config['free_parameters']
+        self.init_parameter_values = base_config['init_parameter_values']
+        self.parameter_limits = base_config['parameter_limits']
 
     def detect_limb(self, **kwargs):
         if self.limb_detection == 'string-drop':
@@ -67,10 +80,16 @@ class LimbObservation(PlanetObservation):
         self._raw_limb = self.features['limb'].copy()
         self._plot_functions['limb'] = plot_limb
 
-    def smooth_limb(self, **kwargs):
+    def smooth_limb(self, fill_nan=True, **kwargs):
         self.features['limb'] = smooth_limb(self._raw_limb, **kwargs)
+        if fill_nan:
+            logging.info("Filling NaNs in fitted limb.")
+            self.features['limb'] = fill_nans(self.features['limb'])
 
-    def fit_limb(self, init_parameters=None, l2=True):
+    def fit_limb(self,
+                 init_parameters: dict = None,
+                 l2: bool = True,
+                 max_iter: int = 1000):
         if init_parameters is None:
             init_parameters = [self.init_parameter_values[key] for key in self.free_parameters]
 
@@ -78,16 +97,29 @@ class LimbObservation(PlanetObservation):
                                           self.free_parameters,
                                           self.init_parameter_values,
                                           l2=l2)
-        print('diff what now brown cow', self.minimizer)
         # 'rand1exp' and  Best/2 supposed to be good?  best2bin best2exp?  rand1bin?
         strategy = 'best2bin'
         # strategy = 'rand1exp'
         results = self.minimizer(self.cost_function.cost,
                                  [self.parameter_limits[key] for key in self.free_parameters],
-                                 workers=4, maxiter=100000, strategy=strategy, polish=True,
-                                 init='halton', updating='deferred', disp=True, x0=init_parameters)
+                                 workers=4, maxiter=max_iter, strategy=strategy,
+                                 polish=True,
+                                 init='sobol', # halton is another reasonable option
+                                 mutation=[0.1, 1.9],
+                                 updating='deferred', disp=True, x0=init_parameters)
         self.fit_results = results
         self.best_parameters = unpack_parameters(results.x, self.free_parameters)
 
         self.features['fitted_limb'] = self.cost_function.evaluate(self.best_parameters)
         self._plot_functions['fitted_limb'] = plot_limb
+
+    def save_limb(self,
+                  filepath: str):
+        np.save(filepath, self.features['limb'])
+
+    def load_limb(self,
+                  filepath: str):
+
+        self.features['limb'] = np.load(filepath)
+        self.features['limb'] = fill_nans(self.features['limb'])
+        self._plot_functions['limb'] = plot_limb

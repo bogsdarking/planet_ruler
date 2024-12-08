@@ -6,7 +6,15 @@ from tqdm.notebook import tqdm
 from PIL import Image
 
 
-def load_image(filepath):
+def load_image(filepath: str):
+    """
+    Load a 3 or 4-channel image from filepath into an array.
+
+    Args:
+        filepath (str): Path to image file.
+    Returns:
+        image array (np.ndarray)
+    """
     img = Image.open(filepath)
     im_arr = np.fromstring(img.tobytes(), dtype=np.uint8)
     try:
@@ -17,10 +25,34 @@ def load_image(filepath):
     return im_arr
 
 
-def gradient_break(image, log=False, y_min=0, y_max=-1,
-                   window_length=501, polyorder=1, deriv=0, delta=1):
+def gradient_break(im_arr: np.ndarray,
+                   log: bool = False,
+                   y_min: int = 0,
+                   y_max: int = -1,
+                   window_length: int = 501,
+                   polyorder: int = 1,
+                   deriv: int = 0,
+                   delta: int = 1):
+    """
+    Scan each vertical line of an image for the maximum change
+    in brightness gradient -- usually corresponds to a horizon.
 
-    grad = abs(np.gradient(image.sum(axis=2), axis=0))
+    Args:
+        im_arr (np.ndarray): Image array.
+        log (bool): Use the log(gradient). Sometimes good for
+            smoothing.
+        y_min (int): Minimum y-position to consider.
+        y_max (int): Maximum y-position to consider.
+        window_length (int): Width of window to apply smoothing
+            for each vertical. Larger means less noise but less
+            sensitivity.
+        polyorder (int): Polynomial order for smoothing.
+        deriv (int): Derivative level for smoothing.
+        delta (int): Delta for smoothing.
+    Returns:
+        image array (np.ndarray)
+    """
+    grad = abs(np.gradient(im_arr.sum(axis=2), axis=0))
 
     if log:
         grad[grad > 0] = np.log10(grad[grad > 0])
@@ -29,7 +61,7 @@ def gradient_break(image, log=False, y_min=0, y_max=-1,
         grad[grad < 0] = 0
 
     breaks = []
-    for i in range(image.shape[1]):
+    for i in range(im_arr.shape[1]):
         y = grad[:, i]
         yhat = savgol_filter(y, window_length=window_length,
                              polyorder=polyorder, deriv=deriv, delta=delta)
@@ -50,6 +82,7 @@ class StringDrop:
         self.force_map = None
         self.tilt = None
         self.smoothing_window = None
+        self.string_positions = None
 
     def transverse_force(self, x, y):
         try:
@@ -90,6 +123,7 @@ class StringDrop:
         f_spring_left = np.zeros(self.gradient.shape[1])
         f_spring_right = np.zeros(self.gradient.shape[1])
 
+        positions = []
         # todo automate steps to convergence criterion
         for _ in tqdm(range(steps)):
 
@@ -104,7 +138,9 @@ class StringDrop:
             position = np.clip(position, 0, self.gradient.shape[0]-1)
             vel += acc * t_step
             vel = np.clip(vel, -max_vel, max_vel)
+            positions.append(position)
 
+        self.string_positions = positions
         return position
 
 
@@ -131,11 +167,24 @@ def smooth_limb(y, method='moving-mean', window_length=101, polyorder=1, deriv=0
             raise AttributeError(f'polyorder {polyorder} not supported for moving-mean')
         interp = interp1d(x, binned, kind=kind, fill_value='extrapolate')
 
-        return interp(np.arange(len(y)))
+        limb = interp(np.arange(len(y)))
     elif method == 'savgol':
-        return savgol_filter(y, window_length=window_length, polyorder=polyorder,
-                             deriv=deriv, delta=delta)
+        limb =  savgol_filter(y, window_length=window_length, polyorder=polyorder,
+                              deriv=deriv, delta=delta)
     elif method == 'rolling-mean':
-        return pd.Series(y).rolling(window_length).mean()
+        limb = pd.Series(y).rolling(window_length).mean()
     elif method == 'rolling-median':
-        return pd.Series(y).rolling(window_length).median()
+        limb = pd.Series(y).rolling(window_length).median()
+    else:
+        raise ValueError(f"Did not recognize smoothing method {method}")
+
+    mask = np.isnan(limb)
+    limb[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), limb[~mask])
+
+    return limb
+
+def fill_nans(limb):
+    fixed = limb.copy()
+    mask = np.isnan(fixed)
+    fixed[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), fixed[~mask])
+    return fixed

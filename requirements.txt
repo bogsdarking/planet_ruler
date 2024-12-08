@@ -1,0 +1,10 @@
+pandas~=2.2.3
+matplotlib~=3.9.3
+numpy~=1.26.4
+tqdm~=4.67.1
+scipy~=1.14.1
+Pillow~=11.0.0
+PyYAML~=6.0.2
+
+yaml~=0.2.5
+seaborn~=0.13.2
