@@ -89,7 +89,9 @@ class LimbObservation(PlanetObservation):
     def fit_limb(self,
                  init_parameters: dict = None,
                  l2: bool = True,
-                 max_iter: int = 1000):
+                 max_iter: int = 1000,
+                 n_jobs: int = 1,
+                 seed: int = 0):
         if init_parameters is None:
             init_parameters = [self.init_parameter_values[key] for key in self.free_parameters]
 
@@ -100,13 +102,17 @@ class LimbObservation(PlanetObservation):
         # 'rand1exp' and  Best/2 supposed to be good?  best2bin best2exp?  rand1bin?
         strategy = 'best2bin'
         # strategy = 'rand1exp'
+        if n_jobs > 1:
+            updating = 'deferred'
+        else:
+            updating = 'immediate'
         results = self.minimizer(self.cost_function.cost,
                                  [self.parameter_limits[key] for key in self.free_parameters],
-                                 workers=4, maxiter=max_iter, strategy=strategy,
+                                 workers=n_jobs, maxiter=max_iter, strategy=strategy,
                                  polish=True,
                                  init='sobol', # halton is another reasonable option
                                  mutation=[0.1, 1.9],
-                                 updating='deferred', disp=True, x0=init_parameters)
+                                 updating=updating, disp=True, x0=init_parameters, seed=seed)
         self.fit_results = results
         self.best_parameters = unpack_parameters(results.x, self.free_parameters)
 
