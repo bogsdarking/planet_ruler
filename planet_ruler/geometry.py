@@ -3,7 +3,7 @@ from scipy.interpolate import UnivariateSpline
 
 
 def horizon_distance(r: float,
-                     h: float):
+                     h: float) -> float:
     return r * np.arctan(np.sqrt(2 * r * h) / r)
 
 
