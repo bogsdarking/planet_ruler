@@ -1,49 +1,108 @@
 import numpy as np
-import pandas as pd
-from matplotlib.lines import Line2D
-import seaborn as sns
-import matplotlib.pyplot as plt
+from typing import Callable
 
 
-def unpack_parameters(params, template):
+def unpack_parameters(params: list,
+                      template: list) -> dict:
+    """
+    Turn a list of parameters back into a dict.
+
+    Args:
+        params (list): Values of dictionary elements in a list.
+        template (list): Ordered list of target keys.
+
+    Returns:
+        param_dict (dict): Parameter dictionary.
+    """
     return {key: params[i] for i, key in enumerate(template)}
 
 
-def pack_parameters(params, template):
+def pack_parameters(params: dict, template: dict) -> list:
+    """
+    Turn a dict of parameters (or defaults) into a list.
+
+    Args:
+        params (dict): Parameter dictionary (subset or full keys of template).
+        template (dict): Template (full) parameter dictionary.
+
+    Returns:
+        param_list (list): List of parameter values.
+    """
     return [params[key] if key in params else template[key] for key in template]
 
 
 class CostFunction:
-    def __init__(self, target, function, free_parameters, init_parameter_values, l2=True):
+    """
+    Wrapper to simplify interface with the minimization at hand.
+
+    Args:
+        target (np.ndarray): True value(s), e.g., the actual limb position.
+        function (Callable): Function mapping parameters to target of interest.
+        free_parameters (list): List of free parameter names.
+        init_parameter_values (dict): Initial values for named parameters.
+        loss_function (str): Type of loss function, must be one of ['l2', 'l1', 'log-l1'].
+
+    Returns:
+        param_list (list): List of parameter values.
+    """
+    def __init__(
+            self,
+            target: np.ndarray,
+            function: Callable,
+            free_parameters: list,
+            init_parameter_values,
+            loss_function='l2'):
+
         self.function = function
         self.free_parameters = free_parameters
         self.init_parameter_values = init_parameter_values
         self.x = np.arange(len(target))
         self.target = target
-        self.l2 = l2
+        self.loss_function = loss_function
 
-    def cost(self, params):
+    def cost(
+            self,
+            params: np.ndarray | dict) -> float:
+        """
+        Compute prediction and use desired metric to reduce difference
+        from truth to a cost. AKA loss function.
 
-        if type(params) == np.ndarray:
-            kwargs = self.init_parameter_values.copy()
-            kwargs.update(unpack_parameters(list(params), self.free_parameters))
-        else:
-            kwargs = params
+        Args:
+            params (np.ndarray | dict): Parameter values, either packed
+                into array or as dict.
 
-        y = self.function(self.x, **kwargs)
+        Returns:
+            cost (float): Cost given parameters.
+        """
+        y = self.evaluate(params)
 
-        if self.l2:
-            cost = np.sum(pow(y - self.target, 2))
-        else:
+        if self.loss_function == 'l2':
+            cost = np.mean(pow(y - self.target, 2))
+        elif self.loss_function == 'l1':
+            abs_diff = abs(y - self.target)
+            cost = np.mean(abs_diff)
+        elif self.loss_function == 'log-l1':
             abs_diff = abs(y - self.target)
             # cost = np.sum(abs_diff) + np.sum(pow(abs_diff+1, -0.5))
-            cost = np.sum(np.log(abs_diff + 1))
-
+            cost = np.mean(np.log(abs_diff + 1))
+        else:
+            raise ValueError("Unrecognized loss function.")
 
         return cost
 
-    def evaluate(self, params):
+    def evaluate(
+            self,
+            params: np.ndarray | dict) -> np.ndarray:
+        """
+        Compute prediction given parameters.
 
+        Args:
+            params (np.ndarray | dict): Parameter values, either packed
+                into array or as dict.
+
+        Returns:
+            prediction (np.ndarray): Prediction value(s).
+        """
         kwargs = self.init_parameter_values.copy()
         if type(params) == np.ndarray:
             kwargs.update(unpack_parameters(list(params), self.free_parameters))
@@ -53,54 +112,3 @@ class CostFunction:
         y = self.function(self.x, **kwargs)
 
         return y
-
-
-def unpack_diff_evol_posteriors(observation):
-    pop = []
-    en = observation.fit_results['population_energies']
-    for i, sol in enumerate(observation.fit_results['population']):
-        mse = en[i]
-        updated = observation.init_parameter_values.copy()
-        updated.update(unpack_parameters(sol, observation.free_parameters))
-        updated['mse'] = mse
-        pop.append(updated)
-    pop = pd.DataFrame.from_records(pop)
-
-    return pop
-
-
-def plot_diff_evol_posteriors(observation, show_points=False):
-    pop = unpack_diff_evol_posteriors(observation)
-
-    for col in pop.columns:
-        if col == 'mse':
-            continue
-        if show_points:
-            plt.scatter(pop[col], pop['mse'])
-        sns.kdeplot(x=pop[col], y=pop['mse'], color='blue', warn_singular=False, label='posterior')
-        plt.axvline(observation.parameter_limits[col][0], ls='--', c='k', alpha=0.5, label='bounds')
-        plt.axvline(observation.parameter_limits[col][1], ls='--', c='k', alpha=0.5)
-        plt.title(col)
-        plt.grid(which='both', ls='--', alpha=0.2)
-        ax = plt.gca()
-        ax.set_yscale('log')
-
-        handles, labels = ax.get_legend_handles_labels()
-        h_plus, l_plus = [Line2D([0], [0], color='blue', lw=2)], ['posterior']
-        plt.legend(handles + h_plus, labels + l_plus)
-
-        plt.show()
-
-
-def package_results(observation):
-    full_fit_params = unpack_parameters(observation.fit_results.x, observation.free_parameters)
-
-    results = []
-    for key in observation.free_parameters:
-        result = {'fit value': full_fit_params[key],
-                  'initial value': observation.init_parameter_values[key],
-                  'parameter': key}
-        results.append(result)
-    results = pd.DataFrame.from_records(results)
-    results = results.set_index(['parameter'])
-    return results
