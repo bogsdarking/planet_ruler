@@ -6,7 +6,7 @@ from tqdm.notebook import tqdm
 from PIL import Image
 
 
-def load_image(filepath: str):
+def load_image(filepath: str) -> np.ndarray:
     """
     Load a 3 or 4-channel image from filepath into an array.
 
@@ -84,7 +84,21 @@ class StringDrop:
         self.smoothing_window = None
         self.string_positions = None
 
-    def transverse_force(self, x, y):
+    def transverse_force(
+            self,
+            x: int,
+            y: np.ndarray) -> float:
+        """
+        Compute the transverse (sideways) force at a position
+        on a 1-D topography.
+
+        Args:
+            x (int): Coordinate where force is computed.
+            y (np.ndarray): 1D topographic map.
+        Returns:
+            force (float): Force in the dimension given, positive
+                in the increasing index direction.
+        """
         try:
             m = np.diff(y)[x]
         except IndexError:
@@ -92,7 +106,21 @@ class StringDrop:
         theta = np.arctan(m)
         return -np.sin(theta)
 
-    def compute_force_map(self, tilt=0.05, smoothing_window=50):
+    def compute_force_map(
+            self,
+            tilt: float = 0.05,
+            smoothing_window: int = 50):
+        """
+        Compute the force a point will feel at any point
+        in a 2D topography.
+
+        Args:
+            tilt (float): Tilt of the topography. Lifts the
+                top end up by giving every column a
+                height = tilt * x component.
+            smoothing_window (int): Length of window for smoothing
+                each column.
+        """
         # skip if already run with same parameters
         if self.tilt == tilt and smoothing_window == smoothing_window:
             return None
@@ -115,9 +143,33 @@ class StringDrop:
         # back-fill smoothed image with repeats of first viable row
         self.force_map[:smoothing_window-1, :] = np.median(self.force_map[smoothing_window-1, :])
 
-    def drop_string(self, start=10, steps=150000, g=100, m=1, k=3e-1,
-                    t_step=0.03, max_acc=2, max_vel=2):
-        # todo add parameter sets by name 'safe' etc.
+    def drop_string(
+            self,
+            start: int = 10,
+            steps: int = 1000000,
+            g: float = 150,
+            m: float = 5,
+            k: float = 3e-1,
+            t_step: float = 0.01,
+            max_acc: float = 1,
+            max_vel: float = 2) -> np.ndarray:
+        """
+        Simulate the string dropping on our topography.
+
+        Args:
+            start (int): Starting y-value (from the top) for simulation.
+            steps (int): Number of time steps.
+            g (float): Force of gravity (points down into the image).
+            m (float): Density of the string (per pixel).
+            k (float): Spring constant (for string tension).
+            t_step (float): Length of time step.
+            max_acc (float): Maximum acceleration.
+            max_vel (float): Maximum velocity.
+
+        Returns:
+            position (np.ndarray): Y-locations of the string for each column.
+        """
+        # todo add parameter sets by name 'safe', 'fast', etc.
         position = np.ones(self.gradient.shape[1]) * start
         vel = np.zeros(self.gradient.shape[1])
         f_spring_left = np.zeros(self.gradient.shape[1])
@@ -144,11 +196,34 @@ class StringDrop:
         return position
 
 
-def smooth_limb(y, method='moving-mean', window_length=101, polyorder=1, deriv=0, delta=1):
+def smooth_limb(y: np.ndarray,
+                method: str = 'rolling-median',
+                window_length: int = 50,
+                polyorder: int = 1,
+                deriv: int = 0,
+                delta=1) -> np.ndarray:
+    """
+    Smooth the limb position values.
 
-    assert method in ['moving-mean', 'savgol', 'rolling-mean', 'rolling-median']
+    Args:
+        y (np.ndarray): Y-locations of the string for each column.
+        method (str): Smoothing method. Must be one of ['bin-interpolate', 'savgol',
+            'rolling-mean', 'rolling-median'].
+        window_length (int): The length of the filter window (i.e., the number of coefficients).
+            If mode is ‘interp’, window_length must be less than or equal to the size of x.
+        polyorder (float): The order of the polynomial used to fit the samples.
+            polyorder must be less than window_length.
+        deriv (int): The order of the derivative to compute. This must be a non-negative integer.
+            The default is 0, which means to filter the data without differentiating.
+        delta (int): The spacing of the samples to which the filter will be applied.
+            This is only used if deriv > 0. Default is 1.0.
 
-    if method == 'moving-mean':
+    Returns:
+        position (np.ndarray): Y-locations of the smoothed string for each column.
+    """
+    assert method in ['bin-interpolate', 'savgol', 'rolling-mean', 'rolling-median']
+
+    if method == 'bin-interpolate':
         binned = []
         x = []
         for i in range(len(y[::window_length])):
@@ -164,7 +239,7 @@ def smooth_limb(y, method='moving-mean', window_length=101, polyorder=1, deriv=0
         elif polyorder == 0:
             kind = 'nearest'
         else:
-            raise AttributeError(f'polyorder {polyorder} not supported for moving-mean')
+            raise AttributeError(f'polyorder {polyorder} not supported for bin-interpolate')
         interp = interp1d(x, binned, kind=kind, fill_value='extrapolate')
 
         limb = interp(np.arange(len(y)))
@@ -183,7 +258,16 @@ def smooth_limb(y, method='moving-mean', window_length=101, polyorder=1, deriv=0
 
     return limb
 
-def fill_nans(limb):
+def fill_nans(limb: np.ndarray) -> np.ndarray:
+    """
+    Fill NaNs for the limb position values.
+
+    Args:
+        limb (np.ndarray): Y-locations of the limb on the image.
+
+    Returns:
+        limb (np.ndarray): Y-locations of the limb on the image.
+    """
     fixed = limb.copy()
     mask = np.isnan(fixed)
     fixed[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), fixed[~mask])
