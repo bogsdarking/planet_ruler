@@ -2,44 +2,45 @@ free_parameters:
   - r
   - h
   - f
-  - pxy
-  - px
-  - x0
-  - y0
+  # - fov
+  # - x0
+  # - y0
   - theta_x
   - theta_y
   - theta_z
-  - origin_x
-  - origin_y
 
 init_parameter_values:
-  r: 750000
-  h: 12500000 # mission-stated closest approach
-  f: 0.075 # RALPH 75mm f/8.7
-  pxy: 50
-  px: 1
-  py: 1
-  x0: 0
-  y0: 0
-  theta_x: 1
-  theta_y: -0.5
+  # r: 750000
+  r: 1188000
+  h: 18000000 # https://photojournal.jpl.nasa.gov/catalog/PIA19948
+  # f: 0.075 # RALPH 75mm f/8.7
+  f: 0.6575 # RALPH/MVIC https://www.dpreview.com/articles/5293237047/nasa-new-horizons-probe-cameras-ralph
+  # n_pix_x: 3420
+  # n_pix_y: 1460
+  n_pix_x: 1000
+  n_pix_y: 800
+  num_sample: 5000
+  # fov: 5.7 # note we can't slice the image on the x-axis or this changes!
+  fov: 1.6666666666666667
+  # x0: 0
+  # y0: 0
+  theta_x: -1.5088430066577383
+  theta_y: 0
   theta_z: 0
-  origin_x: 0
-  origin_y: 1049469 # estimated given r and h
-  origin_z: 0
 
 parameter_limits:
-  r: [6.0e+05, 1.6e+06]
-  h: [1.0e+07, 1.5e+07]
-  f: [0.0749, 0.0751]
-  pxy: [1.0e-00, 3.0e+02]
-  px: [0.1, 2.0]
-  py: [0.1, 1.5]
-  x0: [-5.0e-04, 5.0e-04]
-  y0: [-5.0e-04, 5.0e-04]
-  theta_x: [-2, 2]
-  theta_y: [-1, 1]
-  theta_z: [-0.5, 0.5]
-  origin_x: [-3.0e+05, 5.0e+06]
-  origin_y: [0.5e+5, 5.0e+6]
-  origin_z: [-3.0e+05, 1.0e+06]
+  r: [6.0e+05, 1.9e+06]
+  # h: [1.0e+07, 1.5e+07]
+  h: [1.0e+07, 2.4e+07]
+  # f: [0.0749, 0.0751]
+  f: [0.650, 0.665]
+  # fov: [5.6, 5.8]
+  fov: [1.6, 1.7]
+  n_pix_x: [0, 3420]
+  n_pix_y: [0, 1460]
+  num_sample: [4000, 6000]
+  # x0: [-5.0e-03, 5.0e-03]
+  # y0: [-5.0e-03, 5.0e-03]
+  theta_x: [-1.7, -1.2]
+  theta_y: [-3.14, 3.14]
+  theta_z: [-3.14, 3.14]

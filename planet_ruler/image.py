@@ -16,12 +16,15 @@ def load_image(filepath: str) -> np.ndarray:
         image array (np.ndarray)
     """
     img = Image.open(filepath)
-    im_arr = np.fromstring(img.tobytes(), dtype=np.uint8)
-    try:
-        im_arr = im_arr.reshape((img.size[1], img.size[0], 3))
-    except ValueError:
-        # todo add capacity for auto band detection
-        im_arr = im_arr.reshape((img.size[1], img.size[0], 4))
+    im_arr = np.array(img)
+    if len(im_arr.shape) == 3:
+        im_arr = im_arr.sum(axis=-1)
+    # im_arr = np.fromstring(img.tobytes(), dtype=np.uint8)
+    # try:
+    #     im_arr = im_arr.reshape((img.size[1], img.size[0], 3))
+    # except ValueError:
+    #     # todo add capacity for auto band detection
+    #     im_arr = im_arr.reshape((img.size[1], img.size[0], 4))
     return im_arr
 
 
@@ -128,7 +131,8 @@ class StringDrop:
             self.tilt = tilt
             self.smoothing_window = smoothing_window
 
-        self.gradient = abs(np.gradient(self.image.sum(axis=2), axis=0))
+        # self.gradient = abs(np.gradient(self.image.sum(axis=2), axis=0))
+        self.gradient = abs(np.gradient(self.image, axis=0))
 
         self.topography = np.zeros_like(self.gradient)
         self.force_map = np.zeros_like(self.gradient)
@@ -150,6 +154,7 @@ class StringDrop:
             g: float = 150,
             m: float = 5,
             k: float = 3e-1,
+            friction: float = 0.00,
             t_step: float = 0.01,
             max_acc: float = 1,
             max_vel: float = 2) -> np.ndarray:
@@ -162,6 +167,7 @@ class StringDrop:
             g (float): Force of gravity (points down into the image).
             m (float): Density of the string (per pixel).
             k (float): Spring constant (for string tension).
+            friction (float): Friction coefficient.
             t_step (float): Length of time step.
             max_acc (float): Maximum acceleration.
             max_vel (float): Maximum velocity.
@@ -186,9 +192,11 @@ class StringDrop:
             acc = f_grav + f_spring_left + f_spring_right
             acc = np.clip(acc / m, -max_acc, max_acc)
 
-            position += vel*t_step + acc*0.5*t_step**2
+            distance = vel*t_step + acc*0.5*t_step**2
+            position += distance
             position = np.clip(position, 0, self.gradient.shape[0]-1)
             vel += acc * t_step
+            vel -= distance * friction
             vel = np.clip(vel, -max_vel, max_vel)
             positions.append(position)
 
