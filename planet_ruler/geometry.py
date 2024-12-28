@@ -66,9 +66,10 @@ def intrinsic_transform(camera_coords: np.ndarray,
     # todo allow for shear/etc.
 
     pixel_coords = transform @ camera_coords
-    pixel_coords = pixel_coords.T
-    pixel_coords = pixel_coords / pixel_coords[0, -1]
 
+    # rescale back to homogenous coords (last dim == 1)
+    pixel_coords = pixel_coords.T
+    pixel_coords = pixel_coords / pixel_coords[:, -1].reshape((len(pixel_coords), 1))
 
     return pixel_coords
 
