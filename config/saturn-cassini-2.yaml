@@ -1,0 +1,82 @@
+free_parameters:
+  - r
+  - h
+  - f
+  - fov
+  # - pxy
+  # - px
+  - x0
+  - y0
+  - theta_x
+  - theta_y
+  - theta_z
+  # - origin_x
+  # - origin_y
+
+init_parameter_values:
+  r: 58232000
+  # r: 70000000
+  # r: 42232000
+  # r: 54000000
+  n_pix_x: 1023
+  n_pix_y: 400
+  num_sample: 5000
+  # h: 825000000
+  # h: 866203093
+  h: 8.05e+08 # https://ciclops.org/view/5769/Saturn-Equinox-Raw-Preview-1.html
+  # h: 12.2187e+08 # radius of Titan, where it was two days before
+  f: 2.0077 # wide-angle camera (WAC) f/3.5
+  # pxy: 45000 # https://ciclops.org/view/5769/Saturn-Equinox-Raw-Preview-1.html
+  # pxy: 50635 # low r start
+  # pxy: 51378 # true r start
+  fov: 3.5 # note we can't slice the image on the x-axis or this changes!
+  # px: 1
+  # py: 1
+  x0: 0
+  y0: 0
+  # y0: -2.0e-6
+  # x0: -4.5e-7
+  theta_x: 0
+  theta_y: 0
+  theta_z: 0
+  # origin_x: 0
+  # origin_y: 6.3231518e+07
+  # origin_y: 8.61265650e+08
+  # origin_y: 861265650 # true r start
+  # origin_y: 848807987 # for low r start
+  # origin_y: 8.0526666e+07 # estimated given r and h
+  # origin_z: 0
+
+parameter_limits:
+  r: [3.0e+07, 1.0e+08]
+  n_pix_x: [1020, 1029]
+  n_pix_y: [300, 500]
+  num_sample: [4000, 6000]
+  h: [6.0e+08, 1.0e+09]
+  # h: [7.0e+08, 2.0e+09]
+  # h: [12.0e+08, 12.4e+08] # titan hypothesis
+  # f: [2.004, 2.010]
+  f: [2.0071, 2.0122]
+  # pxy: [4.0e+03, 6.0e+04]
+  fov: [3.48, 3.52]
+  # px: [0.8, 1.2]
+  # py: [0.1, 1.5]
+  # x0: [-5.0e-01, 5.0e-01]
+  # x0: [-512, 1024]
+  # y0: [-200, 400]
+  x0: [-5.0e-05, 5.0e-05]
+  y0: [-5.0e-05, 5.0e-05]
+  # theta_x: [-2, 2]
+  # theta_y: [-1, 1]
+  # theta_z: [-0.5, 0.5]
+  # theta_x: [-1.57, 1.57]
+  # theta_y: [-1.57, 1.57]
+  # theta_z: [-1.57, 1.57]
+  # theta_x: [-1.57, 1.57] # these should be auto-set by the limits on r,h
+  theta_x: [-0.21, 0.21]
+  theta_y: [-0.21, 0.21]
+  theta_z: [-3.14, 3.14]
+  # origin_x: [-5.0e+12, 5.0e+12]
+  # origin_y: [5.0e+7, 2.0e+8]
+  # origin_y: [-5.0e+07, 2.0e+09]
+  # origin_z: [-3.0e+05, 1.0e+06]

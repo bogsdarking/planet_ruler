@@ -109,6 +109,6 @@ class CostFunction:
         else:
             kwargs.update(params)
 
-        y = self.function(self.x, **kwargs)
+        y = self.function(**kwargs)
 
         return y
