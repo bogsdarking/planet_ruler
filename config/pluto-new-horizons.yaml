@@ -3,34 +3,27 @@ free_parameters:
   - h
   - f
   - fov
-  # - x0
-  # - y0
   - theta_x
   - theta_y
   - theta_z
 
 init_parameter_values:
-  # r: 750000
-  r: 1188000
+  r: 750000
+  # r: 1188000
   h: 18000000 # https://photojournal.jpl.nasa.gov/catalog/PIA19948
   f: 0.6575 # RALPH/MVIC https://www.dpreview.com/articles/5293237047/nasa-new-horizons-probe-cameras-ralph
+  fov: 5.7
   num_sample: 5000
-  fov: 5.7 # note we can't slice the image on the x-axis or this changes!
   theta_x: -1.5088430066577383
   theta_y: 0
   theta_z: 0
 
 parameter_limits:
   r: [6.0e+05, 1.9e+06]
-  # h: [1.0e+07, 1.5e+07]
   h: [1.0e+07, 2.4e+07]
-  # f: [0.0749, 0.0751]
   f: [0.650, 0.665]
   fov: [5.6, 5.8]
-  # fov: [1.6, 1.7]
   num_sample: [4000, 6000]
-  # theta_x: [-1.7, -1.2]
   theta_x: [-3.14, 3.14]
   theta_y: [-3.14, 3.14]
-  # theta_y: [-2, 2]
   theta_z: [-3.14, 3.14]

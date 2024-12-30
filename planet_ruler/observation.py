@@ -247,7 +247,7 @@ class LimbObservation(PlanetObservation):
             n_jobs (int): Number of cores to engage.
             seed (int): Random seed for minimizer.
         """
-
+        # todo allow for user-specified fov uncertainty
         inferred_parameters = {
             'n_pix_x': self.image.shape[1],
             'n_pix_y': self.image.shape[0],
@@ -261,7 +261,7 @@ class LimbObservation(PlanetObservation):
 
         current_parameter_limits = self.parameter_limits.copy()
         inferred_limits = {
-            'fov': [0.9 * current_parameter_values['fov'], 1.1 * current_parameter_values['fov']]
+            'fov': [0.99 * current_parameter_values['fov'], 1.01 * current_parameter_values['fov']]
         }
         current_parameter_limits.update(inferred_limits)
         logging.debug("Overriding limits on fov to account for image sub-selection.")
