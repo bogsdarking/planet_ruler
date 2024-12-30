@@ -48,4 +48,3 @@ def plot_limb(
     plt.scatter(np.arange(len(y)), y, c=c, s=s, alpha=alpha)
     if show:
         plt.show()
-    

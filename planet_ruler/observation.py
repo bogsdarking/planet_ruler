@@ -234,7 +234,6 @@ class LimbObservation(PlanetObservation):
             self.features['limb'] = fill_nans(self.features['limb'])
 
     def fit_limb(self,
-                 init_parameters: dict = None,
                  loss_function: str = 'l2',
                  max_iter: int = 1000,
                  n_jobs: int = 1,
@@ -243,18 +242,34 @@ class LimbObservation(PlanetObservation):
         Fit the current limb using minimizer of choice.
 
         Args:
-            init_parameters (dict): Initial values for named parameters.
             loss_function (str): Type of loss function, must be one of ['l2', 'l1', 'log-l1'].
             max_iter (int): Maximum steps used to converge.
             n_jobs (int): Number of cores to engage.
             seed (int): Random seed for minimizer.
         """
-        if init_parameters is None:
-            init_parameters = [self.init_parameter_values[key] for key in self.free_parameters]
+
+        inferred_parameters = {
+            'n_pix_x': self.image.shape[1],
+            'n_pix_y': self.image.shape[0],
+            # note these two shouldn't change when you subset an image
+            'x0': int(self.raw_image.shape[1] * 0.5),
+            'y0': int(self.raw_image.shape[0] * 0.5),
+            'fov': self.init_parameter_values['fov'] * self.image.shape[1] / self.raw_image.shape[1]
+        }
+        current_parameter_values = self.init_parameter_values.copy()
+        current_parameter_values.update(inferred_parameters)
+
+        current_parameter_limits = self.parameter_limits.copy()
+        inferred_limits = {
+            'fov': [0.9 * current_parameter_values['fov'], 1.1 * current_parameter_values['fov']]
+        }
+        current_parameter_limits.update(inferred_limits)
+        logging.debug("Overriding limits on fov to account for image sub-selection.")
+        self.parameter_limits = current_parameter_limits
 
         self.cost_function = CostFunction(self.features['limb'], limb_arc,
                                           self.free_parameters,
-                                          self.init_parameter_values,
+                                          current_parameter_values,
                                           loss_function=loss_function)
         if self.minimizer == 'differential-evolution':
             # 'rand1exp' and  Best/2 supposed to be good?  best2bin best2exp?  rand1bin?
@@ -267,15 +282,15 @@ class LimbObservation(PlanetObservation):
             self.fit_results = differential_evolution(
                 self.cost_function.cost,
                 [self.parameter_limits[key] for key in self.free_parameters],
+                x0=[current_parameter_values[key] for key in self.free_parameters],
                 workers=n_jobs, maxiter=max_iter, strategy=strategy,
                 polish=True,
                 init='sobol', # halton is another reasonable option
                 mutation=[0.1, 1.9],
-                updating=updating, disp=True, x0=init_parameters, seed=seed)
+                updating=updating, disp=True, seed=seed)
         best_parameters = unpack_parameters(self.fit_results.x, self.free_parameters)
-        init_parameters = self.init_parameter_values.copy()
-        init_parameters.update(best_parameters)
-        self.best_parameters = best_parameters
+        current_parameter_values.update(best_parameters)
+        self.best_parameters = current_parameter_values
 
         self.features['fitted_limb'] = self.cost_function.evaluate(self.best_parameters)
         self._plot_functions['fitted_limb'] = plot_limb
@@ -369,6 +384,29 @@ def plot_diff_evol_posteriors(
         plt.legend(handles + h_plus, labels + l_plus)
 
         plt.show()
+
+
+def plot_full_limb(observation: LimbObservation) -> None:
+    """
+    Display the full limb, including the section not seen in the image.
+
+    Args:
+        observation (object): Instance of LimbObservation.
+    """
+    params = observation.best_parameters.copy()
+
+    plt.imshow(observation.image)
+
+    pix = limb_arc(return_full=True, **params)
+    x = pix[:, 0]
+    y = pix[:, 1]
+    plt.scatter(x, y)
+
+    x = np.arange(observation.image.shape[1])
+    y = limb_arc(**params)
+    plt.scatter(x, y)
+
+    plt.show()
 
 
 def package_results(

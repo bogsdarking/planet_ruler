@@ -146,18 +146,15 @@ def limb_arc(r: float,
              n_pix_y: int,
              h: float = 1,
              f: float = 0.035,
-             # pxy: float = 1,
              fov: float = 1,
-             # px: float = 1,
-             # py: float = 1,
-             # x0: float = 0,
-             # y0: float = 0,
+             x0: float = 0,
+             y0: float = 0,
              theta_x: float = 0,
              theta_y: float = 0,
              theta_z: float = 0,
-             # origin_x: float = 0,
-             # origin_y: float = 0,
-             # origin_z: float = 0
+             origin_x: float = 0,
+             origin_y: float = 0,
+             origin_z: float = 0,
              return_full: bool = False,
              num_sample: int = 5000
              ) -> np.ndarray:
@@ -172,23 +169,20 @@ def limb_arc(r: float,
         h (float): Height above surface (units should match radius).
         f (float): Focal length of the camera (m).
         fov (float): Field of view, assuming square (degrees).
-        # pxy (float): The scale of both x and y pixels.
-        # px (float): The relative scale of x pixels.
-        # py (float): The relative scale of y pixels (redundant with px).
-        # x0 (float): The x-axis principle point.
-        # y0 (float): The y-axis principle point.
+        x0 (float): The x-axis principle point.
+        y0 (float): The y-axis principle point.
         theta_x (float): Rotation around the x (horizontal) axis,
             AKA pitch. (radians)
         theta_y (float): Rotation around the y (toward the limb) axis,
             AKA roll. (radians)
         theta_z (float): Rotation around the z (vertical) axis,
             AKA yaw. (radians)
-        # origin_x (float): Horizontal offset from the object in question
-        #     to the camera (m).
-        # origin_y (float): Distance from the object in question to the
-        #     camera (m).
-        # origin_z (float): Height difference from the object in question
-        #     to the camera (m).
+        origin_x (float): Horizontal offset from the object in question
+            to the camera (m).
+        origin_y (float): Distance from the object in question to the
+            camera (m).
+        origin_z (float): Height difference from the object in question
+            to the camera (m).
         return_full (bool): Return both the x and y coordinates of the limb
             in camera space. Note these will *not* be interpolated back on
             to the pixel grid.
@@ -217,19 +211,14 @@ def limb_arc(r: float,
 
     # using field of view and distance we can get linear
     # size of pixels in the projection plane
-    # todo correct fov for image subset (probably in obs)
     pxy = (
         2 * (1 / f - 1 / d) ** -1
         * np.tan(0.5 * fov * np.pi / 180)
         / n_pix_x
     )
 
-    # by default the CCD center is considered the optical axis center
-    x0 = int(n_pix_x * 0.5)
-    y0 = int(n_pix_y * 0.5)
-
     # todo allow for auto-calculation of sample density
-    # num_pts = int(np.pi / dphi)
+    # num_sample = int(np.pi / dphi)
     theta = np.ones(1) * limb_theta
     phi = np.linspace(-np.pi, np.pi, num=num_sample)
     theta, phi = np.meshgrid(theta, phi)
@@ -245,7 +234,8 @@ def limb_arc(r: float,
 
     camera_coords = extrinsic_transform(
         world_coords=world_coords,
-        theta_x=theta_x, theta_y=theta_y, theta_z=theta_z)
+        theta_x=theta_x, theta_y=theta_y, theta_z=theta_z,
+        origin_x=origin_x, origin_y=origin_y, origin_z=origin_z)
     pixel_coords = intrinsic_transform(
         camera_coords=camera_coords,
         f=f, px=pxy, py=pxy, x0=x0, y0=y0)
@@ -278,6 +268,7 @@ def limb_arc(r: float,
     # as a flat line at the signed (in y-axis) euclidean
     # distance between limb apex. this is purely to keep
     # the minimization space continuous
+
     if len(x_reg) == 0:
         arc_min = np.argmin(abs(np.gradient(y)))
         x_min = x[arc_min]
@@ -289,6 +280,8 @@ def limb_arc(r: float,
         sign = 1 - 2 * (limb_x_min < x_min)
         y_pixel = sign * np.ones_like(x_pixel) * y_proxy
     else:
-        y_pixel = np.interp(x_pixel, x_reg, y_reg)
+        # interp goes really wrong if things are not sorted
+        order = np.argsort(x_reg)
+        y_pixel = np.interp(x_pixel, x_reg[order], y_reg[order])
 
     return y_pixel
