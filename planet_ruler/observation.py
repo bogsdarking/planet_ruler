@@ -393,7 +393,10 @@ def plot_full_limb(observation: LimbObservation) -> None:
     Args:
         observation (object): Instance of LimbObservation.
     """
-    params = observation.best_parameters.copy()
+    try:
+        params = observation.best_parameters.copy()
+    except AttributeError:
+        params = observation.init_parameter_values.copy()
 
     plt.imshow(observation.image)
 
@@ -406,6 +409,25 @@ def plot_full_limb(observation: LimbObservation) -> None:
     y = limb_arc(**params)
     plt.scatter(x, y)
 
+    plt.show()
+
+
+def plot_string_evolution(observation: LimbObservation) -> None:
+    """
+    Display snapshots of a dropped string.
+
+    Args:
+        observation (object): Instance of LimbObservation.
+    """
+    string_positions = observation._string_drop.string_positions
+    n_pos = len(string_positions)
+
+    plt.imshow(observation.image)
+    steps = np.logspace(1, np.log10(n_pos - 1), num=20).astype(int)
+    for step in steps:
+        pos = string_positions[step]
+        plt.plot(np.arange(len(pos)), pos, c='yellow',
+                 alpha=step/n_pos)
     plt.show()
 
 
