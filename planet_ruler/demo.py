@@ -21,7 +21,8 @@ def load_demo_parameters(demo):
             'fit_config': '../config/pluto-new-horizons.yaml',
             'limb_config': json.load(open('../config/pluto_limb_1.json', 'r')),
             'limb_save': 'pluto_limb.npy',
-            'parameter_walkthrough': '../demo/pluto_init.md'
+            'parameter_walkthrough': '../demo/pluto_init.md',
+            'preamble': '../demo/pluto_preamble.md'
         }
     elif demo.value == 2:
         demo_parameters = {
@@ -31,7 +32,8 @@ def load_demo_parameters(demo):
             'fit_config': '../config/saturn-cassini-1.yaml',
             'limb_config': json.load(open('../config/saturn_limb_1.json', 'r')),
             'limb_save': 'saturn_limb_1.npy',
-            'parameter_walkthrough': '../demo/pluto_init.md'
+            'parameter_walkthrough': '../demo/saturn_init_1.md',
+            'preamble': '../demo/saturn_preamble_1.md'
         }
     elif demo.value == 3:
         demo_parameters = {
@@ -41,12 +43,15 @@ def load_demo_parameters(demo):
             'fit_config': '../config/saturn-cassini-2.yaml',
             'limb_config': json.load(open('../config/saturn_limb_2.json', 'r')),
             'limb_save': 'saturn_limb_2.npy',
-            'parameter_walkthrough': '../demo/pluto_init.md'
+            'parameter_walkthrough': '../demo/saturn_init_2.md',
+            'preamble': '../demo/saturn_preamble_2.md'
         }
     else:
         demo_parameters = None
     return demo_parameters
 
-def explain_init_values(init_param_md):
-    with open(init_param_md, 'r') as f:
+def display_text(filepath):
+    with open(filepath, 'r') as f:
         display(Markdown(f.read()))
+
+

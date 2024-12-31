@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.colors import LightSource
 from planet_ruler.geometry import limb_camera_angle, horizon_distance
 
 matplotlib.rcParams['figure.figsize'] = (16, 10)
@@ -151,3 +152,32 @@ def plot_3d_solution(
     if savefile is not None:
         plt.savefig(savefile, bbox_inches='tight')
     plt.show()
+
+
+def plot_topography(image: np.ndarray) -> None:
+    """
+    Display the full limb, including the section not seen in the image.
+
+    Args:
+        image (np.ndarray): Image array.
+    """
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(projection='3d')
+
+    image = np.clip(image, None, 1000)
+    n_rows, n_cols = image.shape
+    x = np.arange(n_cols)[::-1]
+    y = np.arange(n_rows)
+
+    x, y = np.meshgrid(x, y)
+
+    ls = LightSource(altdeg=30, azdeg=-15)
+    ax.plot_surface(x, y, image, lightsource=ls)
+    ax.view_init(elev=90, azim=0, roll=-90)
+
+    plt.subplots_adjust(top=1, bottom=0, right=1, left=0,
+                        hspace=0, wspace=0)
+
+    plt.axis('off')
+    plt.show()
+
