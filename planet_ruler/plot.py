@@ -85,7 +85,7 @@ def plot_3d_solution(
          None
      """
     h = h * (1. / zoom)
-    limb_theta = np.pi / 2 - limb_camera_angle(r, h)
+    limb_theta = limb_camera_angle(r, h)
     d = horizon_distance(r, h)
     horizon_radius = d * np.cos(limb_theta)
 

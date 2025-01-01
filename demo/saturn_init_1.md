@@ -28,7 +28,7 @@ To help the fit we can give initial guesses and boundaries to each of these feat
 
 - **[f]** Focal length of the camera (m)
 
-> From the stated mission parameters, the [NAC](https://ciclops.org/iss/iss.php.html) camera has a 2.00270 m focal length. Since we're pretty sure about this one, let's give it a very small (1 mm) tolerance.
+> From the stated mission parameters, the [NAC](https://ciclops.org/iss/iss.php.html) has a 2.00270 m focal length. Since we're pretty sure about this one, let's give it a very small (1 mm) tolerance.
 
 - **[fov]** The angle observed by the camera (degrees).
 
