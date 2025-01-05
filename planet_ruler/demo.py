@@ -28,7 +28,7 @@ def load_demo_parameters(demo):
         demo_parameters = {
             'target': 'Saturn',
             'true_radius': 58232,
-            'image_filepath': '../demo/images/saturn_pia21341-1041.jpg',
+            'image_filepath': '../demo/images/PIA21341.jpg',
             'fit_config': '../config/saturn-cassini-1.yaml',
             'limb_config': json.load(open('../config/saturn_limb_1.json', 'r')),
             'limb_save': 'saturn_limb_1.npy',
