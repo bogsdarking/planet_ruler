@@ -30,7 +30,7 @@ def limb_camera_angle(r: float,
         theta_c (float): Angle of camera (radians).
     """
     theta = np.arccos(r / (r + h))
-    return np.pi / 2 - theta
+    return theta
 
 
 def intrinsic_transform(camera_coords: np.ndarray,

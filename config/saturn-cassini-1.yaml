@@ -2,44 +2,27 @@ free_parameters:
   - r
   - h
   - f
-  - pxy
-  - px
-  - x0
-  - y0
+  - fov
   - theta_x
   - theta_y
   - theta_z
-  - origin_x
-  - origin_y
 
 init_parameter_values:
-  r: 58232000
+  r: 75000000
   h: 1.2e+09 # cassini altitude https://photojournal.jpl.nasa.gov/catalog/PIA21341
-  f: 2.00270 # narrow-angle camera (NAC) f/10.5
-  pxy: 7000 # stated here https://photojournal.jpl.nasa.gov/catalog/PIA21341
-  px: 1
-  py: 1
-  x0: 0
-  y0: 0
-  theta_x: 1
-  theta_y: -0.5
+  f: 2.00270 # narrow-angle camera (NAC) f/10.5asa-new-horizons-probe-cameras-ralph
+  fov: 0.35 # https://ciclops.org/iss/iss.php.html
+  num_sample: 5000
+  theta_x: -1.5244989761883725
+  theta_y: 0
   theta_z: 0
-  origin_x: 0
-  origin_y: 82472303 # estimated given r and h
-  origin_z: 0
 
 parameter_limits:
-  r: [1.0e+07, 1.4e+08]
-  h: [1.0e+08, 3.0e+09]
+  r: [1.0e+07, 1.0e+08]
+  h: [1.0e+09, 1.4e+09]
   f: [2.002, 2.003]
-  pxy: [3.0e+03, 9.0e+03]
-  px: [0.8, 1.2]
-  py: [0.1, 1.5]
-  x0: [-5.0e-04, 5.0e-04]
-  y0: [-5.0e-04, 5.0e-04]
-  theta_x: [-2, 2]
-  theta_y: [-1, 1]
-  theta_z: [-0.5, 0.5]
-  origin_x: [-1.0e+08, 1.0e+08]
-  origin_y: [5.0e+7, 2.0e+8]
-  origin_z: [-3.0e+05, 1.0e+06]
+  fov: [0.34, 0.36]
+  num_sample: [4000, 6000]
+  theta_x: [-3.14, 3.14]
+  theta_y: [-3.14, 3.14]
+  theta_z: [-3.14, 3.14]
