@@ -1,0 +1,28 @@
+free_parameters:
+  - r
+  - h
+  - f
+  - fov
+  - theta_x
+  - theta_y
+  - theta_z
+
+init_parameter_values:
+  r: 75000000
+  h: 8.05e+08 # https://ciclops.org/view/5769/Saturn-Equinox-Raw-Preview-1.html
+  f: 2.0077 # wide-angle camera (WAC) f/3.5
+  fov: 3.5
+  num_sample: 5000
+  theta_x: -1.5032869483848499
+  theta_y: 0
+  theta_z: 0
+
+parameter_limits:
+  r: [1.0e+07, 1.0e+08]
+  h: [6.0e+08, 1.0e+09]
+  f: [2.0071, 2.0122]
+  fov: [3.48, 3.52]
+  num_sample: [4000, 6000]
+  theta_x: [-3.14, 3.14]
+  theta_y: [-3.14, 3.14]
+  theta_z: [-3.14, 3.14]

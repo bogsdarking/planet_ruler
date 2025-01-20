@@ -1,3 +1,8 @@
+*.DS_Store
+*.npy
+build
+dist
+*egg-info*
 *.p
 .ipynb_checkpoints
 .idea

@@ -1,0 +1,28 @@
+free_parameters:
+  - r
+  - h
+  - f
+  - w
+  - theta_x
+  - theta_y
+  - theta_z
+
+init_parameter_values:
+  r: 8000000
+  h: 418000 # roughly average for the ISS
+  f: 0.056 # https://www.flickr.com/photos/nasa2explore/50644513538/
+  w: 0.036 # https://en.nikon.ca/p/d4/25482/overview#tech-specs
+  num_sample: 50000
+  theta_x: -0.35273952205077197
+  theta_y: 0
+  theta_z: 0
+
+parameter_limits:
+  r: [1.0e+06, 2.0e+07]
+  h: [400000, 450000]
+  f: [0.053, 0.059]
+  w: [0.034, 0.037]
+  num_sample: [10000, 600000]
+  theta_x: [-3.14, 3.14]
+  theta_y: [-3.14, 3.14]
+  theta_z: [-3.14, 3.14]

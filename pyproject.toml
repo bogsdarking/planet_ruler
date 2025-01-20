@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "planet_ruler"
+authors = [
+    {name = "Brandon Anderson", email = "bogsdarking@proton.me"}
+]
+description = "A tool to infer the radius of the planet you are sitting on."
+version = "1.0"
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "pandas",
+    "matplotlib",
+    "numpy",
+    "tqdm",
+    "scipy",
+    "Pillow",
+    "PyYAML",
+    "seaborn",
+    "ipywidgets",
+    "ipython",
+    "kagglehub",
+    "segment-anything",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/bogsdarking/planet-ruler"
+Issues = "https://github.com/bogsdarking/planet-ruler/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["planet_ruler"]

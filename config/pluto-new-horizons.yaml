@@ -2,42 +2,27 @@ free_parameters:
   - r
   - h
   - f
-  - pxy
-  - x0
-  - y0
+  - fov
   - theta_x
+  - theta_y
   - theta_z
-  - origin_x
-  - origin_y
 
 init_parameter_values:
-  r: 1188300 # pluto radius
-  h: 18000 # closest approach
-  f: 0.075 # RALPH 75mm f/8.7
-  pxy: 1.0e-05
-  px: 1
-  py: 1
-  x0: 0
-  y0: 0
-  theta_x: -3.141592653589793 # so that -y points toward planet center
+  r: 750000
+  h: 18000000 # https://photojournal.jpl.nasa.gov/catalog/PIA19948
+  f: 0.6575 # RALPH/MVIC https://www.dpreview.com/articles/5293237047/nasa-new-horizons-probe-cameras-ralph
+  fov: 5.7
+  num_sample: 5000
+  theta_x: -1.5088430066577383
   theta_y: 0
   theta_z: 0
-  origin_x: 0
-  origin_y: 207612 # distance to pluto horizon from new horizons
-  origin_z: 0
 
 parameter_limits:
-  r: [5.0e+05, 1.0e+07]
-  h: [1.78e+04, 1.82e+04]
-  f: [0.0749, 0.0751]
-  pxy: [1.0e-05, 1.0e+03]
-  px: [1.0e-05, 1]
-  py: [1.0e-05, 1]
-  x0: [-1, 1]
-  y0: [-1, 1]
-  theta_x: [-3.141592653589793, 3.141592653589793]
-  theta_y: [0, 0]
-  theta_z: [-3.141592653589793, 3.141592653589793]
-  origin_x: [-3.0e+05, 1.0e+06]
-  origin_y: [-3.0e+05, 1.0e+06]
-  origin_z: [-3.0e+05, 1.0e+06]
+  r: [6.0e+05, 1.9e+06]
+  h: [1.0e+07, 2.4e+07]
+  f: [0.650, 0.665]
+  fov: [5.64, 5.76]
+  num_sample: [4000, 6000]
+  theta_x: [-3.14, 3.14]
+  theta_y: [-3.14, 3.14]
+  theta_z: [-3.14, 3.14]
