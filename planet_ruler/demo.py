@@ -1,6 +1,6 @@
 import json
 import ipywidgets as widgets
-from IPython.display import display, Markdown, Latex
+from IPython.display import display, Markdown
 
 
 def make_dropdown():
