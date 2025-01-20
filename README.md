@@ -23,7 +23,7 @@ Yes! While it's mostly a geometry exercise, the hardest part of this problem is 
 we save as pixels _really_ matters to what result we get. The current solution I've been using is to look for a best fit for all the camera parameters at the same time 
 I look for the planet dimensions. To do this we need to have a rough idea of what the camera parameters are (focal length, etc.), otherwise the solution is quite degenerate. Fortunately, if you have some idea of _which_ camera was used, the specs are readily available online.
 
-Check out [this notebook](https://github.com/bogsdarking/planet-ruler/blob/39b4bf0ae97b40e8936090acdab3ddfc523a98ac/notebooks/limb_demo-pluto-lite.ipynb) for a tour.
+Check out [this notebook](https://github.com/bogsdarking/planet_ruler/blob/e8d0d79930746661eea1bd6673801f92263b1988/notebooks/limb_demo.ipynb) for a tour.
 
 # Where can I learn more?
 
