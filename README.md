@@ -1,6 +1,6 @@
 # PLANET RULER
 
-A tool to infer the radius of the planet you are sitting on, just by taking a picture of the horizon! At least that's the idea...
+A tool to infer the radius of the planet you are sitting on, just by taking a picture of the horizon!
 
 # How?
 
@@ -19,16 +19,15 @@ are looking at, but we generally have better tools for that available.
 
 # Does it work?
 
-Right now, sort of. The hardest part of this problem is that cameras are complicated. Exactly what happens between the horizon you are looking at and the flattened image 
+Yes! While it's mostly a geometry exercise, the hardest part of this problem is that cameras are complicated. Exactly what happens between the horizon you are looking at and the flattened image 
 we save as pixels _really_ matters to what result we get. The current solution I've been using is to look for a best fit for all the camera parameters at the same time 
-I look for the planet dimensions. Unfortunately this is a fairly degenerate system and is therefore quite sensitive to the priors you put on said parameters (in English, 
-the results are not stable). But hey, it's still a fun idea.
+I look for the planet dimensions. To do this we need to have a rough idea of what the camera parameters are (focal length, etc.), otherwise the solution is quite degenerate. Fortunately, if you have some idea of _which_ camera was used, the specs are readily available online.
 
 Check out [this notebook](https://github.com/bogsdarking/planet-ruler/blob/39b4bf0ae97b40e8936090acdab3ddfc523a98ac/notebooks/limb_demo-pluto-lite.ipynb) for a tour.
 
 # Where can I learn more?
 
-Here are a few references I used:
+Here are just a few of the references I used:
 
 - [Horizon Wiki](https://en.wikipedia.org/wiki/Horizon)
 - [earth science stack exchange thread](https://earthscience.stackexchange.com/questions/7283/how-high-must-one-be-for-the-curvature-of-the-earth-to-be-visible-to-the-eye)

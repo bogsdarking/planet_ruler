@@ -18,7 +18,12 @@ dependencies = [
     "tqdm",
     "scipy",
     "Pillow",
-    "PyYAML"
+    "PyYAML",
+    "seaborn",
+    "ipywidgets",
+    "ipython",
+    "kagglehub",
+    "segment-anything",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
