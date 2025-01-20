@@ -2,6 +2,8 @@
 
 A tool to infer the radius of the planet you are sitting on, just by taking a picture of the horizon!
 
+![image](demo/images/beach-ocean-panorama-187916.jpg)
+
 # How?
 
 Planets are round. This might not be obvious from the ground, but it becomes more so the higher you go. This is because the planet's horizon, or 'limb', 
