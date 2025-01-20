@@ -33,6 +33,55 @@ def limb_camera_angle(r: float,
     return theta
 
 
+def focal_length(w: float,
+                 fov: float) -> float:
+    """
+    The size of the CCD (inferred) based on focal length and
+    field of view.
+
+    Args:
+        w (float): detector size (float): Width of CCD (m).
+        fov (float): Field of view, assuming square (degrees).
+    Returns:
+        f (float): Focal length of the camera (m).
+    """
+
+    return w / (2 * np.tan(0.5 * fov * np.pi / 180))
+
+
+def detector_size(f: float,
+                  fov: float) -> float:
+    """
+    The size of the CCD (inferred) based on focal length and
+    field of view.
+
+    Args:
+        f (float): Focal length of the camera (m).
+        # todo really need to pick either degrees or radians
+        fov (float): Field of view, assuming square (degrees).
+    Returns:
+        detector size (float): Width of CCD (m).
+    """
+
+    return 2 * f * np.tan(fov * np.pi / 180. / 2)
+
+
+def field_of_view(f: float,
+                  w: float) -> float:
+    """
+    The size of the CCD (inferred) based on focal length and
+    field of view.
+
+    Args:
+        f (float): Focal length of the camera (m).
+        w (float): Width of detector (m).
+    Returns:
+        fov (float): Field of view, assuming square (degrees).
+    """
+
+    return 2 * np.arctan(w / (2 * f)) * 180. / np.pi
+
+
 def intrinsic_transform(camera_coords: np.ndarray,
                         f: float = 1,
                         px: float = 1,
@@ -145,8 +194,9 @@ def limb_arc(r: float,
              n_pix_x: int,
              n_pix_y: int,
              h: float = 1,
-             f: float = 0.035,
-             fov: float = 1,
+             f: float = None,
+             fov: float = None,
+             w: float = None,
              x0: float = 0,
              y0: float = 0,
              theta_x: float = 0,
@@ -169,6 +219,7 @@ def limb_arc(r: float,
         h (float): Height above surface (units should match radius).
         f (float): Focal length of the camera (m).
         fov (float): Field of view, assuming square (degrees).
+        w (float): detector size (float): Width of CCD (m).
         x0 (float): The x-axis principle point.
         y0 (float): The y-axis principle point.
         theta_x (float): Rotation around the x (horizontal) axis,
@@ -204,13 +255,23 @@ def limb_arc(r: float,
     # todo diffraction correction?
     #     r = r * 1.2
 
+    assert f is None or fov is None or w is None,\
+        "Cannot specify focal length, field of view, and detector size. Set one of them to None."
+
+    if f is None:
+        f = focal_length(w, fov)
+    if fov is None:
+        fov = field_of_view(f, w)
+    # if w is None:
+    #     w = detector_size(f, fov)
+
     # distance to limb
     d = horizon_distance(r, h)
     # angle below x-z plane that points to horizon (same in all directions)
-    limb_theta = np.arccos(r / (r + h))
+    limb_theta = limb_camera_angle(r, h)
 
     # using field of view and distance we can get linear
-    # size of pixels in the projection plane
+    # size of pixels in the projection plane (note: uses thin lens)
     pxy = (
         2 * (1 / f - 1 / d) ** -1
         * np.tan(0.5 * fov * np.pi / 180)
@@ -236,6 +297,16 @@ def limb_arc(r: float,
         world_coords=world_coords,
         theta_x=theta_x, theta_y=theta_y, theta_z=theta_z,
         origin_x=origin_x, origin_y=origin_y, origin_z=origin_z)
+
+    all_in_front = all(camera_coords[2, :] > 0)
+    all_behind = all(camera_coords[2, :] < 0)
+
+    # the limb can be both behind and in front of the camera
+    # if it is, remove the behind part, or it will cause weirdness
+    if not all_behind and not all_in_front:
+        cut = np.where((camera_coords[2, :] > 0))[0]
+        camera_coords = camera_coords[:, cut]
+
     pixel_coords = intrinsic_transform(
         camera_coords=camera_coords,
         f=f, px=pxy, py=pxy, x0=x0, y0=y0)
@@ -251,37 +322,45 @@ def limb_arc(r: float,
     x_reg = np.digitize(x, x_pixel)
 
     # get whatever actually landed in the FOV
-    y_reg = y[(x_reg > 0) & (x_reg < len(x))]
-    x_reg = x_reg[(x_reg > 0) & (x_reg < len(x))]
+    y_reg = y[(x_reg > 0) & (x_reg < n_pix_x)]
+    x_reg = x_reg[(x_reg > 0) & (x_reg < n_pix_x)]
 
-    # grab the section of the arc that is
-    # *not* backtracking in x-coords -- otherwise we get
-    # two arcs since it is a circle
-    try:
-        diff = np.diff(x_reg, append=x_reg[-1])
-        x_reg = x_reg[diff > 0]
-        y_reg = y_reg[diff > 0]
-    except IndexError:
-        pass
+    # grab half of the arc (arbitrary) when the whole
+    # circle is visible
+    if all_in_front:
+        try:
+            # diff = np.diff(x_reg, prepend=x_reg[0])
+            # x_reg = x_reg[diff < 0]
+            # y_reg = y_reg[diff < 0]
+
+            diff = np.diff(x_reg, append=x_reg[-1])
+            x_reg = x_reg[diff > 0]
+            y_reg = y_reg[diff > 0]
+        except IndexError:
+            pass
 
     # if nothing is in the FOV, draw the proposed limb
-    # as a flat line at the signed (in y-axis) euclidean
+    # as a flat line at the signed (in y-axis) Euclidean
     # distance between limb apex. this is purely to keep
     # the minimization space continuous
 
+    arc_min = np.argmin(abs(np.gradient(y)))
+    x_min = x[arc_min]
+    y_min = y[arc_min]
+    # assume the limb is centered in the image
+    limb_x_min = int(n_pix_x * 0.5)
+    limb_y_min = int(n_pix_y * 0.5)
+    y_proxy = np.sqrt((limb_x_min - x_min) ** 2 + (limb_y_min - y_min) ** 2)
+    # sign is compound but should be continuous when it enters the frame
+    sign = (1 - 2 * (limb_x_min > x_min)) * (1 - 2 * (limb_y_min > y_min))
     if len(x_reg) == 0:
-        arc_min = np.argmin(abs(np.gradient(y)))
-        x_min = x[arc_min]
-        y_min = y[arc_min]
-        # assume the limb is centered in the image
-        limb_x_min = int(n_pix_x * 0.5)
-        limb_y_min = int(n_pix_y * 0.5)
-        y_proxy = np.sqrt((limb_x_min - x_min) ** 2 + (limb_y_min - y_min) ** 2)
-        sign = 1 - 2 * (limb_x_min < x_min)
         y_pixel = sign * np.ones_like(x_pixel) * y_proxy
     else:
         # interp goes really wrong if things are not sorted
         order = np.argsort(x_reg)
-        y_pixel = np.interp(x_pixel, x_reg[order], y_reg[order])
+        y_pixel = np.interp(x_pixel, x_reg[order], y_reg[order]) #,
+                            # left=sign * y_proxy, right=sign * y_proxy)
+        # for some reason it always interps the first value... todo solve
+        # y_pixel[0] = y_pixel[1]
 
     return y_pixel

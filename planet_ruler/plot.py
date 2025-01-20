@@ -164,7 +164,7 @@ def plot_topography(image: np.ndarray) -> None:
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(projection='3d')
 
-    image = np.clip(image, None, 1000)
+    image = np.clip(image.sum(axis=-1), None, 1000)
     n_rows, n_cols = image.shape
     x = np.arange(n_cols)[::-1]
     y = np.arange(n_rows)

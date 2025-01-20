@@ -4,6 +4,8 @@ from scipy.signal import savgol_filter
 from scipy.interpolate import interp1d
 from tqdm.notebook import tqdm
 from PIL import Image
+import kagglehub
+from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
 
 
 def load_image(filepath: str) -> np.ndarray:
@@ -17,14 +19,13 @@ def load_image(filepath: str) -> np.ndarray:
     """
     img = Image.open(filepath)
     im_arr = np.array(img)
-    if len(im_arr.shape) == 3:
-        im_arr = im_arr.sum(axis=-1)
-    # im_arr = np.fromstring(img.tobytes(), dtype=np.uint8)
-    # try:
-    #     im_arr = im_arr.reshape((img.size[1], img.size[0], 3))
-    # except ValueError:
-    #     # todo add capacity for auto band detection
-    #     im_arr = im_arr.reshape((img.size[1], img.size[0], 4))
+
+    # for segmentation to work we need 3 channels
+    if len(im_arr.shape) == 2:
+        im_arr = np.dstack([im_arr] * 3)
+    if im_arr.shape[2] == 4:
+        im_arr = im_arr[:, :, :3]
+
     return im_arr
 
 
@@ -131,21 +132,20 @@ class StringDrop:
             self.tilt = tilt
             self.smoothing_window = smoothing_window
 
-        # self.gradient = abs(np.gradient(self.image.sum(axis=2), axis=0))
         self.gradient = abs(np.gradient(self.image, axis=0))
 
         self.topography = np.zeros_like(self.gradient)
-        self.force_map = np.zeros_like(self.gradient)
         for j in range(self.gradient.shape[1]):
             y = self.gradient[:, j]
             x = np.arange(len(y))
             # smooth the topography along y-axis lines, adding a minor tilt to establish movement towards basin
             # todo automate tilt level
             self.topography[:, j] = pd.Series(y).rolling(smoothing_window).mean() - tilt*x
-            for i in range(self.gradient.shape[0]):
-                self.force_map[i, j] = self.transverse_force(i, self.topography[:, j])
+        m = np.diff(self.topography, axis=0)
+        theta = np.arctan(m)
+        self.force_map = -np.sin(theta)
         # back-fill smoothed image with repeats of first viable row
-        self.force_map[:smoothing_window-1, :] = np.median(self.force_map[smoothing_window-1, :])
+        self.force_map[:smoothing_window-1, :] = np.nanmedian(self.force_map[smoothing_window-1, :])
 
     def drop_string(
             self,
@@ -202,6 +202,53 @@ class StringDrop:
 
         self.string_positions = positions
         return position
+
+
+class ImageSegmentation:
+    def __init__(self,
+                 image: np.ndarray,
+                 segmenter: str = 'segment-anything'):
+        self.image = image
+        self.segmenter = segmenter
+        self._masks = None
+
+        if segmenter == 'segment-anything':
+            self.model_path = kagglehub.model_download("metaresearch/segment-anything/pyTorch/vit-b")
+        else:
+            self.model_path = None
+            raise ValueError(f"segmenter must be one of [segment-anything]")
+
+    def limb_from_mask(self, mask: np.ndarray) -> np.ndarray:
+        limb = []
+        for y in mask.T:
+            try:
+                pt = np.arange(len(y))[np.where((y == True))][0]
+            except IndexError:
+                pt = np.nan
+            limb.append(pt)
+        limb = np.array(limb).astype(float)
+        # handling of blips (sometimes the image edges confuse segmenters)
+        # set big jumps to NaN
+        limb[abs(np.diff(limb, n=1, append=limb[-1])) > 10 * abs(
+            np.nanmean(np.diff(limb, n=1, append=limb[-1])))] = np.nan
+        # set their immediate neighbors to NaN
+        limb[np.isnan(np.diff(limb, n=1, append=limb[-1]))] = np.nan
+        nan_mask = np.isnan(limb)
+        # interpolate them back in
+        limb[nan_mask] = np.interp(np.flatnonzero(nan_mask), np.flatnonzero(~nan_mask), limb[~nan_mask])
+
+        return np.array(limb)
+
+    def segment(self) -> np.ndarray:
+        if self.segmenter == 'segment-anything':
+            sam = sam_model_registry["vit_b"](checkpoint=f"{self.model_path}/model.pth")
+            mask_generator = SamAutomaticMaskGenerator(sam)
+            masks = mask_generator.generate(self.image)
+            self._masks = masks
+            # combine first two (should be above/below)
+            mask = (1 - masks[0]['segmentation']) * masks[1]['segmentation']
+
+            return self.limb_from_mask(mask)
 
 
 def smooth_limb(y: np.ndarray,
