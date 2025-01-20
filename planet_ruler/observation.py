@@ -22,8 +22,6 @@ class PlanetObservation:
     def __init__(
             self,
             image_filepath: str):
-        # self.raw_image = load_image(image_filepath)
-        # self.image = self.raw_image.copy()
         self.image = load_image(image_filepath)
         self.features = {}
         self._plot_functions = {}
@@ -53,24 +51,6 @@ class PlanetObservation:
         if show:
             plt.show()
 
-    # def restrict_image(
-    #         self,
-    #         xmin: int = 0,
-    #         ymin: int = 0,
-    #         xmax: int = -1,
-    #         ymax: int = -1) -> None:
-    #     """
-    #     Limit the observation by pixels. Note it does not change the loaded image and can always
-    #     be updated.
-    #
-    #     Args:
-    #         xmin (int): Left pixel bound.
-    #         ymin (int): Bottom pixel bound.
-    #         xmax (int): Right pixel bound.
-    #         ymax (int): Top pixel bound.
-    #     """
-    #     self.image = self.raw_image[ymin:ymax, xmin:xmax]
-
 
 class LimbObservation(PlanetObservation):
     """
@@ -92,10 +72,8 @@ class LimbObservation(PlanetObservation):
         super().__init__(image_filepath)
 
         self.free_parameters = None
-        # self.working_free_parameters = None
         self.init_parameter_values = None
         self.parameter_limits = None
-        # self.working_parameter_limits = None
         self.load_fit_config(fit_config)
         assert limb_detection in ['gradient-break', 'string-drop', 'segmentation']
         self.limb_detection = limb_detection
@@ -249,7 +227,6 @@ class LimbObservation(PlanetObservation):
 
     def fit_limb(self,
                  loss_function: str = 'l2',
-                 # dependent_interval_z: float = 1,
                  max_iter: int = 1000,
                  n_jobs: int = 1,
                  seed: int = 0) -> None:
@@ -262,21 +239,6 @@ class LimbObservation(PlanetObservation):
             n_jobs (int): Number of cores to engage.
             seed (int): Random seed for minimizer.
         """
-        #
-
-        # self._detector_size = detector_size(self.init_parameter_values['f'],
-        #                                     self.init_parameter_values['fov'])
-
-        # if f and fov specified in init parameters
-        # approximate latent interval and mean for w
-        # fix one of them (arbitrary) in fit and introduce w
-        # if f and w are specified
-        # appx latent interval and mean for fov
-
-        # correct fov for possible image restriction
-        # restricted_view_corr = self.image.shape[1] / self.raw_image.shape[1]
-
-        # working_free_parameters = self.free_parameters.copy()
 
         inferred_parameters = {
             'n_pix_x': self.image.shape[1],
@@ -284,69 +246,10 @@ class LimbObservation(PlanetObservation):
             # note these two shouldn't change when you subset an image
             'x0': int(self.image.shape[1] * 0.5),
             'y0': int(self.image.shape[0] * 0.5),
-            # 'fov': self.init_parameter_values['fov'] * restricted_view_corr
         }
-
-        # inferred_limits = {
-        #     'fov': [
-        #         inferred_parameters['fov'][0] * restricted_view_corr,
-        #         inferred_parameters['fov'][1] * restricted_view_corr
-        #     ]
-        # }
-
-        # inferred_limits = {}
-
-        # if 'w' not in working_free_parameters:
-        #     ll, ul = appx_dependent_interval(self.parameter_limits['f'],
-        #                                      self.parameter_limits['fov'],
-        #                                      detector_size,
-        #                                      z=dependent_interval_z)
-        #     inferred_limits['w'] = [ll, ul]
-        #     inferred_parameters['w'] = (ul + ll) / 2
-        #     inferred_parameters['fov'] = None
-        #     working_free_parameters.append('w')
-        #     working_free_parameters.remove('fov')
-        # elif 'fov' not in working_free_parameters:
-        #     ll, ul = appx_dependent_interval(self.parameter_limits['f'],
-        #                                      self.parameter_limits['w'],
-        #                                      field_of_view,
-        #                                      z=dependent_interval_z)
-        #     inferred_limits['fov'] = [ll, ul]
-        #     inferred_parameters['fov'] = (ul + ll) / 2
-        #     inferred_parameters['w'] = None
-        #     working_free_parameters.append('fov')
-        #     working_free_parameters.remove('w')
-        # elif 'f' not in working_free_parameters:
-        #     ll, ul = appx_dependent_interval(self.parameter_limits['w'],
-        #                                      self.parameter_limits['fov'],
-        #                                      focal_length,
-        #                                      z=dependent_interval_z)
-        #     inferred_limits['f'] = [ll, ul]
-        #     inferred_parameters['f'] = (ul + ll) / 2
-        #     inferred_parameters['w'] = None
-        #     working_free_parameters.append('f')
-        #     working_free_parameters.remove('w')
-        # else:
-        #     raise ValueError('Cannot specify all three of (f, fov, w) in free parameters.')
 
         working_parameters = self.init_parameter_values.copy()
         working_parameters.update(inferred_parameters)
-
-        # working_parameter_limits = self.parameter_limits.copy()
-        # inferred_limits = {
-        #     # 'fov': [0.99 * current_parameter_values['fov'], 1.01 * current_parameter_values['fov']]
-        #     'fov': [
-        #         current_parameter_limits['fov'][0] * self.image.shape[1] / self.raw_image.shape[1],
-        #         current_parameter_limits['fov'][1] * self.image.shape[1] / self.raw_image.shape[1]
-        #     ]
-        # }
-        # working_parameter_limits.update(inferred_limits)
-        # logging.debug("Overriding limits on fov to account for image sub-selection.")
-        # self.parameter_limits = working_parameter_limits
-
-        # print(working_parameters)
-        # print(working_free_parameters)
-        # print(working_parameter_limits)
 
         self.cost_function = CostFunction(target=self.features['limb'],
                                           function=limb_arc,
@@ -373,8 +276,6 @@ class LimbObservation(PlanetObservation):
         best_parameters = unpack_parameters(self.fit_results.x, self.free_parameters)
         working_parameters.update(best_parameters)
         self.best_parameters = working_parameters
-        # self.working_parameter_limits = working_parameter_limits
-        # self.working_free_parameters = working_free_parameters
         self.features['fitted_limb'] = self.cost_function.evaluate(self.best_parameters)
         self._plot_functions['fitted_limb'] = plot_limb
 

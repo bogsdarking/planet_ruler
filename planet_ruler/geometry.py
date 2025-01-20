@@ -262,8 +262,6 @@ def limb_arc(r: float,
         f = focal_length(w, fov)
     if fov is None:
         fov = field_of_view(f, w)
-    # if w is None:
-    #     w = detector_size(f, fov)
 
     # distance to limb
     d = horizon_distance(r, h)
@@ -329,10 +327,6 @@ def limb_arc(r: float,
     # circle is visible
     if all_in_front:
         try:
-            # diff = np.diff(x_reg, prepend=x_reg[0])
-            # x_reg = x_reg[diff < 0]
-            # y_reg = y_reg[diff < 0]
-
             diff = np.diff(x_reg, append=x_reg[-1])
             x_reg = x_reg[diff > 0]
             y_reg = y_reg[diff > 0]
@@ -358,9 +352,5 @@ def limb_arc(r: float,
     else:
         # interp goes really wrong if things are not sorted
         order = np.argsort(x_reg)
-        y_pixel = np.interp(x_pixel, x_reg[order], y_reg[order]) #,
-                            # left=sign * y_proxy, right=sign * y_proxy)
-        # for some reason it always interps the first value... todo solve
-        # y_pixel[0] = y_pixel[1]
-
+        y_pixel = np.interp(x_pixel, x_reg[order], y_reg[order])
     return y_pixel
