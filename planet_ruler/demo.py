@@ -1,6 +1,6 @@
 import json
 import ipywidgets as widgets
-from IPython.display import display, Markdown, Latex
+from IPython.display import display, Markdown
 
 
 def make_dropdown():
@@ -45,6 +45,17 @@ def load_demo_parameters(demo):
             'limb_save': 'saturn_limb_2.npy',
             'parameter_walkthrough': '../demo/saturn_init_2.md',
             'preamble': '../demo/saturn_preamble_2.md'
+        }
+    elif demo.value == 4:
+        demo_parameters = {
+            'target': 'Earth',
+            'true_radius': 6371,
+            'image_filepath': '../demo/images/50644513538_56228a2027_o.jpg',
+            'fit_config': '../config/earth_iss_1.yaml',
+            'limb_config': json.load(open('../config/saturn_limb_2.json', 'r')),
+            'limb_save': 'earth_limb_1.npy',
+            'parameter_walkthrough': '../demo/earth_init_1.md',
+            'preamble': '../demo/earth_preamble_1.md'
         }
     else:
         demo_parameters = None

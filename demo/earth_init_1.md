@@ -21,17 +21,17 @@ To help the fit we can give initial guesses and boundaries to each of these feat
 
 - **[r]** Radius of the planet (m)
   
-> Obviously we are trying to find out **r** so we might not have much to go on here, but that doesn't mean we can't put in some reasonable bounds. We know for example that we are looking at a rocky dwarf planet that is quite spherical which is a clue to the minimum radius. I leave it to the user to do that napkin math -- today let's just put in a guess for the radius at 75,000 km -- in the ballpark of the truth (58,232 km) but not so close to give away the answer. We set the bounds loosely to 10,000-100,000 km.
+> Obviously we are trying to find out **r** so we might not have much to go on here, but that doesn't mean we can't put in some reasonable bounds. Today let's just put in a guess for the radius at 8,000 km -- in the ballpark of the truth (6,371 km) but not so close to give away the answer. We set the bounds loosely to 1,000-20,000 km.
 
 - **[h]** Height of the camera above the surface (m)
 
-> The picture was taken on NASA's Cassini-Huygens mission from an approximate altitude of 805,000 km. We allow for some uncertainty ranging from 600,000 - 1 million km.
+> The approximate altitude of the ISS is 418 km. We allow for some uncertainty ranging from 400 - 450 km.
 
 - **[f]** Focal length of the camera (m)
 - **[fov]** The angle observed by the camera (degrees)
 - **[w]** The width of the detector (m)
 
-> These three are grouped together because they are mathematically tied -- see [angle of view](https://en.wikipedia.org/wiki/Angle_of_view_(photography)). By specifying any two, the third is calculable. For that reason we will restrict ourselves to specifying two at a time (to avoid nonsensical combinations). Any two are sufficient, so here we will let f and fov be our free parameters since their initial values were readily available: see the [mission parameters](https://ciclops.org/iss/iss.php.html). We set the focal length to 2.0077 m, and since we're pretty sure about this one, let's give it a very small (1mm) tolerance. Field of view will be 3.5 degrees with a 0.02 degree uncertainty.
+> These three are grouped together because they are mathematically tied -- see [angle of view](https://en.wikipedia.org/wiki/Angle_of_view_(photography)). By specifying any two, the third is calculable. For that reason we will restrict ourselves to specifying two at a time (to avoid nonsensical combinations). Any two are sufficient, so here we will let f and w be our free parameters since their initial values were readily available: see pages on the [image](https://www.flickr.com/photos/nasa2explore/50644513538/) and [camera](https://en.nikon.ca/p/d4/25482/overview#tech-specs). We allow a bit of give -- 3mm and 1mm, respectively.
 
 - **[x0]** The x-axis principle point (center of the image in pixel space)
 

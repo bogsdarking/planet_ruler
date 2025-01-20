@@ -1,4 +1,4 @@
-from scipy.optimize import differential_evolution, shgo, minimize
+from scipy.optimize import differential_evolution
 import yaml
 import numpy as np
 import pandas as pd
@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import seaborn as sns
 from planet_ruler.plot import plot_image, plot_limb
-from planet_ruler.image import load_image, gradient_break, StringDrop, smooth_limb, fill_nans
+from planet_ruler.image import load_image, gradient_break, StringDrop, smooth_limb, fill_nans, ImageSegmentation
 from planet_ruler.fit import CostFunction, unpack_parameters
 from planet_ruler.geometry import limb_arc
 
@@ -22,8 +22,7 @@ class PlanetObservation:
     def __init__(
             self,
             image_filepath: str):
-        self.raw_image = load_image(image_filepath)
-        self.image = self.raw_image.copy()
+        self.image = load_image(image_filepath)
         self.features = {}
         self._plot_functions = {}
         self._cwheel = ['y', 'b', 'r', 'orange', 'pink', 'black']
@@ -52,24 +51,6 @@ class PlanetObservation:
         if show:
             plt.show()
 
-    def restrict_image(
-            self,
-            xmin: int = 0,
-            ymin: int = 0,
-            xmax: int = -1,
-            ymax: int = -1) -> None:
-        """
-        Limit the observation by pixels. Note it does not change the loaded image and can always
-        be updated.
-
-        Args:
-            xmin (int): Left pixel bound.
-            ymin (int): Bottom pixel bound.
-            xmax (int): Right pixel bound.
-            ymax (int): Top pixel bound.
-        """
-        self.image = self.raw_image[ymin:ymax, xmin:xmax]
-
 
 class LimbObservation(PlanetObservation):
     """
@@ -86,7 +67,7 @@ class LimbObservation(PlanetObservation):
             self,
             image_filepath,
             fit_config,
-            limb_detection='string-drop',
+            limb_detection='segmentation',
             minimizer='differential-evolution'):
         super().__init__(image_filepath)
 
@@ -94,9 +75,10 @@ class LimbObservation(PlanetObservation):
         self.init_parameter_values = None
         self.parameter_limits = None
         self.load_fit_config(fit_config)
-        assert limb_detection in ['gradient-break', 'string-drop']
+        assert limb_detection in ['gradient-break', 'string-drop', 'segmentation']
         self.limb_detection = limb_detection
         self._string_drop = None
+        self._segmenter = None
         assert minimizer in ['differential-evolution']
         self.minimizer = minimizer
 
@@ -148,7 +130,8 @@ class LimbObservation(PlanetObservation):
             window_length: int = 501,
             polyorder: int = 1,
             deriv: int = 0,
-            delta: int = 1
+            delta: int = 1,
+            segmenter: str = 'segment-anything'
     ) -> None:
         """
         Use the instance-defined method to find the limb in our observation.
@@ -179,6 +162,8 @@ class LimbObservation(PlanetObservation):
             polyorder (int): Polynomial order for smoothing.
             deriv (int): Derivative level for smoothing.
             delta (int): Delta for smoothing.
+            segmenter (str): Model used for segmentation. Must be one
+                of ['segment-anything'].
 
         """
         if self.limb_detection == 'string-drop':
@@ -214,6 +199,13 @@ class LimbObservation(PlanetObservation):
                     deriv=deriv,
                     delta=delta
             )
+        elif self.limb_detection == 'segmentation':
+            if self._segmenter is None:
+                self._segmenter = ImageSegmentation(self.image,
+                                                    segmenter=segmenter)
+            self.features['limb'] =\
+                self._segmenter.segment()
+
 
         self._raw_limb = self.features['limb'].copy()
         self._plot_functions['limb'] = plot_limb
@@ -247,29 +239,22 @@ class LimbObservation(PlanetObservation):
             n_jobs (int): Number of cores to engage.
             seed (int): Random seed for minimizer.
         """
-        # todo allow for user-specified fov uncertainty
+
         inferred_parameters = {
             'n_pix_x': self.image.shape[1],
             'n_pix_y': self.image.shape[0],
             # note these two shouldn't change when you subset an image
-            'x0': int(self.raw_image.shape[1] * 0.5),
-            'y0': int(self.raw_image.shape[0] * 0.5),
-            'fov': self.init_parameter_values['fov'] * self.image.shape[1] / self.raw_image.shape[1]
+            'x0': int(self.image.shape[1] * 0.5),
+            'y0': int(self.image.shape[0] * 0.5),
         }
-        current_parameter_values = self.init_parameter_values.copy()
-        current_parameter_values.update(inferred_parameters)
 
-        current_parameter_limits = self.parameter_limits.copy()
-        inferred_limits = {
-            'fov': [0.99 * current_parameter_values['fov'], 1.01 * current_parameter_values['fov']]
-        }
-        current_parameter_limits.update(inferred_limits)
-        logging.debug("Overriding limits on fov to account for image sub-selection.")
-        self.parameter_limits = current_parameter_limits
+        working_parameters = self.init_parameter_values.copy()
+        working_parameters.update(inferred_parameters)
 
-        self.cost_function = CostFunction(self.features['limb'], limb_arc,
-                                          self.free_parameters,
-                                          current_parameter_values,
+        self.cost_function = CostFunction(target=self.features['limb'],
+                                          function=limb_arc,
+                                          free_parameters=self.free_parameters,
+                                          init_parameter_values=working_parameters,
                                           loss_function=loss_function)
         if self.minimizer == 'differential-evolution':
             # 'rand1exp' and  Best/2 supposed to be good?  best2bin best2exp?  rand1bin?
@@ -282,16 +267,15 @@ class LimbObservation(PlanetObservation):
             self.fit_results = differential_evolution(
                 self.cost_function.cost,
                 [self.parameter_limits[key] for key in self.free_parameters],
-                x0=[current_parameter_values[key] for key in self.free_parameters],
+                x0=[working_parameters[key] for key in self.free_parameters],
                 workers=n_jobs, maxiter=max_iter, strategy=strategy,
                 polish=True,
                 init='sobol', # halton is another reasonable option
                 mutation=[0.1, 1.9],
                 updating=updating, disp=True, seed=seed)
         best_parameters = unpack_parameters(self.fit_results.x, self.free_parameters)
-        current_parameter_values.update(best_parameters)
-        self.best_parameters = current_parameter_values
-
+        working_parameters.update(best_parameters)
+        self.best_parameters = working_parameters
         self.features['fitted_limb'] = self.cost_function.evaluate(self.best_parameters)
         self._plot_functions['fitted_limb'] = plot_limb
 
@@ -316,6 +300,7 @@ class LimbObservation(PlanetObservation):
         self.features['limb'] = np.load(filepath)
         self.features['limb'] = fill_nans(self.features['limb'])
         self._plot_functions['limb'] = plot_limb
+        self._raw_limb = self.features['limb'].copy()
 
 
 def unpack_diff_evol_posteriors(
@@ -372,7 +357,10 @@ def plot_diff_evol_posteriors(
         sns.kdeplot(x=pop[col], y=pop['mse'], color='blue', warn_singular=False, label='posterior')
         plt.axvline(observation.parameter_limits[col][0], ls='--', c='k', alpha=0.5, label='bounds')
         plt.axvline(observation.parameter_limits[col][1], ls='--', c='k', alpha=0.5)
-        plt.axvline(observation.init_parameter_values[col], ls='-', c='y', alpha=0.5, label='initial value')
+        try:
+            plt.axvline(observation.init_parameter_values[col], ls='-', c='y', alpha=0.5, label='initial value')
+        except KeyError:
+            pass
         plt.title(col)
         plt.grid(which='both', ls='--', alpha=0.2)
         ax = plt.gca()
@@ -386,12 +374,20 @@ def plot_diff_evol_posteriors(
         plt.show()
 
 
-def plot_full_limb(observation: LimbObservation) -> None:
+def plot_full_limb(observation: LimbObservation,
+                   x_min: int = None,
+                   x_max: int = None,
+                   y_min: int = None,
+                   y_max: int = None,) -> None:
     """
     Display the full limb, including the section not seen in the image.
 
     Args:
         observation (object): Instance of LimbObservation.
+        x_min (int): Left edge in pixels.
+        x_max (int): Right edge in pixels.
+        y_min (int): Bottom edge in pixels.
+        y_max (int): Top edge in pixels.
     """
     try:
         params = observation.best_parameters.copy()
@@ -408,6 +404,10 @@ def plot_full_limb(observation: LimbObservation) -> None:
     x = np.arange(observation.image.shape[1])
     y = limb_arc(**params)
     plt.scatter(x, y)
+
+    ax = plt.gca()
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
 
     plt.show()
 
@@ -429,6 +429,20 @@ def plot_string_evolution(observation: LimbObservation) -> None:
         plt.plot(np.arange(len(pos)), pos, c='yellow',
                  alpha=step/n_pos)
     plt.show()
+
+
+def plot_segmentation_masks(observation: LimbObservation) -> None:
+    """
+    Display all the classes/masks generated by the segmentation.
+
+    Args:
+        observation (object): Instance of LimbObservation.
+    """
+    for i, mask in enumerate(observation._segmenter._masks):
+        mask = mask['segmentation']
+        plt.imshow(mask)
+        plt.title(f"Mask {i}")
+        plt.show()
 
 
 def package_results(
