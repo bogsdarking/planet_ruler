@@ -2,43 +2,6 @@ import numpy as np
 from typing import Callable
 
 
-def appx_dependent_interval(interval_a: list,
-                            interval_b: list,
-                            latent_function: Callable,
-                            n: int = 1000,
-                            z: float = 1,
-                            exact: bool = False) -> tuple:
-    """
-    Determine the credible interval of a dependent variable given the range
-    of its parents and the mapping function.
-
-    Args:
-        interval_a (list): Values of dictionary elements in a list.
-        interval_b (list): Ordered list of target keys.
-        latent_function (Callable): Function determining dependent variable.
-            Must be of the form f(feature_a, feature_b).
-        n (int): Number of draws.
-        z (int): Number of standard deviations.
-        exact (bool): Returns full interval (overrides z).
-
-    Returns:
-        upper and lower limit to interval (tuple)
-    """
-    draw = []
-    for i in range(n):
-        val_a = np.random.random() * (interval_a[1] - interval_a[0]) + interval_a[0]
-        val_b = np.random.random() * (interval_b[1] - interval_b[0]) + interval_b[0]
-        draw.append(latent_function(val_a, val_b))
-    if exact:
-        ll = min(draw)
-        ul = max(draw)
-    else:
-        mean = np.mean(draw)
-        std = np.std(draw)
-        ll, ul = mean - 0.5*z*std, mean + 0.5*z*std
-    return ll, ul
-
-
 def unpack_parameters(params: list,
                       template: list) -> dict:
     """

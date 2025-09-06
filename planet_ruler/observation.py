@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import seaborn as sns
 from planet_ruler.plot import plot_image, plot_limb
-from planet_ruler.image import load_image, gradient_break, StringDrop, smooth_limb, fill_nans, ImageSegmentation
+from planet_ruler.image import load_image, gradient_break, smooth_limb, fill_nans, ImageSegmentation
 from planet_ruler.fit import CostFunction, unpack_parameters
 from planet_ruler.geometry import limb_arc
 
@@ -75,9 +75,8 @@ class LimbObservation(PlanetObservation):
         self.init_parameter_values = None
         self.parameter_limits = None
         self.load_fit_config(fit_config)
-        assert limb_detection in ['gradient-break', 'string-drop', 'segmentation']
+        assert limb_detection in ['gradient-break', 'segmentation']
         self.limb_detection = limb_detection
-        self._string_drop = None
         self._segmenter = None
         assert minimizer in ['differential-evolution']
         self.minimizer = minimizer
@@ -166,28 +165,7 @@ class LimbObservation(PlanetObservation):
                 of ['segment-anything'].
 
         """
-        if self.limb_detection == 'string-drop':
-            if self._string_drop is None:
-                self._string_drop = StringDrop(self.image)
-            print('computing gradient force map...')
-            self._string_drop.compute_force_map(
-                tilt=tilt,
-                smoothing_window=smoothing_window
-            )
-            print('dropping horizon string...')
-            self.features['limb'] =\
-                self._string_drop.drop_string(
-                    start=start,
-                    steps=steps,
-                    g=g,
-                    m=m,
-                    k=k,
-                    friction=friction,
-                    t_step=t_step,
-                    max_acc=max_acc,
-                    max_vel=max_vel
-                )
-        elif self.limb_detection == 'gradient-break':
+        if self.limb_detection == 'gradient-break':
             self.features['limb'] =\
                 gradient_break(
                     self.image,
@@ -409,25 +387,6 @@ def plot_full_limb(observation: LimbObservation,
     ax.set_xlim(x_min, x_max)
     ax.set_ylim(y_min, y_max)
 
-    plt.show()
-
-
-def plot_string_evolution(observation: LimbObservation) -> None:
-    """
-    Display snapshots of a dropped string.
-
-    Args:
-        observation (object): Instance of LimbObservation.
-    """
-    string_positions = observation._string_drop.string_positions
-    n_pos = len(string_positions)
-
-    plt.imshow(observation.image)
-    steps = np.logspace(1, np.log10(n_pos - 1), num=20).astype(int)
-    for step in steps:
-        pos = string_positions[step]
-        plt.plot(np.arange(len(pos)), pos, c='yellow',
-                 alpha=step/n_pos)
     plt.show()
 
 
