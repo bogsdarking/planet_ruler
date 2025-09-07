@@ -140,7 +140,9 @@ class TestPlotLimb:
         plot_limb(limb_data, show=True, c="blue", s=50, alpha=1.0)
 
         expected_x = np.array([0])
-        mock_plt.scatter.assert_called_once_with(expected_x, limb_data, c="blue", s=50, alpha=1.0)
+        mock_plt.scatter.assert_called_once_with(
+            expected_x, limb_data, c="blue", s=50, alpha=1.0
+        )
         mock_plt.show.assert_called_once()
 
 
@@ -185,7 +187,9 @@ class TestPlot3DSolution:
     @patch("planet_ruler.plot.plt")
     @patch("planet_ruler.plot.limb_camera_angle")
     @patch("planet_ruler.plot.horizon_distance")
-    def test_plot_3d_solution_with_zoom(self, mock_horizon_dist, mock_limb_angle, mock_plt):
+    def test_plot_3d_solution_with_zoom(
+        self, mock_horizon_dist, mock_limb_angle, mock_plt
+    ):
         """Test 3D solution plotting with zoom factor."""
         mock_limb_angle.return_value = 0.3
         mock_horizon_dist.return_value = 800.0
@@ -212,7 +216,9 @@ class TestPlot3DSolution:
     @patch("planet_ruler.plot.plt")
     @patch("planet_ruler.plot.limb_camera_angle")
     @patch("planet_ruler.plot.horizon_distance")
-    def test_plot_3d_solution_axis_options(self, mock_horizon_dist, mock_limb_angle, mock_plt):
+    def test_plot_3d_solution_axis_options(
+        self, mock_horizon_dist, mock_limb_angle, mock_plt
+    ):
         """Test 3D solution plotting with different axis options."""
         mock_limb_angle.return_value = 0.4
         mock_horizon_dist.return_value = 1200.0
@@ -247,7 +253,9 @@ class TestPlot3DSolution:
     @patch("planet_ruler.plot.plt")
     @patch("planet_ruler.plot.limb_camera_angle")
     @patch("planet_ruler.plot.horizon_distance")
-    def test_plot_3d_solution_save_file(self, mock_horizon_dist, mock_limb_angle, mock_plt):
+    def test_plot_3d_solution_save_file(
+        self, mock_horizon_dist, mock_limb_angle, mock_plt
+    ):
         """Test 3D solution plotting with file saving."""
         mock_limb_angle.return_value = 0.2
         mock_horizon_dist.return_value = 600.0
@@ -267,7 +275,9 @@ class TestPlot3DSolution:
     @patch("planet_ruler.plot.plt")
     @patch("planet_ruler.plot.limb_camera_angle")
     @patch("planet_ruler.plot.horizon_distance")
-    def test_plot_3d_solution_kwargs(self, mock_horizon_dist, mock_limb_angle, mock_plt):
+    def test_plot_3d_solution_kwargs(
+        self, mock_horizon_dist, mock_limb_angle, mock_plt
+    ):
         """Test 3D solution plotting absorbs extra kwargs."""
         mock_limb_angle.return_value = 0.1
         mock_horizon_dist.return_value = 300.0
@@ -278,7 +288,13 @@ class TestPlot3DSolution:
         mock_fig.add_subplot.return_value = mock_ax
 
         # Pass extra kwargs that should be absorbed
-        plot_3d_solution(r=500000, h=25000, extra_param1="ignored", extra_param2=42, unused_setting=True)
+        plot_3d_solution(
+            r=500000,
+            h=25000,
+            extra_param1="ignored",
+            extra_param2=42,
+            unused_setting=True,
+        )
 
         # Should not raise any errors and complete successfully
         mock_plt.show.assert_called_once()
@@ -321,7 +337,9 @@ class TestPlotTopography:
         mock_ax.view_init.assert_called_once_with(elev=90, azim=0, roll=-90)
 
         # Verify layout adjustments
-        mock_plt.subplots_adjust.assert_called_once_with(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
+        mock_plt.subplots_adjust.assert_called_once_with(
+            top=1, bottom=0, right=1, left=0, hspace=0, wspace=0
+        )
         mock_plt.axis.assert_called_with("off")
         mock_plt.show.assert_called_once()
 
@@ -399,7 +417,9 @@ class TestPlotIntegration:
     @patch("planet_ruler.plot.plt")
     @patch("planet_ruler.plot.limb_camera_angle")
     @patch("planet_ruler.plot.horizon_distance")
-    def test_plot_functions_numerical_edge_cases(self, mock_horizon_dist, mock_limb_angle, mock_plt):
+    def test_plot_functions_numerical_edge_cases(
+        self, mock_horizon_dist, mock_limb_angle, mock_plt
+    ):
         """Test plot functions with extreme numerical values."""
         # Very small planet
         mock_limb_angle.return_value = 1e-6
@@ -450,7 +470,9 @@ class TestPlotError:
     @patch("planet_ruler.plot.plt")
     @patch("planet_ruler.plot.limb_camera_angle")
     @patch("planet_ruler.plot.horizon_distance")
-    def test_plot_3d_solution_zero_radius(self, mock_horizon_dist, mock_limb_angle, mock_plt):
+    def test_plot_3d_solution_zero_radius(
+        self, mock_horizon_dist, mock_limb_angle, mock_plt
+    ):
         """Test 3D solution plotting with edge case parameters."""
         # Zero radius should be handled by geometry functions
         mock_limb_angle.return_value = 0.0

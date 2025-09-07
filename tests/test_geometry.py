@@ -223,7 +223,15 @@ class TestLimbArcGeneration:
 
     def test_limb_arc_return_full(self):
         """Test limb arc with return_full=True"""
-        result = limb_arc(r=1_000_000, n_pix_x=100, n_pix_y=100, h=10_000, f=0.050, w=0.036, return_full=True)
+        result = limb_arc(
+            r=1_000_000,
+            n_pix_x=100,
+            n_pix_y=100,
+            h=10_000,
+            f=0.050,
+            w=0.036,
+            return_full=True,
+        )
 
         # Should return full coordinate array
         assert result.shape[1] == 3  # x, y, homogeneous coordinate
@@ -235,7 +243,9 @@ class TestEdgeCases:
 
     def test_very_small_planet(self):
         """Test with very small planet radius"""
-        result = limb_arc(r=10, n_pix_x=100, n_pix_y=100, h=1, f=0.050, w=0.036)  # 10 meter "planet"  # 1 meter altitude
+        result = limb_arc(
+            r=10, n_pix_x=100, n_pix_y=100, h=1, f=0.050, w=0.036
+        )  # 10 meter "planet"  # 1 meter altitude
 
         assert len(result) == 100
         assert not np.any(np.isnan(result))
@@ -246,7 +256,12 @@ class TestEdgeCases:
         # numerical issues in limb_arc. This is a degenerate case.
         # We test that the function handles it gracefully.
         result = limb_arc(
-            r=1_000_000, n_pix_x=100, n_pix_y=100, h=1e-10, f=0.050, w=0.036  # Very small altitude instead of exactly 0
+            r=1_000_000,
+            n_pix_x=100,
+            n_pix_y=100,
+            h=1e-10,
+            f=0.050,
+            w=0.036,  # Very small altitude instead of exactly 0
         )
 
         assert len(result) == 100
@@ -259,13 +274,19 @@ class TestEdgeCases:
     def test_fov_parameter_combinations(self):
         """Test different parameter combinations for camera specification"""
         # Test with focal length and detector size
-        result1 = limb_arc(r=1_000_000, n_pix_x=100, n_pix_y=100, h=1000, f=0.050, w=0.036)
+        result1 = limb_arc(
+            r=1_000_000, n_pix_x=100, n_pix_y=100, h=1000, f=0.050, w=0.036
+        )
 
         # Test with detector size and FOV
-        result2 = limb_arc(r=1_000_000, n_pix_x=100, n_pix_y=100, h=1000, w=0.036, fov=40)
+        result2 = limb_arc(
+            r=1_000_000, n_pix_x=100, n_pix_y=100, h=1000, w=0.036, fov=40
+        )
 
         # Test with focal length and FOV
-        result3 = limb_arc(r=1_000_000, n_pix_x=100, n_pix_y=100, h=1000, f=0.050, fov=40)
+        result3 = limb_arc(
+            r=1_000_000, n_pix_x=100, n_pix_y=100, h=1000, f=0.050, fov=40
+        )
 
         # All should produce valid results
         for result in [result1, result2, result3]:
@@ -279,7 +300,12 @@ class TestNumericalStability:
     def test_large_radius_values(self):
         """Test with very large planetary radii"""
         result = limb_arc(
-            r=1e10, n_pix_x=100, n_pix_y=100, h=1e6, f=0.050, w=0.036  # Very large planet  # Proportionally large altitude
+            r=1e10,
+            n_pix_x=100,
+            n_pix_y=100,
+            h=1e6,
+            f=0.050,
+            w=0.036,  # Very large planet  # Proportionally large altitude
         )
 
         assert not np.any(np.isnan(result))
@@ -312,7 +338,9 @@ class TestParametrizedGeometry:
             (1_737_400, 10_000, 180_000, 190_000),  # Moon at 10km (corrected range)
         ],
     )
-    def test_horizon_distance_real_bodies(self, radius, height, expected_min, expected_max):
+    def test_horizon_distance_real_bodies(
+        self, radius, height, expected_min, expected_max
+    ):
         """Test horizon distance for real celestial bodies"""
         distance = horizon_distance(radius, height)
         assert expected_min <= distance <= expected_max
@@ -360,7 +388,9 @@ class TestIntegration:
 
     def test_earth_horizon_calculation(self, earth_params, camera_params):
         """Test complete horizon calculation for Earth"""
-        result = limb_arc(r=earth_params["radius"], h=earth_params["altitude"], **camera_params)
+        result = limb_arc(
+            r=earth_params["radius"], h=earth_params["altitude"], **camera_params
+        )
 
         assert len(result) == camera_params["n_pix_x"]
         assert not np.any(np.isnan(result))

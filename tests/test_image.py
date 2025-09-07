@@ -17,7 +17,13 @@ import pandas as pd
 from unittest.mock import Mock, patch, MagicMock
 from PIL import Image
 
-from planet_ruler.image import load_image, gradient_break, ImageSegmentation, smooth_limb, fill_nans
+from planet_ruler.image import (
+    load_image,
+    gradient_break,
+    ImageSegmentation,
+    smooth_limb,
+    fill_nans,
+)
 
 
 class TestLoadImage:
@@ -229,7 +235,9 @@ class TestImageSegmentation:
     @patch("planet_ruler.image.sam_model_registry")
     @patch("planet_ruler.image.SamAutomaticMaskGenerator")
     @patch("planet_ruler.image.kagglehub.model_download")
-    def test_segment_full_pipeline(self, mock_download, mock_generator_class, mock_registry):
+    def test_segment_full_pipeline(
+        self, mock_download, mock_generator_class, mock_registry
+    ):
         """Test full segmentation pipeline with mocked SAM model."""
         mock_download.return_value = "/fake/path"
 
@@ -275,7 +283,9 @@ class TestSmoothLimb:
         """Test rolling median smoothing."""
         # Create noisy limb data
         np.random.seed(42)
-        limb = 30 + np.sin(np.linspace(0, 4 * np.pi, 100)) + np.random.normal(0, 0.5, 100)
+        limb = (
+            30 + np.sin(np.linspace(0, 4 * np.pi, 100)) + np.random.normal(0, 0.5, 100)
+        )
 
         smoothed = smooth_limb(limb, method="rolling-median", window_length=11)
 
@@ -310,12 +320,16 @@ class TestSmoothLimb:
         limb = np.sin(np.linspace(0, 2 * np.pi, 60)) + np.random.normal(0, 0.1, 60)
 
         # Test linear interpolation
-        smoothed = smooth_limb(limb, method="bin-interpolate", window_length=10, polyorder=1)
+        smoothed = smooth_limb(
+            limb, method="bin-interpolate", window_length=10, polyorder=1
+        )
 
         assert len(smoothed) == len(limb)
 
         # Test quadratic interpolation
-        smoothed_quad = smooth_limb(limb, method="bin-interpolate", window_length=10, polyorder=2)
+        smoothed_quad = smooth_limb(
+            limb, method="bin-interpolate", window_length=10, polyorder=2
+        )
         assert len(smoothed_quad) == len(limb)
 
     def test_smooth_limb_invalid_method(self):
@@ -449,7 +463,9 @@ class TestImageIntegration:
         noisy_breaks = breaks + np.random.normal(0, 0.5, len(breaks))
 
         # Smooth the detected limb
-        smoothed_limb = smooth_limb(noisy_breaks, method="rolling-median", window_length=5)
+        smoothed_limb = smooth_limb(
+            noisy_breaks, method="rolling-median", window_length=5
+        )
 
         # Fill any potential NaNs
         final_limb = fill_nans(smoothed_limb)
@@ -506,7 +522,9 @@ class TestNumericalStability:
 
         # Very large values
         large_limb = np.array([1e6, 2e6, 3e6, 4e6, 5e6])
-        smoothed = smooth_limb(large_limb, method="savgol", window_length=5, polyorder=1)
+        smoothed = smooth_limb(
+            large_limb, method="savgol", window_length=5, polyorder=1
+        )
         assert all(np.isfinite(s) for s in smoothed)
 
 
@@ -529,7 +547,9 @@ class TestImagePerformance:
     def test_smooth_limb_long_array(self):
         """Test smoothing performance on long limb arrays."""
         # Long limb data
-        long_limb = np.sin(np.linspace(0, 10 * np.pi, 10000)) + np.random.normal(0, 0.1, 10000)
+        long_limb = np.sin(np.linspace(0, 10 * np.pi, 10000)) + np.random.normal(
+            0, 0.1, 10000
+        )
 
         smoothed = smooth_limb(long_limb, method="rolling-median", window_length=101)
 

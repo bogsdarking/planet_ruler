@@ -46,7 +46,12 @@ class CostFunction:
     """
 
     def __init__(
-        self, target: np.ndarray, function: Callable, free_parameters: list, init_parameter_values, loss_function="l2"
+        self,
+        target: np.ndarray,
+        function: Callable,
+        free_parameters: list,
+        init_parameter_values,
+        loss_function="l2",
     ):
 
         self.function = function

@@ -10,7 +10,13 @@ import pytest
 import numpy as np
 from unittest.mock import patch
 
-from planet_ruler.geometry import horizon_distance, limb_camera_angle, limb_arc, intrinsic_transform, extrinsic_transform
+from planet_ruler.geometry import (
+    horizon_distance,
+    limb_camera_angle,
+    limb_arc,
+    intrinsic_transform,
+    extrinsic_transform,
+)
 from planet_ruler.fit import CostFunction, unpack_parameters, pack_parameters
 from planet_ruler.image import gradient_break, smooth_limb
 from planet_ruler.observation import LimbObservation, PlanetObservation
@@ -86,11 +92,19 @@ class TestGeometryBenchmarks:
 
             # Apply extrinsic transform
             camera_coords = extrinsic_transform(
-                world_coords, theta_x=0.1, theta_y=0.05, theta_z=0.02, origin_x=10, origin_y=100, origin_z=5
+                world_coords,
+                theta_x=0.1,
+                theta_y=0.05,
+                theta_z=0.02,
+                origin_x=10,
+                origin_y=100,
+                origin_z=5,
             )
 
             # Apply intrinsic transform
-            pixel_coords = intrinsic_transform(camera_coords, f=0.05, px=1e-5, py=1e-5, x0=500, y0=500)
+            pixel_coords = intrinsic_transform(
+                camera_coords, f=0.05, px=1e-5, py=1e-5, x0=500, y0=500
+            )
 
             return pixel_coords
 
@@ -123,7 +137,16 @@ class TestFitBenchmarks:
     def test_parameter_unpacking_benchmark(self, benchmark):
         """Benchmark parameter unpacking operations."""
         param_array = np.array([6371000, 35000, 0.05, 0.01, 30.0, 0.1, 0.05, 0.02])
-        param_names = ["radius", "altitude", "focal_length", "detector_width", "fov", "theta_x", "theta_y", "theta_z"]
+        param_names = [
+            "radius",
+            "altitude",
+            "focal_length",
+            "detector_width",
+            "fov",
+            "theta_x",
+            "theta_y",
+            "theta_z",
+        ]
 
         result = benchmark(unpack_parameters, param_array, param_names)
         assert len(result) == len(param_names)
@@ -184,7 +207,9 @@ class TestImageProcessingBenchmarks:
         height, width = 300, 600
         # Create 3D synthetic image with gradual brightness change
         single_channel = np.linspace(0, 255, height * width).reshape((height, width))
-        image = np.stack([single_channel, single_channel, single_channel], axis=2).astype(np.uint8)
+        image = np.stack(
+            [single_channel, single_channel, single_channel], axis=2
+        ).astype(np.uint8)
 
         # Function now auto-calculates appropriate window size
         result = benchmark(gradient_break, image)
@@ -236,22 +261,36 @@ class TestImageProcessingBenchmarks:
         """Benchmark smooth_limb with Savitzky-Golay filter."""
         n_points = 2000
         # Create synthetic limb data with noise
-        y = 300 + 30 * np.cos(np.linspace(0, 4 * np.pi, n_points)) + np.random.normal(0, 3, n_points)
+        y = (
+            300
+            + 30 * np.cos(np.linspace(0, 4 * np.pi, n_points))
+            + np.random.normal(0, 3, n_points)
+        )
 
-        result = benchmark(smooth_limb, y, method="savgol", window_length=51, polyorder=3)
+        result = benchmark(
+            smooth_limb, y, method="savgol", window_length=51, polyorder=3
+        )
         assert len(result) == n_points
 
     def test_smooth_limb_methods_comparison_benchmark(self, benchmark):
         """Benchmark comparison of different smoothing methods."""
         n_points = 1500
         # Create noisy limb data
-        y = 250 + 40 * np.sin(np.linspace(0, 2 * np.pi, n_points)) + np.random.normal(0, 8, n_points)
+        y = (
+            250
+            + 40 * np.sin(np.linspace(0, 2 * np.pi, n_points))
+            + np.random.normal(0, 8, n_points)
+        )
 
         def compare_methods():
             methods = {
-                "rolling_median": smooth_limb(y, method="rolling-median", window_length=25),
+                "rolling_median": smooth_limb(
+                    y, method="rolling-median", window_length=25
+                ),
                 "rolling_mean": smooth_limb(y, method="rolling-mean", window_length=25),
-                "savgol": smooth_limb(y, method="savgol", window_length=25, polyorder=3),
+                "savgol": smooth_limb(
+                    y, method="savgol", window_length=25, polyorder=3
+                ),
             }
             return methods
 
@@ -263,7 +302,9 @@ class TestObservationBenchmarks:
     """Benchmark tests for observation workflow functions."""
 
     @patch("planet_ruler.observation.load_image")
-    def test_planet_observation_initialization_benchmark(self, mock_load_image, benchmark):
+    def test_planet_observation_initialization_benchmark(
+        self, mock_load_image, benchmark
+    ):
         """Benchmark PlanetObservation initialization."""
         height, width = 1000, 1500
         image = np.random.randint(0, 255, (height, width, 3), dtype=np.uint8)
@@ -310,17 +351,34 @@ class TestIntegratedWorkflowBenchmarks:
             angle = limb_camera_angle(radius, altitude)
 
             # Step 2: Generate limb arc
-            limb_y = limb_arc(r=radius, n_pix_x=1000, n_pix_y=1000, h=altitude, fov=30.0, w=0.01, num_sample=2000)
+            limb_y = limb_arc(
+                r=radius,
+                n_pix_x=1000,
+                n_pix_y=1000,
+                h=altitude,
+                fov=30.0,
+                w=0.01,
+                num_sample=2000,
+            )
 
             # Step 3: Apply coordinate transformations
             world_coords = np.random.standard_normal((100, 4))
             world_coords[:, 3] = 1
 
-            camera_coords = extrinsic_transform(world_coords, theta_x=angle * 0.1, theta_y=0, theta_z=0)
+            camera_coords = extrinsic_transform(
+                world_coords, theta_x=angle * 0.1, theta_y=0, theta_z=0
+            )
 
-            pixel_coords = intrinsic_transform(camera_coords, f=0.05, px=1e-5, py=1e-5, x0=500, y0=500)
+            pixel_coords = intrinsic_transform(
+                camera_coords, f=0.05, px=1e-5, py=1e-5, x0=500, y0=500
+            )
 
-            return {"distance": distance, "angle": angle, "limb_y": limb_y, "pixel_coords": pixel_coords}
+            return {
+                "distance": distance,
+                "angle": angle,
+                "limb_y": limb_y,
+                "pixel_coords": pixel_coords,
+            }
 
         result = benchmark(complete_pipeline)
         assert result["distance"] > 0
@@ -332,7 +390,10 @@ class TestIntegratedWorkflowBenchmarks:
         """Benchmark complete image processing pipeline."""
 
         def processing_pipeline():
-            height, width = 400, 800  # Increased width to work with gradient_break's savgol filter
+            height, width = (
+                400,
+                800,
+            )  # Increased width to work with gradient_break's savgol filter
             # Create realistic synthetic image with horizon (3D for gradient_break)
             image = np.zeros((height, width, 3), dtype=np.uint8)
 
@@ -351,16 +412,24 @@ class TestIntegratedWorkflowBenchmarks:
             limb_y = gradient_break(image)
 
             # Step 2: Smooth the detected limb
-            smooth_limb_y = smooth_limb(limb_y, method="rolling-median", window_length=15)
+            smooth_limb_y = smooth_limb(
+                limb_y, method="rolling-median", window_length=15
+            )
 
             # Step 3: Further smooth with Savitzky-Golay (use appropriate window size)
             window_len = min(21, len(smooth_limb_y))
             if window_len % 2 == 0:  # Ensure odd window length
                 window_len -= 1
             window_len = max(5, window_len)  # Minimum window size
-            final_limb = smooth_limb(smooth_limb_y, method="savgol", window_length=window_len, polyorder=3)
+            final_limb = smooth_limb(
+                smooth_limb_y, method="savgol", window_length=window_len, polyorder=3
+            )
 
-            return {"original_limb": limb_y, "smooth_limb": smooth_limb_y, "final_limb": final_limb}
+            return {
+                "original_limb": limb_y,
+                "smooth_limb": smooth_limb_y,
+                "final_limb": final_limb,
+            }
 
         result = benchmark(processing_pipeline)
         assert len(result["original_limb"]) == 800
@@ -406,7 +475,9 @@ class TestIntegratedWorkflowBenchmarks:
                 predicted_limb = np.random.normal(300, 20, 500)
                 observed_limb = predicted_limb + np.random.normal(0, 5, 500)
 
-                cost = np.sum((predicted_limb - observed_limb) ** 2) / len(observed_limb)
+                cost = np.sum((predicted_limb - observed_limb) ** 2) / len(
+                    observed_limb
+                )
                 results.append(cost)
 
             return np.array(results)

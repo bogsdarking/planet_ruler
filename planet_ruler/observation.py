@@ -7,7 +7,13 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import seaborn as sns
 from planet_ruler.plot import plot_image, plot_limb
-from planet_ruler.image import load_image, gradient_break, smooth_limb, fill_nans, ImageSegmentation
+from planet_ruler.image import (
+    load_image,
+    gradient_break,
+    smooth_limb,
+    fill_nans,
+    ImageSegmentation,
+)
 from planet_ruler.fit import CostFunction, unpack_parameters
 from planet_ruler.geometry import limb_arc
 
@@ -37,7 +43,9 @@ class PlanetObservation:
         plot_image(self.image, gradient=gradient, show=False)
         h_plus, l_plus = [], []
         for i, feature in enumerate(self.features):
-            self._plot_functions[feature](self.features[feature], show=False, c=self._cwheel[i])
+            self._plot_functions[feature](
+                self.features[feature], show=False, c=self._cwheel[i]
+            )
             h_plus.append(Line2D([0], [0], color=self._cwheel[i], lw=2))
             l_plus.append(feature)
         ax = plt.gca()
@@ -60,7 +68,13 @@ class LimbObservation(PlanetObservation):
             'differential-evolution'.
     """
 
-    def __init__(self, image_filepath, fit_config, limb_detection="segmentation", minimizer="differential-evolution"):
+    def __init__(
+        self,
+        image_filepath,
+        fit_config,
+        limb_detection="segmentation",
+        minimizer="differential-evolution",
+    ):
         super().__init__(image_filepath)
 
         self.free_parameters = None
@@ -91,8 +105,12 @@ class LimbObservation(PlanetObservation):
             base_config = yaml.safe_load(f)
 
         for p, v in base_config["init_parameter_values"].items():
-            assert v >= base_config["parameter_limits"][p][0], f"Initial value for parameter {p} violates stated lower limit."
-            assert v <= base_config["parameter_limits"][p][1], f"Initial value for parameter {p} violates stated upper limit."
+            assert (
+                v >= base_config["parameter_limits"][p][0]
+            ), f"Initial value for parameter {p} violates stated lower limit."
+            assert (
+                v <= base_config["parameter_limits"][p][1]
+            ), f"Initial value for parameter {p} violates stated upper limit."
 
         self.free_parameters = base_config["free_parameters"]
         self.init_parameter_values = base_config["init_parameter_values"]
@@ -184,7 +202,13 @@ class LimbObservation(PlanetObservation):
             logging.info("Filling NaNs in fitted limb.")
             self.features["limb"] = fill_nans(self.features["limb"])
 
-    def fit_limb(self, loss_function: str = "l2", max_iter: int = 1000, n_jobs: int = 1, seed: int = 0) -> None:
+    def fit_limb(
+        self,
+        loss_function: str = "l2",
+        max_iter: int = 1000,
+        n_jobs: int = 1,
+        seed: int = 0,
+    ) -> None:
         """
         Fit the current limb using minimizer of choice.
 
@@ -288,7 +312,9 @@ def unpack_diff_evol_posteriors(observation: LimbObservation) -> pd.DataFrame:
     return pop
 
 
-def plot_diff_evol_posteriors(observation: LimbObservation, show_points: bool = False, log: bool = True):
+def plot_diff_evol_posteriors(
+    observation: LimbObservation, show_points: bool = False, log: bool = True
+):
     """
     Extract and display the final state population of a differential evolution
     minimization.
@@ -310,11 +336,29 @@ def plot_diff_evol_posteriors(observation: LimbObservation, show_points: bool = 
             continue
         if show_points:
             plt.scatter(pop[col], pop["mse"])
-        sns.kdeplot(x=pop[col], y=pop["mse"], color="blue", warn_singular=False, label="posterior")
-        plt.axvline(observation.parameter_limits[col][0], ls="--", c="k", alpha=0.5, label="bounds")
+        sns.kdeplot(
+            x=pop[col],
+            y=pop["mse"],
+            color="blue",
+            warn_singular=False,
+            label="posterior",
+        )
+        plt.axvline(
+            observation.parameter_limits[col][0],
+            ls="--",
+            c="k",
+            alpha=0.5,
+            label="bounds",
+        )
         plt.axvline(observation.parameter_limits[col][1], ls="--", c="k", alpha=0.5)
         try:
-            plt.axvline(observation.init_parameter_values[col], ls="-", c="y", alpha=0.5, label="initial value")
+            plt.axvline(
+                observation.init_parameter_values[col],
+                ls="-",
+                c="y",
+                alpha=0.5,
+                label="initial value",
+            )
         except KeyError:
             pass
         plt.title(col)
@@ -398,11 +442,17 @@ def package_results(observation: LimbObservation) -> pd.DataFrame:
             - initial value
             - parameter
     """
-    full_fit_params = unpack_parameters(observation.fit_results.x, observation.free_parameters)
+    full_fit_params = unpack_parameters(
+        observation.fit_results.x, observation.free_parameters
+    )
 
     results = []
     for key in observation.free_parameters:
-        result = {"fit value": full_fit_params[key], "initial value": observation.init_parameter_values[key], "parameter": key}
+        result = {
+            "fit value": full_fit_params[key],
+            "initial value": observation.init_parameter_values[key],
+            "parameter": key,
+        }
         results.append(result)
     results = pd.DataFrame.from_records(results)
     results = results.set_index(["parameter"])

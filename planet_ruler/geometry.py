@@ -78,7 +78,12 @@ def field_of_view(f: float, w: float) -> float:
 
 
 def intrinsic_transform(
-    camera_coords: np.ndarray, f: float = 1, px: float = 1, py: float = 1, x0: float = 0, y0: float = 0
+    camera_coords: np.ndarray,
+    f: float = 1,
+    px: float = 1,
+    py: float = 1,
+    x0: float = 0,
+    y0: float = 0,
 ) -> np.ndarray:
     """
     Transform from camera coordinates into image coordinates.
@@ -98,7 +103,9 @@ def intrinsic_transform(
         pixel_coords (np.ndarray): Coordinates in image space.
     """
     # note the intentional extension to 3x4 (for homogenous coords)
-    transform = np.array([[float(f) / px, 0, x0, 0], [0, float(f) / py, y0, 0], [0, 0, 1, 0]])
+    transform = np.array(
+        [[float(f) / px, 0, x0, 0], [0, float(f) / py, y0, 0], [0, 0, 1, 0]]
+    )
 
     # todo allow for shear/etc.
 
@@ -145,11 +152,29 @@ def extrinsic_transform(
         camera_coords (np.ndarray): Coordinates in camera space.
     """
 
-    x_rotation = np.array([[1, 0, 0], [0, np.cos(theta_x), -np.sin(theta_x)], [0, np.sin(theta_x), np.cos(theta_x)]])
+    x_rotation = np.array(
+        [
+            [1, 0, 0],
+            [0, np.cos(theta_x), -np.sin(theta_x)],
+            [0, np.sin(theta_x), np.cos(theta_x)],
+        ]
+    )
 
-    y_rotation = np.array([[np.cos(theta_y), 0, np.sin(theta_y)], [0, 1, 0], [-np.sin(theta_y), 0, np.cos(theta_y)]])
+    y_rotation = np.array(
+        [
+            [np.cos(theta_y), 0, np.sin(theta_y)],
+            [0, 1, 0],
+            [-np.sin(theta_y), 0, np.cos(theta_y)],
+        ]
+    )
 
-    z_rotation = np.array([[np.cos(theta_z), -np.sin(theta_z), 0], [np.sin(theta_z), np.cos(theta_z), 0], [0, 0, 1]])
+    z_rotation = np.array(
+        [
+            [np.cos(theta_z), -np.sin(theta_z), 0],
+            [np.sin(theta_z), np.cos(theta_z), 0],
+            [0, 0, 1],
+        ]
+    )
 
     rotation = x_rotation @ y_rotation @ z_rotation
 
@@ -286,7 +311,9 @@ def limb_arc(
         cut = np.where((camera_coords[2, :] > 0))[0]
         camera_coords = camera_coords[:, cut]
 
-    pixel_coords = intrinsic_transform(camera_coords=camera_coords, f=f, px=pxy, py=pxy, x0=x0, y0=y0)
+    pixel_coords = intrinsic_transform(
+        camera_coords=camera_coords, f=f, px=pxy, py=pxy, x0=x0, y0=y0
+    )
 
     if return_full:
         return pixel_coords

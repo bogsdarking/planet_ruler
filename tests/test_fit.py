@@ -298,7 +298,16 @@ class TestCostFunctionIntegration:
         """Test parameter handling with realistic parameter counts"""
         # Simulate a fit with many parameters like in limb fitting
         param_names = ["r", "h", "f", "w", "x0", "y0", "theta_x", "theta_y"]
-        init_values = {"r": 6371000, "h": 10000, "f": 0.05, "w": 0.036, "x0": 960, "y0": 540, "theta_x": 0, "theta_y": 0}
+        init_values = {
+            "r": 6371000,
+            "h": 10000,
+            "f": 0.05,
+            "w": 0.036,
+            "x0": 960,
+            "y0": 540,
+            "theta_x": 0,
+            "theta_y": 0,
+        }
 
         def complex_func(**kwargs):
             # Simple combination of parameters for testing

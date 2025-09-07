@@ -86,7 +86,13 @@ def gradient_break(
     breaks = []
     for i in range(im_arr.shape[1]):
         y = grad[:, i]
-        yhat = savgol_filter(y, window_length=window_length, polyorder=polyorder, deriv=deriv, delta=delta)
+        yhat = savgol_filter(
+            y,
+            window_length=window_length,
+            polyorder=polyorder,
+            deriv=deriv,
+            delta=delta,
+        )
 
         yhathat = np.diff(yhat)
         m = np.argmax(yhathat[y_min:y_max])
@@ -103,7 +109,9 @@ class ImageSegmentation:
         self._masks = None
 
         if segmenter == "segment-anything":
-            self.model_path = kagglehub.model_download("metaresearch/segment-anything/pyTorch/vit-b")
+            self.model_path = kagglehub.model_download(
+                "metaresearch/segment-anything/pyTorch/vit-b"
+            )
         else:
             self.model_path = None
             raise ValueError(f"segmenter must be one of [segment-anything]")
@@ -119,12 +127,17 @@ class ImageSegmentation:
         limb = np.array(limb).astype(float)
         # handling of blips (sometimes the image edges confuse segmenters)
         # set big jumps to NaN
-        limb[abs(np.diff(limb, n=1, append=limb[-1])) > 10 * abs(np.nanmean(np.diff(limb, n=1, append=limb[-1])))] = np.nan
+        limb[
+            abs(np.diff(limb, n=1, append=limb[-1]))
+            > 10 * abs(np.nanmean(np.diff(limb, n=1, append=limb[-1])))
+        ] = np.nan
         # set their immediate neighbors to NaN
         limb[np.isnan(np.diff(limb, n=1, append=limb[-1]))] = np.nan
         nan_mask = np.isnan(limb)
         # interpolate them back in
-        limb[nan_mask] = np.interp(np.flatnonzero(nan_mask), np.flatnonzero(~nan_mask), limb[~nan_mask])
+        limb[nan_mask] = np.interp(
+            np.flatnonzero(nan_mask), np.flatnonzero(~nan_mask), limb[~nan_mask]
+        )
 
         return np.array(limb)
 
@@ -141,7 +154,12 @@ class ImageSegmentation:
 
 
 def smooth_limb(
-    y: np.ndarray, method: str = "rolling-median", window_length: int = 50, polyorder: int = 1, deriv: int = 0, delta=1
+    y: np.ndarray,
+    method: str = "rolling-median",
+    window_length: int = 50,
+    polyorder: int = 1,
+    deriv: int = 0,
+    delta=1,
 ) -> np.ndarray:
     """
     Smooth the limb position values.
@@ -168,7 +186,9 @@ def smooth_limb(
         binned = []
         x = []
         for i in range(len(y[::window_length])):
-            binned += [np.mean(y[i * window_length : i * window_length + window_length])]
+            binned += [
+                np.mean(y[i * window_length : i * window_length + window_length])
+            ]
             x += [i * window_length + int(0.5 * window_length)]
         binned = np.array(binned)
         x = np.array(x)
@@ -180,12 +200,20 @@ def smooth_limb(
         elif polyorder == 0:
             kind = "nearest"
         else:
-            raise AttributeError(f"polyorder {polyorder} not supported for bin-interpolate")
+            raise AttributeError(
+                f"polyorder {polyorder} not supported for bin-interpolate"
+            )
         interp = interp1d(x, binned, kind=kind, fill_value="extrapolate")
 
         limb = interp(np.arange(len(y)))
     elif method == "savgol":
-        limb = savgol_filter(y, window_length=window_length, polyorder=polyorder, deriv=deriv, delta=delta)
+        limb = savgol_filter(
+            y,
+            window_length=window_length,
+            polyorder=polyorder,
+            deriv=deriv,
+            delta=delta,
+        )
     elif method == "rolling-mean":
         limb = pd.Series(y).rolling(window_length).mean()
     elif method == "rolling-median":
