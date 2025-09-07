@@ -23,15 +23,57 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
+    - name: Validate dependency compatibility
+      run: |
+        python -m pip install --upgrade pip
+        # Test dependency resolution without installing
+        echo "Testing dependency resolution for Python ${{ matrix.python-version }}"
+        pip install --dry-run -r requirements.txt -r requirements-test.txt || echo "Dependency conflicts detected"
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        # Install project dependencies
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        # Install project dependencies with error handling
+        if [ -f requirements.txt ]; then
+          echo "Installing core dependencies..."
+          pip install -r requirements.txt
+        fi
         # Install test dependencies
-        if [ -f requirements-test.txt ]; then pip install -r requirements-test.txt; fi
+        if [ -f requirements-test.txt ]; then
+          echo "Installing test dependencies..."
+          pip install -r requirements-test.txt
+        fi
         # Install package in development mode
+        echo "Installing package in development mode..."
         pip install -e .
+
+    - name: Verify critical imports
+      run: |
+        # Test that critical dependencies can be imported
+        python -c "
+        import sys
+        print('Python version:', sys.version)
+        
+        critical_imports = [
+            'numpy', 'pandas', 'matplotlib', 'scipy',
+            'PIL', 'yaml', 'pytest', 'hypothesis'
+        ]
+        
+        failed = []
+        for module in critical_imports:
+            try:
+                __import__(module)
+                print(f'✓ {module}')
+            except ImportError as e:
+                print(f'✗ {module}: {e}')
+                failed.append(module)
+        
+        if failed:
+            print(f'\\nFailed imports: {failed}')
+            sys.exit(1)
+        else:
+            print('\\n✓ All critical dependencies imported successfully')
+        "
 
     - name: Lint with flake8
       run: |
