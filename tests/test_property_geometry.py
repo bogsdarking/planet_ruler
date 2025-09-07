@@ -98,7 +98,12 @@ class TestLimbCameraAngleProperties:
         assert 0 <= angle <= np.pi/2, f"Angle {angle} should be between 0 and π/2"
         assert np.isfinite(angle), "Angle should be finite"
     
-    @given(radius=realistic_radii, altitude=st.floats(min_value=10, max_value=1e5, allow_nan=False, allow_infinity=False))
+    @given(
+        radius=realistic_radii,
+        altitude=st.floats(
+            min_value=10, max_value=1e5, allow_nan=False, allow_infinity=False
+        ),
+    )
     def test_limb_angle_monotonic_in_altitude(self, radius, altitude):
         """Higher altitude should give larger camera angle."""
         
