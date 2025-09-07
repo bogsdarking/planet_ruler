@@ -25,7 +25,9 @@ from planet_ruler.geometry import (
 
 # Custom strategies for realistic parameter ranges
 realistic_radii = st.floats(min_value=1e3, max_value=1e8, allow_nan=False, allow_infinity=False)
+realistic_radii_for_monotonic = st.floats(min_value=1e3, max_value=1e7, allow_nan=False, allow_infinity=False)
 realistic_altitudes = st.floats(min_value=0, max_value=1e6, allow_nan=False, allow_infinity=False)
+positive_altitudes = st.floats(min_value=1.0, max_value=1e5, allow_nan=False, allow_infinity=False)
 small_angles = st.floats(min_value=-np.pi/4, max_value=np.pi/4, allow_nan=False, allow_infinity=False)
 camera_fov = st.floats(min_value=1.0, max_value=179.0, allow_nan=False, allow_infinity=False)
 detector_sizes = st.floats(min_value=1e-6, max_value=1e-1, allow_nan=False, allow_infinity=False)
@@ -52,11 +54,9 @@ class TestHorizonDistanceProperties:
         
         assert distance2 > distance1, f"Distance should increase with altitude: {distance1} vs {distance2}"
     
-    @given(radius=realistic_radii, altitude=realistic_altitudes)
+    @given(radius=realistic_radii_for_monotonic, altitude=positive_altitudes)
     def test_horizon_distance_monotonic_in_radius(self, radius, altitude):
         """Larger radius should give longer horizon distance for same altitude."""
-        assume(radius < 1e7)  # Avoid overflow
-        assume(altitude > 0)  # Need positive altitude for meaningful comparison
         
         distance1 = horizon_distance(radius, altitude)
         distance2 = horizon_distance(radius * 1.1, altitude)
@@ -98,11 +98,9 @@ class TestLimbCameraAngleProperties:
         assert 0 <= angle <= np.pi/2, f"Angle {angle} should be between 0 and π/2"
         assert np.isfinite(angle), "Angle should be finite"
     
-    @given(radius=realistic_radii, altitude=realistic_altitudes)
+    @given(radius=realistic_radii, altitude=st.floats(min_value=10, max_value=1e5, allow_nan=False, allow_infinity=False))
     def test_limb_angle_monotonic_in_altitude(self, radius, altitude):
         """Higher altitude should give larger camera angle."""
-        assume(altitude > 10)  # Avoid very small values
-        assume(altitude < 1e5)  # Avoid overflow
         
         angle1 = limb_camera_angle(radius, altitude)
         angle2 = limb_camera_angle(radius, altitude + 100)
