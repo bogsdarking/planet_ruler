@@ -2,8 +2,14 @@
 import pytest
 import numpy as np
 from planet_ruler.geometry import (
-    horizon_distance, limb_camera_angle, focal_length, detector_size,
-    field_of_view, intrinsic_transform, extrinsic_transform, limb_arc
+    horizon_distance,
+    limb_camera_angle,
+    focal_length,
+    detector_size,
+    field_of_view,
+    intrinsic_transform,
+    extrinsic_transform,
+    limb_arc,
 )
 
 
@@ -20,7 +26,7 @@ class TestBasicGeometry:
         distance = horizon_distance(earth_radius, altitude)
 
         # Expected: roughly 357km for 10km altitude
-        expected = np.sqrt(altitude ** 2 + 2 * altitude * earth_radius)
+        expected = np.sqrt(altitude**2 + 2 * altitude * earth_radius)
         assert np.isclose(distance, expected)
         assert distance > 350_000  # At least 350km
         assert distance < 370_000  # Less than 370km
@@ -160,31 +166,19 @@ class TestCoordinateTransforms:
 
     def test_extrinsic_transform_identity(self):
         """Test extrinsic transform with no rotation or translation"""
-        world_coords = np.array([
-            [1, 0, 0, 1],
-            [0, 1, 0, 1],
-            [0, 0, 1, 1]
-        ])
+        world_coords = np.array([[1, 0, 0, 1], [0, 1, 0, 1], [0, 0, 1, 1]])
 
         result = extrinsic_transform(world_coords)
 
         # Should be unchanged (identity transform) - result is 4x3 (transposed)
-        expected = np.array([
-            [1, 0, 0],
-            [0, 1, 0],
-            [0, 0, 1],
-            [1, 1, 1]
-        ])
+        expected = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
         assert np.allclose(result, expected)
 
     def test_extrinsic_transform_translation(self):
         """Test extrinsic transform with translation only"""
         world_coords = np.array([[0, 0, 0, 1]])  # 1x4 array (single point)
 
-        result = extrinsic_transform(
-            world_coords,
-            origin_x=1, origin_y=2, origin_z=3
-        )
+        result = extrinsic_transform(world_coords, origin_x=1, origin_y=2, origin_z=3)
 
         # Point should be translated
         assert np.isclose(result[0, 0], 1)  # x
@@ -204,7 +198,7 @@ class TestLimbArcGeneration:
             n_pix_y=1080,
             h=10_000,  # 10km altitude
             f=0.050,  # 50mm lens
-            w=0.036  # 36mm sensor
+            w=0.036,  # 36mm sensor
         )
 
         # Should return array with x-pixel coordinates
@@ -220,7 +214,7 @@ class TestLimbArcGeneration:
             n_pix_y=100,
             h=100_000,  # High altitude
             f=0.050,
-            w=0.036
+            w=0.036,
         )
 
         assert len(result) == 100
@@ -229,15 +223,7 @@ class TestLimbArcGeneration:
 
     def test_limb_arc_return_full(self):
         """Test limb arc with return_full=True"""
-        result = limb_arc(
-            r=1_000_000,
-            n_pix_x=100,
-            n_pix_y=100,
-            h=10_000,
-            f=0.050,
-            w=0.036,
-            return_full=True
-        )
+        result = limb_arc(r=1_000_000, n_pix_x=100, n_pix_y=100, h=10_000, f=0.050, w=0.036, return_full=True)
 
         # Should return full coordinate array
         assert result.shape[1] == 3  # x, y, homogeneous coordinate
@@ -249,14 +235,7 @@ class TestEdgeCases:
 
     def test_very_small_planet(self):
         """Test with very small planet radius"""
-        result = limb_arc(
-            r=10,  # 10 meter "planet"
-            n_pix_x=100,
-            n_pix_y=100,
-            h=1,  # 1 meter altitude
-            f=0.050,
-            w=0.036
-        )
+        result = limb_arc(r=10, n_pix_x=100, n_pix_y=100, h=1, f=0.050, w=0.036)  # 10 meter "planet"  # 1 meter altitude
 
         assert len(result) == 100
         assert not np.any(np.isnan(result))
@@ -267,12 +246,7 @@ class TestEdgeCases:
         # numerical issues in limb_arc. This is a degenerate case.
         # We test that the function handles it gracefully.
         result = limb_arc(
-            r=1_000_000,
-            n_pix_x=100,
-            n_pix_y=100,
-            h=1e-10,  # Very small altitude instead of exactly 0
-            f=0.050,
-            w=0.036
+            r=1_000_000, n_pix_x=100, n_pix_y=100, h=1e-10, f=0.050, w=0.036  # Very small altitude instead of exactly 0
         )
 
         assert len(result) == 100
@@ -285,22 +259,13 @@ class TestEdgeCases:
     def test_fov_parameter_combinations(self):
         """Test different parameter combinations for camera specification"""
         # Test with focal length and detector size
-        result1 = limb_arc(
-            r=1_000_000, n_pix_x=100, n_pix_y=100, h=1000,
-            f=0.050, w=0.036
-        )
+        result1 = limb_arc(r=1_000_000, n_pix_x=100, n_pix_y=100, h=1000, f=0.050, w=0.036)
 
         # Test with detector size and FOV
-        result2 = limb_arc(
-            r=1_000_000, n_pix_x=100, n_pix_y=100, h=1000,
-            w=0.036, fov=40
-        )
+        result2 = limb_arc(r=1_000_000, n_pix_x=100, n_pix_y=100, h=1000, w=0.036, fov=40)
 
         # Test with focal length and FOV
-        result3 = limb_arc(
-            r=1_000_000, n_pix_x=100, n_pix_y=100, h=1000,
-            f=0.050, fov=40
-        )
+        result3 = limb_arc(r=1_000_000, n_pix_x=100, n_pix_y=100, h=1000, f=0.050, fov=40)
 
         # All should produce valid results
         for result in [result1, result2, result3]:
@@ -314,12 +279,7 @@ class TestNumericalStability:
     def test_large_radius_values(self):
         """Test with very large planetary radii"""
         result = limb_arc(
-            r=1e10,  # Very large planet
-            n_pix_x=100,
-            n_pix_y=100,
-            h=1e6,  # Proportionally large altitude
-            f=0.050,
-            w=0.036
+            r=1e10, n_pix_x=100, n_pix_y=100, h=1e6, f=0.050, w=0.036  # Very large planet  # Proportionally large altitude
         )
 
         assert not np.any(np.isnan(result))
@@ -333,7 +293,7 @@ class TestNumericalStability:
             n_pix_y=100,
             h=1e-6,  # Micrometer altitude
             f=0.050,
-            w=0.036
+            w=0.036,
         )
 
         assert not np.any(np.isnan(result))
@@ -344,11 +304,14 @@ class TestNumericalStability:
 class TestParametrizedGeometry:
     """Parametrized tests for thorough coverage"""
 
-    @pytest.mark.parametrize("radius,height,expected_min,expected_max", [
-        (6_371_000, 10_000, 350_000, 370_000),  # Earth at 10km
-        (6_371_000, 35_000, 600_000, 700_000),  # Earth at cruising altitude
-        (1_737_400, 10_000, 180_000, 190_000),  # Moon at 10km (corrected range)
-    ])
+    @pytest.mark.parametrize(
+        "radius,height,expected_min,expected_max",
+        [
+            (6_371_000, 10_000, 350_000, 370_000),  # Earth at 10km
+            (6_371_000, 35_000, 600_000, 700_000),  # Earth at cruising altitude
+            (1_737_400, 10_000, 180_000, 190_000),  # Moon at 10km (corrected range)
+        ],
+    )
     def test_horizon_distance_real_bodies(self, radius, height, expected_min, expected_max):
         """Test horizon distance for real celestial bodies"""
         distance = horizon_distance(radius, height)
@@ -372,10 +335,10 @@ class TestParametrizedGeometry:
 def earth_params():
     """Standard Earth parameters for testing"""
     return {
-        'radius': 6_371_000,  # meters
-        'altitude': 10_000,  # 10km
-        'focal_length': 0.050,  # 50mm
-        'sensor_width': 0.036,  # 36mm full frame
+        "radius": 6_371_000,  # meters
+        "altitude": 10_000,  # 10km
+        "focal_length": 0.050,  # 50mm
+        "sensor_width": 0.036,  # 36mm full frame
     }
 
 
@@ -383,12 +346,12 @@ def earth_params():
 def camera_params():
     """Standard camera parameters for testing"""
     return {
-        'n_pix_x': 1920,
-        'n_pix_y': 1080,
-        'f': 0.050,
-        'w': 0.036,
-        'x0': 960,  # Image center
-        'y0': 540,  # Image center
+        "n_pix_x": 1920,
+        "n_pix_y": 1080,
+        "f": 0.050,
+        "w": 0.036,
+        "x0": 960,  # Image center
+        "y0": 540,  # Image center
     }
 
 
@@ -397,13 +360,9 @@ class TestIntegration:
 
     def test_earth_horizon_calculation(self, earth_params, camera_params):
         """Test complete horizon calculation for Earth"""
-        result = limb_arc(
-            r=earth_params['radius'],
-            h=earth_params['altitude'],
-            **camera_params
-        )
+        result = limb_arc(r=earth_params["radius"], h=earth_params["altitude"], **camera_params)
 
-        assert len(result) == camera_params['n_pix_x']
+        assert len(result) == camera_params["n_pix_x"]
         assert not np.any(np.isnan(result))
 
         # For Earth at 10km, horizon should be nearly flat in most images

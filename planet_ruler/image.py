@@ -29,14 +29,16 @@ def load_image(filepath: str) -> np.ndarray:
     return im_arr
 
 
-def gradient_break(im_arr: np.ndarray,
-                   log: bool = False,
-                   y_min: int = 0,
-                   y_max: int = -1,
-                   window_length: int = None,
-                   polyorder: int = 1,
-                   deriv: int = 0,
-                   delta: int = 1):
+def gradient_break(
+    im_arr: np.ndarray,
+    log: bool = False,
+    y_min: int = 0,
+    y_max: int = -1,
+    window_length: int = None,
+    polyorder: int = 1,
+    deriv: int = 0,
+    delta: int = 1,
+):
     """
     Scan each vertical line of an image for the maximum change
     in brightness gradient -- usually corresponds to a horizon.
@@ -72,7 +74,7 @@ def gradient_break(im_arr: np.ndarray,
             window_length = max(5, max_window)
             if window_length % 2 == 0:
                 window_length -= 1
-    
+
     grad = abs(np.gradient(im_arr.sum(axis=2), axis=0))
 
     if log:
@@ -84,26 +86,23 @@ def gradient_break(im_arr: np.ndarray,
     breaks = []
     for i in range(im_arr.shape[1]):
         y = grad[:, i]
-        yhat = savgol_filter(y, window_length=window_length,
-                             polyorder=polyorder, deriv=deriv, delta=delta)
+        yhat = savgol_filter(y, window_length=window_length, polyorder=polyorder, deriv=deriv, delta=delta)
 
         yhathat = np.diff(yhat)
         m = np.argmax(yhathat[y_min:y_max])
-        breaks += [m+y_min]
+        breaks += [m + y_min]
     breaks = np.array(breaks)
 
     return breaks
 
 
 class ImageSegmentation:
-    def __init__(self,
-                 image: np.ndarray,
-                 segmenter: str = 'segment-anything'):
+    def __init__(self, image: np.ndarray, segmenter: str = "segment-anything"):
         self.image = image
         self.segmenter = segmenter
         self._masks = None
 
-        if segmenter == 'segment-anything':
+        if segmenter == "segment-anything":
             self.model_path = kagglehub.model_download("metaresearch/segment-anything/pyTorch/vit-b")
         else:
             self.model_path = None
@@ -120,8 +119,7 @@ class ImageSegmentation:
         limb = np.array(limb).astype(float)
         # handling of blips (sometimes the image edges confuse segmenters)
         # set big jumps to NaN
-        limb[abs(np.diff(limb, n=1, append=limb[-1])) > 10 * abs(
-            np.nanmean(np.diff(limb, n=1, append=limb[-1])))] = np.nan
+        limb[abs(np.diff(limb, n=1, append=limb[-1])) > 10 * abs(np.nanmean(np.diff(limb, n=1, append=limb[-1])))] = np.nan
         # set their immediate neighbors to NaN
         limb[np.isnan(np.diff(limb, n=1, append=limb[-1]))] = np.nan
         nan_mask = np.isnan(limb)
@@ -131,23 +129,20 @@ class ImageSegmentation:
         return np.array(limb)
 
     def segment(self) -> np.ndarray:
-        if self.segmenter == 'segment-anything':
+        if self.segmenter == "segment-anything":
             sam = sam_model_registry["vit_b"](checkpoint=f"{self.model_path}/model.pth")
             mask_generator = SamAutomaticMaskGenerator(sam)
             masks = mask_generator.generate(self.image)
             self._masks = masks
             # combine first two (should be above/below)
-            mask = (1 - masks[0]['segmentation']) * masks[1]['segmentation']
+            mask = (1 - masks[0]["segmentation"]) * masks[1]["segmentation"]
 
             return self.limb_from_mask(mask)
 
 
-def smooth_limb(y: np.ndarray,
-                method: str = 'rolling-median',
-                window_length: int = 50,
-                polyorder: int = 1,
-                deriv: int = 0,
-                delta=1) -> np.ndarray:
+def smooth_limb(
+    y: np.ndarray, method: str = "rolling-median", window_length: int = 50, polyorder: int = 1, deriv: int = 0, delta=1
+) -> np.ndarray:
     """
     Smooth the limb position values.
 
@@ -167,34 +162,33 @@ def smooth_limb(y: np.ndarray,
     Returns:
         position (np.ndarray): Y-locations of the smoothed string for each column.
     """
-    assert method in ['bin-interpolate', 'savgol', 'rolling-mean', 'rolling-median']
+    assert method in ["bin-interpolate", "savgol", "rolling-mean", "rolling-median"]
 
-    if method == 'bin-interpolate':
+    if method == "bin-interpolate":
         binned = []
         x = []
         for i in range(len(y[::window_length])):
-            binned += [np.mean(y[i*window_length:i*window_length+window_length])]
-            x += [i*window_length+int(0.5*window_length)]
+            binned += [np.mean(y[i * window_length : i * window_length + window_length])]
+            x += [i * window_length + int(0.5 * window_length)]
         binned = np.array(binned)
         x = np.array(x)
 
         if polyorder == 1:
-            kind = 'linear'
+            kind = "linear"
         elif polyorder == 2:
-            kind = 'quadratic'
+            kind = "quadratic"
         elif polyorder == 0:
-            kind = 'nearest'
+            kind = "nearest"
         else:
-            raise AttributeError(f'polyorder {polyorder} not supported for bin-interpolate')
-        interp = interp1d(x, binned, kind=kind, fill_value='extrapolate')
+            raise AttributeError(f"polyorder {polyorder} not supported for bin-interpolate")
+        interp = interp1d(x, binned, kind=kind, fill_value="extrapolate")
 
         limb = interp(np.arange(len(y)))
-    elif method == 'savgol':
-        limb =  savgol_filter(y, window_length=window_length, polyorder=polyorder,
-                              deriv=deriv, delta=delta)
-    elif method == 'rolling-mean':
+    elif method == "savgol":
+        limb = savgol_filter(y, window_length=window_length, polyorder=polyorder, deriv=deriv, delta=delta)
+    elif method == "rolling-mean":
         limb = pd.Series(y).rolling(window_length).mean()
-    elif method == 'rolling-median':
+    elif method == "rolling-median":
         limb = pd.Series(y).rolling(window_length).median()
     else:
         raise ValueError(f"Did not recognize smoothing method {method}")
@@ -203,6 +197,7 @@ def smooth_limb(y: np.ndarray,
     limb[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), limb[~mask])
 
     return limb
+
 
 def fill_nans(limb: np.ndarray) -> np.ndarray:
     """
