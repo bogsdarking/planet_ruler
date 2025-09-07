@@ -19,4 +19,4 @@ torch>=1.11.0,<3.0.0; python_version>="3.8"  # Required by segment-anything
 segment-anything>=1.0,<2.0.0; python_version>="3.8"  # Segmentation models
 
 # Optional/newer dependencies - may cause issues
-kagglehub>=0.1.0,<1.0.0; python_version>="3.9"  # Conditional for newer Python
+kagglehub>=0.1.0,<1.0.0; python_version>="3.8"  # Conditional for newer Python
