@@ -2,8 +2,7 @@ import numpy as np
 from typing import Callable
 
 
-def unpack_parameters(params: list,
-                      template: list) -> dict:
+def unpack_parameters(params: list, template: list) -> dict:
     """
     Turn a list of parameters back into a dict.
 
@@ -45,13 +44,10 @@ class CostFunction:
     Returns:
         param_list (list): List of parameter values.
     """
+
     def __init__(
-            self,
-            target: np.ndarray,
-            function: Callable,
-            free_parameters: list,
-            init_parameter_values,
-            loss_function='l2'):
+        self, target: np.ndarray, function: Callable, free_parameters: list, init_parameter_values, loss_function="l2"
+    ):
 
         self.function = function
         self.free_parameters = free_parameters
@@ -60,9 +56,7 @@ class CostFunction:
         self.target = target
         self.loss_function = loss_function
 
-    def cost(
-            self,
-            params: np.ndarray | dict) -> float:
+    def cost(self, params: np.ndarray | dict) -> float:
         """
         Compute prediction and use desired metric to reduce difference
         from truth to a cost. AKA loss function.
@@ -76,12 +70,12 @@ class CostFunction:
         """
         y = self.evaluate(params)
 
-        if self.loss_function == 'l2':
+        if self.loss_function == "l2":
             cost = np.nanmean(pow(y - self.target, 2))
-        elif self.loss_function == 'l1':
+        elif self.loss_function == "l1":
             abs_diff = abs(y - self.target)
             cost = np.nanmean(abs_diff)
-        elif self.loss_function == 'log-l1':
+        elif self.loss_function == "log-l1":
             abs_diff = abs(y - self.target)
             # cost = np.sum(abs_diff) + np.sum(pow(abs_diff+1, -0.5))
             cost = np.nanmean(np.log(abs_diff + 1))
@@ -90,9 +84,7 @@ class CostFunction:
 
         return cost
 
-    def evaluate(
-            self,
-            params: np.ndarray | dict) -> np.ndarray:
+    def evaluate(self, params: np.ndarray | dict) -> np.ndarray:
         """
         Compute prediction given parameters.
 

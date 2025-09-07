@@ -13,9 +13,9 @@ np.random.seed(42)
 def earth_data():
     """Real Earth data for testing"""
     return {
-        'radius': 6_371_000,  # meters
-        'mass': 5.972e24,  # kg
-        'surface_gravity': 9.81,  # m/s^2
+        "radius": 6_371_000,  # meters
+        "mass": 5.972e24,  # kg
+        "surface_gravity": 9.81,  # m/s^2
     }
 
 
@@ -23,9 +23,9 @@ def earth_data():
 def moon_data():
     """Real Moon data for testing"""
     return {
-        'radius': 1_737_400,  # meters
-        'mass': 7.342e22,  # kg
-        'surface_gravity': 1.62,  # m/s^2
+        "radius": 1_737_400,  # meters
+        "mass": 7.342e22,  # kg
+        "surface_gravity": 1.62,  # m/s^2
     }
 
 
@@ -33,9 +33,9 @@ def moon_data():
 def mars_data():
     """Real Mars data for testing"""
     return {
-        'radius': 3_389_500,  # meters
-        'mass': 6.390e23,  # kg
-        'surface_gravity': 3.71,  # m/s^2
+        "radius": 3_389_500,  # meters
+        "mass": 6.390e23,  # kg
+        "surface_gravity": 3.71,  # m/s^2
     }
 
 
@@ -43,12 +43,12 @@ def mars_data():
 def standard_camera():
     """Standard DSLR camera parameters"""
     return {
-        'sensor_width': 0.036,  # 36mm (full frame)
-        'sensor_height': 0.024,  # 24mm
-        'focal_length': 0.050,  # 50mm lens
-        'n_pix_x': 6000,  # 6K resolution
-        'n_pix_y': 4000,
-        'pixel_size': 6e-6,  # 6 micron pixels
+        "sensor_width": 0.036,  # 36mm (full frame)
+        "sensor_height": 0.024,  # 24mm
+        "focal_length": 0.050,  # 50mm lens
+        "n_pix_x": 6000,  # 6K resolution
+        "n_pix_y": 4000,
+        "pixel_size": 6e-6,  # 6 micron pixels
     }
 
 
@@ -56,12 +56,12 @@ def standard_camera():
 def action_camera():
     """Action camera (GoPro-style) parameters"""
     return {
-        'sensor_width': 0.006,  # Small sensor
-        'sensor_height': 0.0045,
-        'focal_length': 0.003,  # Wide angle
-        'n_pix_x': 4000,
-        'n_pix_y': 3000,
-        'pixel_size': 1.5e-6,  # Small pixels
+        "sensor_width": 0.006,  # Small sensor
+        "sensor_height": 0.0045,
+        "focal_length": 0.003,  # Wide angle
+        "n_pix_x": 4000,
+        "n_pix_y": 3000,
+        "pixel_size": 1.5e-6,  # Small pixels
     }
 
 
@@ -69,13 +69,13 @@ def action_camera():
 def flight_altitudes():
     """Common flight altitudes for testing"""
     return {
-        'ground': 0,
-        'drone': 120,  # meters (400 feet)
-        'small_aircraft': 3_000,  # meters (10,000 feet)
-        'airliner': 11_000,  # meters (36,000 feet)
-        'u2_spy_plane': 21_000,  # meters (70,000 feet)
-        'sr71': 26_000,  # meters (85,000 feet)
-        'balloon': 40_000,  # meters (stratosphere)
+        "ground": 0,
+        "drone": 120,  # meters (400 feet)
+        "small_aircraft": 3_000,  # meters (10,000 feet)
+        "airliner": 11_000,  # meters (36,000 feet)
+        "u2_spy_plane": 21_000,  # meters (70,000 feet)
+        "sr71": 26_000,  # meters (85,000 feet)
+        "balloon": 40_000,  # meters (stratosphere)
     }
 
 
@@ -114,31 +114,31 @@ def known_test_cases():
     """Known test cases with expected results for validation"""
     return [
         {
-            'name': 'Earth_10km_50mm',
-            'params': {
-                'r': 6_371_000,
-                'h': 10_000,
-                'f': 0.050,
-                'w': 0.036,
-                'n_pix_x': 1920,
-                'n_pix_y': 1080,
+            "name": "Earth_10km_50mm",
+            "params": {
+                "r": 6_371_000,
+                "h": 10_000,
+                "f": 0.050,
+                "w": 0.036,
+                "n_pix_x": 1920,
+                "n_pix_y": 1080,
             },
-            'expected_horizon_distance': 357_099,  # meters (calculated)
-            'expected_limb_angle': 0.055992,  # radians (calculated)
+            "expected_horizon_distance": 357_099,  # meters (calculated)
+            "expected_limb_angle": 0.055992,  # radians (calculated)
         },
         {
-            'name': 'Moon_1km_28mm',
-            'params': {
-                'r': 1_737_400,
-                'h': 1_000,
-                'f': 0.028,
-                'w': 0.036,
-                'n_pix_x': 1920,
-                'n_pix_y': 1080,
+            "name": "Moon_1km_28mm",
+            "params": {
+                "r": 1_737_400,
+                "h": 1_000,
+                "f": 0.028,
+                "w": 0.036,
+                "n_pix_x": 1920,
+                "n_pix_y": 1080,
             },
-            'expected_horizon_distance': 58_948,  # meters
-            'expected_limb_angle': 0.00058,  # radians
-        }
+            "expected_horizon_distance": 58_948,  # meters
+            "expected_limb_angle": 0.00058,  # radians
+        },
     ]
 
 
@@ -166,15 +166,7 @@ pytest_plugins = []
 # Configure test markers
 def pytest_configure(config):
     """Register custom markers"""
-    config.addinivalue_line(
-        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
-    )
-    config.addinivalue_line(
-        "markers", "integration: marks tests as integration tests"
-    )
-    config.addinivalue_line(
-        "markers", "real_data: marks tests that use real planetary data"
-    )
-    config.addinivalue_line(
-        "markers", "numerical: marks tests that focus on numerical precision"
-    )
+    config.addinivalue_line("markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')")
+    config.addinivalue_line("markers", "integration: marks tests as integration tests")
+    config.addinivalue_line("markers", "real_data: marks tests that use real planetary data")
+    config.addinivalue_line("markers", "numerical: marks tests that focus on numerical precision")
