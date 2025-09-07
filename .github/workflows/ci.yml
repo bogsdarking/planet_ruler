@@ -123,11 +123,14 @@ jobs:
           htmlcov/
           coverage.xml
 
-    - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v4
+    - name: Upload coverage reports as artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
       with:
-        file: ./coverage.xml
-        fail_ci_if_error: true
+        name: coverage-report-${{ matrix.python-version }}
+        path: |
+          htmlcov/
+          coverage.xml
 
   benchmark:
     runs-on: ubuntu-latest
