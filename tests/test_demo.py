@@ -47,7 +47,12 @@ class TestMakeDropdown:
         call_args = mock_widgets.Dropdown.call_args[1]
 
         # Verify options
-        expected_options = [("Pluto", 1), ("Saturn-1", 2), ("Saturn-2", 3), ("Earth", 4)]
+        expected_options = [
+            ("Pluto", 1),
+            ("Saturn-1", 2),
+            ("Saturn-2", 3),
+            ("Earth", 4),
+        ]
         assert call_args["options"] == expected_options
 
         # Verify default value
@@ -152,7 +157,9 @@ class TestLoadDemoParameters:
         # Verify Saturn-2 specific parameters
         assert result["target"] == "Saturn"
         assert result["true_radius"] == 58232
-        assert result["image_filepath"] == "../demo/images/saturn_ciclops_5769_13427_1.jpg"
+        assert (
+            result["image_filepath"] == "../demo/images/saturn_ciclops_5769_13427_1.jpg"
+        )
         assert result["fit_config"] == "../config/saturn-cassini-2.yaml"
         assert result["limb_save"] == "saturn_limb_2.npy"
         assert result["parameter_walkthrough"] == "../demo/saturn_init_2.md"
@@ -207,7 +214,9 @@ class TestLoadDemoParameters:
 
     @patch("planet_ruler.demo.json.load")
     @patch("planet_ruler.demo.open")
-    def test_load_demo_parameters_all_demos_have_required_keys(self, mock_open_func, mock_json_load):
+    def test_load_demo_parameters_all_demos_have_required_keys(
+        self, mock_open_func, mock_json_load
+    ):
         """Test that all demo configurations have required parameter keys."""
         mock_limb_config = {"test": "config"}
         mock_json_load.return_value = mock_limb_config
@@ -234,7 +243,9 @@ class TestLoadDemoParameters:
 
     @patch("planet_ruler.demo.json.load")
     @patch("planet_ruler.demo.open")
-    def test_load_demo_parameters_file_path_consistency(self, mock_open_func, mock_json_load):
+    def test_load_demo_parameters_file_path_consistency(
+        self, mock_open_func, mock_json_load
+    ):
         """Test that file paths follow expected patterns."""
         mock_json_load.return_value = {}
 
@@ -243,7 +254,11 @@ class TestLoadDemoParameters:
             (1, "../config/pluto_limb_1.json", "pluto_limb.npy"),
             (2, "../config/saturn_limb_1.json", "saturn_limb_1.npy"),
             (3, "../config/saturn_limb_2.json", "saturn_limb_2.npy"),
-            (4, "../config/saturn_limb_2.json", "earth_limb_1.npy"),  # Earth uses Saturn config
+            (
+                4,
+                "../config/saturn_limb_2.json",
+                "earth_limb_1.npy",
+            ),  # Earth uses Saturn config
         ]
 
         for demo_value, expected_config_path, expected_save_path in demo_configs:
@@ -359,7 +374,9 @@ class TestDemoIntegration:
     @patch("planet_ruler.demo.widgets")
     @patch("planet_ruler.demo.json.load")
     @patch("planet_ruler.demo.open")
-    def test_dropdown_to_parameters_workflow(self, mock_open_func, mock_json_load, mock_widgets):
+    def test_dropdown_to_parameters_workflow(
+        self, mock_open_func, mock_json_load, mock_widgets
+    ):
         """Test complete workflow from dropdown creation to parameter loading."""
         # Setup dropdown
         mock_dropdown = Mock()
@@ -382,7 +399,9 @@ class TestDemoIntegration:
     def test_parameter_consistency_across_demos(self):
         """Test that parameter structures are consistent across all demos."""
 
-        with patch("planet_ruler.demo.json.load") as mock_json_load, patch("planet_ruler.demo.open"):
+        with patch("planet_ruler.demo.json.load") as mock_json_load, patch(
+            "planet_ruler.demo.open"
+        ):
 
             mock_json_load.return_value = {}
 

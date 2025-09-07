@@ -28,7 +28,9 @@ def plot_image(im_arr: np.ndarray, gradient: bool = False, show: bool = True) ->
         plt.show()
 
 
-def plot_limb(y: np.ndarray, show: bool = True, c: str = "y", s: int = 10, alpha: float = 0.2) -> None:
+def plot_limb(
+    y: np.ndarray, show: bool = True, c: str = "y", s: int = 10, alpha: float = 0.2
+) -> None:
     """
     Display the limb (usually on top of an image).
 
@@ -104,14 +106,37 @@ def plot_3d_solution(
     z_world = r * np.sin(theta) * np.sin(phi)
     ax.plot(x_world, y_world, z_world, c="k", label="limb")
 
-    ax.scatter([0], [0], [0], marker=".", s=100, label=f"camera/origin [elevation = {int(h / 1000)} km]")
+    ax.scatter(
+        [0],
+        [0],
+        [0],
+        marker=".",
+        s=100,
+        label=f"camera/origin [elevation = {int(h / 1000)} km]",
+    )
 
     if y_axis:
         ax.plot([0, 0], [-h, 0], [0, 0], c="g", ls="--", alpha=0.7, label="y-axis")
     if z_axis:
-        ax.plot([0, 0], [0, 0], [-horizon_radius, horizon_radius], c="b", ls="--", alpha=0.7, label="z-axis")
+        ax.plot(
+            [0, 0],
+            [0, 0],
+            [-horizon_radius, horizon_radius],
+            c="b",
+            ls="--",
+            alpha=0.7,
+            label="z-axis",
+        )
     if x_axis:
-        ax.plot([-horizon_radius, horizon_radius], [0, 0], [0, 0], c="k", ls="--", alpha=0.7, label="x-axis")
+        ax.plot(
+            [-horizon_radius, horizon_radius],
+            [0, 0],
+            [0, 0],
+            c="k",
+            ls="--",
+            alpha=0.7,
+            label="x-axis",
+        )
 
     theta = limb_theta
     phi = 0
@@ -141,7 +166,9 @@ def plot_3d_solution(
 
     ax.plot_wireframe(x_world, y_world, z_world, color="b", alpha=0.01)
 
-    ax.view_init(elev=limb_theta * 180 / np.pi, azim=azim, roll=roll, vertical_axis=vertical_axis)
+    ax.view_init(
+        elev=limb_theta * 180 / np.pi, azim=azim, roll=roll, vertical_axis=vertical_axis
+    )
     plt.axis("off")
     if legend:
         plt.legend(fontsize=12)

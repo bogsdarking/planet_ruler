@@ -36,7 +36,9 @@ class TestPlanetObservation:
             obs = PlanetObservation(tmp_file.name)
 
             # Handle that loaded images may have channel dimension
-            assert obs.image.shape[:2] == image_data.shape[:2]  # Compare height and width
+            assert (
+                obs.image.shape[:2] == image_data.shape[:2]
+            )  # Compare height and width
             assert isinstance(obs.features, dict)
             assert len(obs.features) == 0
             assert isinstance(obs._plot_functions, dict)
@@ -48,7 +50,9 @@ class TestPlanetObservation:
 
     @patch("matplotlib.pyplot.show")
     @patch("planet_ruler.observation.plot_image")
-    def test_plot_empty_features(self, mock_plot_image, mock_show, sample_horizon_image):
+    def test_plot_empty_features(
+        self, mock_plot_image, mock_show, sample_horizon_image
+    ):
         """Test plotting with no features"""
         image_data = sample_horizon_image()
 
@@ -59,7 +63,9 @@ class TestPlanetObservation:
             obs = PlanetObservation(tmp_file.name)
             obs.plot()
 
-            mock_plot_image.assert_called_once_with(obs.image, gradient=False, show=False)
+            mock_plot_image.assert_called_once_with(
+                obs.image, gradient=False, show=False
+            )
             mock_show.assert_called_once()
 
             os.unlink(tmp_file.name)
@@ -83,7 +89,9 @@ class TestPlanetObservation:
 
             obs.plot(gradient=True, show=False)
 
-            mock_plot_image.assert_called_once_with(obs.image, gradient=True, show=False)
+            mock_plot_image.assert_called_once_with(
+                obs.image, gradient=True, show=False
+            )
             mock_plot_func.assert_called_once()
             mock_show.assert_not_called()  # show=False
 
@@ -140,7 +148,9 @@ class TestLimbObservation:
             )
 
             # Handle that loaded images may have channel dimension
-            assert obs.image.shape[:2] == image_data.shape[:2]  # Compare height and width
+            assert (
+                obs.image.shape[:2] == image_data.shape[:2]
+            )  # Compare height and width
             assert obs.limb_detection == "segmentation"
             assert obs.minimizer == "differential-evolution"
             assert obs._segmenter is None
@@ -149,7 +159,9 @@ class TestLimbObservation:
 
             os.unlink(tmp_file.name)
 
-    def test_initialization_invalid_limb_detection(self, sample_horizon_image, config_file):
+    def test_initialization_invalid_limb_detection(
+        self, sample_horizon_image, config_file
+    ):
         """Test initialization with invalid limb detection method"""
         image_data = sample_horizon_image()
 
@@ -158,7 +170,11 @@ class TestLimbObservation:
             tmp_file.flush()
 
             with pytest.raises(AssertionError):
-                LimbObservation(image_filepath=tmp_file.name, fit_config=config_file, limb_detection="invalid-method")
+                LimbObservation(
+                    image_filepath=tmp_file.name,
+                    fit_config=config_file,
+                    limb_detection="invalid-method",
+                )
 
             os.unlink(tmp_file.name)
 
@@ -180,11 +196,15 @@ class TestLimbObservation:
 
             os.unlink(tmp_file.name)
 
-    def test_load_fit_config_invalid_initial_values(self, sample_horizon_image, sample_fit_config):
+    def test_load_fit_config_invalid_initial_values(
+        self, sample_horizon_image, sample_fit_config
+    ):
         """Test load_fit_config with invalid initial values"""
         # Create config with initial value outside bounds
         invalid_config = sample_fit_config.copy()
-        invalid_config["init_parameter_values"]["planet_radius"] = 5000000.0  # Below lower bound
+        invalid_config["init_parameter_values"][
+            "planet_radius"
+        ] = 5000000.0  # Below lower bound
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
             yaml.dump(invalid_config, f)
@@ -203,7 +223,9 @@ class TestLimbObservation:
             os.unlink(f.name)
 
     @patch("planet_ruler.observation.gradient_break")
-    def test_detect_limb_gradient_break(self, mock_gradient_break, sample_horizon_image, config_file):
+    def test_detect_limb_gradient_break(
+        self, mock_gradient_break, sample_horizon_image, config_file
+    ):
         """Test limb detection using gradient-break method"""
         image_data = sample_horizon_image()
 
@@ -211,7 +233,11 @@ class TestLimbObservation:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file, limb_detection="gradient-break")
+            obs = LimbObservation(
+                image_filepath=tmp_file.name,
+                fit_config=config_file,
+                limb_detection="gradient-break",
+            )
 
             # Mock return value
             expected_limb = np.random.random(image_data.shape[1])
@@ -220,7 +246,14 @@ class TestLimbObservation:
             obs.detect_limb(log=True, y_min=10, y_max=90)
 
             mock_gradient_break.assert_called_once_with(
-                obs.image, log=True, y_min=10, y_max=90, window_length=501, polyorder=1, deriv=0, delta=1
+                obs.image,
+                log=True,
+                y_min=10,
+                y_max=90,
+                window_length=501,
+                polyorder=1,
+                deriv=0,
+                delta=1,
             )
 
             assert np.array_equal(obs.features["limb"], expected_limb)
@@ -229,7 +262,9 @@ class TestLimbObservation:
             os.unlink(tmp_file.name)
 
     @patch("planet_ruler.observation.ImageSegmentation")
-    def test_detect_limb_segmentation(self, mock_segmentation_class, sample_horizon_image, config_file):
+    def test_detect_limb_segmentation(
+        self, mock_segmentation_class, sample_horizon_image, config_file
+    ):
         """Test limb detection using segmentation method"""
         image_data = sample_horizon_image()
 
@@ -237,7 +272,11 @@ class TestLimbObservation:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file, limb_detection="segmentation")
+            obs = LimbObservation(
+                image_filepath=tmp_file.name,
+                fit_config=config_file,
+                limb_detection="segmentation",
+            )
 
             # Mock segmenter and its methods
             mock_segmenter = Mock()
@@ -247,7 +286,9 @@ class TestLimbObservation:
 
             obs.detect_limb(segmenter="segment-anything")
 
-            mock_segmentation_class.assert_called_once_with(obs.image, segmenter="segment-anything")
+            mock_segmentation_class.assert_called_once_with(
+                obs.image, segmenter="segment-anything"
+            )
             mock_segmenter.segment.assert_called_once()
 
             assert np.array_equal(obs.features["limb"], expected_limb)
@@ -258,7 +299,9 @@ class TestLimbObservation:
 
     @patch("planet_ruler.observation.smooth_limb")
     @patch("planet_ruler.observation.fill_nans")
-    def test_smooth_limb(self, mock_fill_nans, mock_smooth_limb, sample_horizon_image, config_file):
+    def test_smooth_limb(
+        self, mock_fill_nans, mock_smooth_limb, sample_horizon_image, config_file
+    ):
         """Test limb smoothing functionality"""
         image_data = sample_horizon_image()
 
@@ -289,7 +332,13 @@ class TestLimbObservation:
 
     @patch("planet_ruler.observation.differential_evolution")
     @patch("planet_ruler.observation.CostFunction")
-    def test_fit_limb(self, mock_cost_function_class, mock_diff_evolution, sample_horizon_image, config_file):
+    def test_fit_limb(
+        self,
+        mock_cost_function_class,
+        mock_diff_evolution,
+        sample_horizon_image,
+        config_file,
+    ):
         """Test limb fitting functionality"""
         image_data = sample_horizon_image()
 
@@ -359,7 +408,9 @@ class TestLimbObservation:
                 obs.save_limb(tmp_limb.name)
 
                 # Create new observation and load limb data
-                obs2 = LimbObservation(image_filepath=tmp_image.name, fit_config=config_file)
+                obs2 = LimbObservation(
+                    image_filepath=tmp_image.name, fit_config=config_file
+                )
 
                 with patch("planet_ruler.observation.fill_nans") as mock_fill_nans:
                     filled_limb = limb_data + 0.1  # Slightly different
@@ -388,7 +439,11 @@ class TestUtilityFunctions:
 
         # Mock fit results
         obs.fit_results = {
-            "population": [np.array([1.1, 2.1]), np.array([1.2, 2.2]), np.array([1.3, 2.3])],
+            "population": [
+                np.array([1.1, 2.1]),
+                np.array([1.2, 2.2]),
+                np.array([1.3, 2.3]),
+            ],
             "population_energies": [0.1, 0.2, 0.3],
         }
 
@@ -426,9 +481,14 @@ class TestUtilityFunctions:
         obs.init_parameter_values = {"param1": 1.0}
 
         # Mock the posterior data
-        mock_pop_data = pd.DataFrame({"param1": [1.1, 1.2, 1.3], "mse": [0.1, 0.2, 0.3]})
+        mock_pop_data = pd.DataFrame(
+            {"param1": [1.1, 1.2, 1.3], "mse": [0.1, 0.2, 0.3]}
+        )
 
-        with patch("planet_ruler.observation.unpack_diff_evol_posteriors", return_value=mock_pop_data):
+        with patch(
+            "planet_ruler.observation.unpack_diff_evol_posteriors",
+            return_value=mock_pop_data,
+        ):
             plot_diff_evol_posteriors(obs, show_points=False, log=True)
 
             mock_kdeplot.assert_called_once()
@@ -447,7 +507,9 @@ class TestUtilityFunctions:
         obs.best_parameters = {"param1": 1.0, "param2": 2.0}
 
         # Mock limb_arc returns
-        full_limb_pixels = np.column_stack([np.arange(200), np.random.random(200) * 100])  # x coordinates  # y coordinates
+        full_limb_pixels = np.column_stack(
+            [np.arange(200), np.random.random(200) * 100]
+        )  # x coordinates  # y coordinates
         visible_limb = np.random.random(200)
 
         mock_limb_arc.side_effect = [full_limb_pixels, visible_limb]
@@ -465,7 +527,10 @@ class TestUtilityFunctions:
         """Test plotting segmentation masks"""
         # Create mock observation
         obs = Mock()
-        mock_masks = [{"segmentation": np.random.random((100, 100))}, {"segmentation": np.random.random((100, 100))}]
+        mock_masks = [
+            {"segmentation": np.random.random((100, 100))},
+            {"segmentation": np.random.random((100, 100))},
+        ]
         obs._segmenter._masks = mock_masks
 
         plot_segmentation_masks(obs)
@@ -528,7 +593,9 @@ class TestObservationIntegration:
             },
         }
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as config_file:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yml", delete=False
+        ) as config_file:
             yaml.dump(sample_fit_config, config_file)
             config_file.flush()
 
@@ -539,11 +606,15 @@ class TestObservationIntegration:
 
                 # Create observation
                 obs = LimbObservation(
-                    image_filepath=image_file.name, fit_config=config_file.name, limb_detection="gradient-break"
+                    image_filepath=image_file.name,
+                    fit_config=config_file.name,
+                    limb_detection="gradient-break",
                 )
 
                 # Mock limb detection
-                with patch("planet_ruler.observation.gradient_break") as mock_gradient_break:
+                with patch(
+                    "planet_ruler.observation.gradient_break"
+                ) as mock_gradient_break:
                     expected_limb = np.random.random(image_data.shape[1])
                     mock_gradient_break.return_value = expected_limb
 
@@ -590,7 +661,9 @@ class TestObservationIntegration:
             },
         }
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as config_file:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yml", delete=False
+        ) as config_file:
             yaml.dump(sample_fit_config, config_file)
             config_file.flush()
 
@@ -599,7 +672,11 @@ class TestObservationIntegration:
                 plt.imsave(image_file.name, image_data, cmap="gray")
                 image_file.flush()
 
-                obs = LimbObservation(image_filepath=image_file.name, fit_config=config_file.name, limb_detection=limb_method)
+                obs = LimbObservation(
+                    image_filepath=image_file.name,
+                    fit_config=config_file.name,
+                    limb_detection=limb_method,
+                )
 
                 assert obs.limb_detection == limb_method
 

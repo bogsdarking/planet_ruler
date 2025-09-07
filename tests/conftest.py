@@ -166,7 +166,13 @@ pytest_plugins = []
 # Configure test markers
 def pytest_configure(config):
     """Register custom markers"""
-    config.addinivalue_line("markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')")
+    config.addinivalue_line(
+        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+    )
     config.addinivalue_line("markers", "integration: marks tests as integration tests")
-    config.addinivalue_line("markers", "real_data: marks tests that use real planetary data")
-    config.addinivalue_line("markers", "numerical: marks tests that focus on numerical precision")
+    config.addinivalue_line(
+        "markers", "real_data: marks tests that use real planetary data"
+    )
+    config.addinivalue_line(
+        "markers", "numerical: marks tests that focus on numerical precision"
+    )

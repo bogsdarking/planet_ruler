@@ -24,14 +24,30 @@ from planet_ruler.geometry import (
 
 
 # Custom strategies for realistic parameter ranges
-realistic_radii = st.floats(min_value=1e3, max_value=1e8, allow_nan=False, allow_infinity=False)
-realistic_radii_for_monotonic = st.floats(min_value=1e3, max_value=1e7, allow_nan=False, allow_infinity=False)
-realistic_altitudes = st.floats(min_value=0, max_value=1e6, allow_nan=False, allow_infinity=False)
-positive_altitudes = st.floats(min_value=1.0, max_value=1e5, allow_nan=False, allow_infinity=False)
-small_angles = st.floats(min_value=-np.pi / 4, max_value=np.pi / 4, allow_nan=False, allow_infinity=False)
-camera_fov = st.floats(min_value=1.0, max_value=179.0, allow_nan=False, allow_infinity=False)
-detector_sizes = st.floats(min_value=1e-6, max_value=1e-1, allow_nan=False, allow_infinity=False)
-focal_lengths = st.floats(min_value=1e-3, max_value=10.0, allow_nan=False, allow_infinity=False)
+realistic_radii = st.floats(
+    min_value=1e3, max_value=1e8, allow_nan=False, allow_infinity=False
+)
+realistic_radii_for_monotonic = st.floats(
+    min_value=1e3, max_value=1e7, allow_nan=False, allow_infinity=False
+)
+realistic_altitudes = st.floats(
+    min_value=0, max_value=1e6, allow_nan=False, allow_infinity=False
+)
+positive_altitudes = st.floats(
+    min_value=1.0, max_value=1e5, allow_nan=False, allow_infinity=False
+)
+small_angles = st.floats(
+    min_value=-np.pi / 4, max_value=np.pi / 4, allow_nan=False, allow_infinity=False
+)
+camera_fov = st.floats(
+    min_value=1.0, max_value=179.0, allow_nan=False, allow_infinity=False
+)
+detector_sizes = st.floats(
+    min_value=1e-6, max_value=1e-1, allow_nan=False, allow_infinity=False
+)
+focal_lengths = st.floats(
+    min_value=1e-3, max_value=10.0, allow_nan=False, allow_infinity=False
+)
 
 
 class TestHorizonDistanceProperties:
@@ -52,7 +68,9 @@ class TestHorizonDistanceProperties:
         distance1 = horizon_distance(radius, altitude)
         distance2 = horizon_distance(radius, altitude + 100)
 
-        assert distance2 > distance1, f"Distance should increase with altitude: {distance1} vs {distance2}"
+        assert (
+            distance2 > distance1
+        ), f"Distance should increase with altitude: {distance1} vs {distance2}"
 
     @given(radius=realistic_radii_for_monotonic, altitude=positive_altitudes)
     def test_horizon_distance_monotonic_in_radius(self, radius, altitude):
@@ -61,13 +79,17 @@ class TestHorizonDistanceProperties:
         distance1 = horizon_distance(radius, altitude)
         distance2 = horizon_distance(radius * 1.1, altitude)
 
-        assert distance2 > distance1, f"Distance should increase with radius: {distance1} vs {distance2}"
+        assert (
+            distance2 > distance1
+        ), f"Distance should increase with radius: {distance1} vs {distance2}"
 
     @given(radius=realistic_radii)
     def test_horizon_distance_zero_altitude(self, radius):
         """At zero altitude, horizon distance should be zero."""
         distance = horizon_distance(radius, 0)
-        assert abs(distance) < 1e-10, f"Distance at zero altitude should be zero, got {distance}"
+        assert (
+            abs(distance) < 1e-10
+        ), f"Distance at zero altitude should be zero, got {distance}"
 
     @given(radius=realistic_radii, altitude=realistic_altitudes)
     def test_horizon_distance_bounds(self, radius, altitude):
@@ -77,7 +99,9 @@ class TestHorizonDistanceProperties:
         distance = horizon_distance(radius, altitude)
 
         # Distance should be at least the altitude (looking straight down)
-        assert distance >= altitude, f"Distance {distance} should be at least altitude {altitude}"
+        assert (
+            distance >= altitude
+        ), f"Distance {distance} should be at least altitude {altitude}"
 
         # For small h relative to r, distance ≈ sqrt(2*h*r)
         if altitude / radius < 0.01:
@@ -100,7 +124,9 @@ class TestLimbCameraAngleProperties:
 
     @given(
         radius=realistic_radii,
-        altitude=st.floats(min_value=10, max_value=1e5, allow_nan=False, allow_infinity=False),
+        altitude=st.floats(
+            min_value=10, max_value=1e5, allow_nan=False, allow_infinity=False
+        ),
     )
     def test_limb_angle_monotonic_in_altitude(self, radius, altitude):
         """Higher altitude should give larger camera angle."""
@@ -108,7 +134,9 @@ class TestLimbCameraAngleProperties:
         angle1 = limb_camera_angle(radius, altitude)
         angle2 = limb_camera_angle(radius, altitude + 100)
 
-        assert angle2 > angle1, f"Angle should increase with altitude: {angle1} vs {angle2}"
+        assert (
+            angle2 > angle1
+        ), f"Angle should increase with altitude: {angle1} vs {angle2}"
 
     @given(radius=realistic_radii, altitude=realistic_altitudes)
     def test_limb_angle_approaches_limits(self, radius, altitude):
@@ -119,7 +147,9 @@ class TestLimbCameraAngleProperties:
 
         # For very high altitude, angle approaches π/2
         if altitude / radius > 100:
-            assert angle > np.pi / 2 - 0.1, f"High altitude angle {angle} should approach π/2"
+            assert (
+                angle > np.pi / 2 - 0.1
+            ), f"High altitude angle {angle} should approach π/2"
 
         # For very low altitude, angle approaches 0
         if altitude / radius < 0.001:
@@ -193,7 +223,9 @@ class TestCoordinateTransformProperties:
         x0=st.floats(min_value=-1000, max_value=1000),
         y0=st.floats(min_value=-1000, max_value=1000),
     )
-    def test_intrinsic_transform_preserves_dimensions(self, n_points, f, px, py, x0, y0):
+    def test_intrinsic_transform_preserves_dimensions(
+        self, n_points, f, px, py, x0, y0
+    ):
         """Intrinsic transform should preserve number of points."""
         # Generate random camera coordinates
         camera_coords = np.random.standard_normal((4, n_points))
@@ -203,7 +235,9 @@ class TestCoordinateTransformProperties:
 
         assert pixel_coords.shape[0] == n_points, "Should preserve number of points"
         assert pixel_coords.shape[1] >= 3, "Should have at least 3 coordinates"
-        assert np.allclose(pixel_coords[:, -1], 1), "Last column should be ones (homogeneous)"
+        assert np.allclose(
+            pixel_coords[:, -1], 1
+        ), "Last column should be ones (homogeneous)"
 
     @given(
         n_points=st.integers(min_value=1, max_value=100),
@@ -214,12 +248,16 @@ class TestCoordinateTransformProperties:
         origin_y=st.floats(min_value=-1000, max_value=1000),
         origin_z=st.floats(min_value=-1000, max_value=1000),
     )
-    def test_extrinsic_transform_preserves_dimensions(self, n_points, theta_x, theta_y, theta_z, origin_x, origin_y, origin_z):
+    def test_extrinsic_transform_preserves_dimensions(
+        self, n_points, theta_x, theta_y, theta_z, origin_x, origin_y, origin_z
+    ):
         """Extrinsic transform should preserve number of points."""
         world_coords = np.random.standard_normal((n_points, 4))
         world_coords[:, 3] = 1  # Homogeneous coordinates
 
-        camera_coords = extrinsic_transform(world_coords, theta_x, theta_y, theta_z, origin_x, origin_y, origin_z)
+        camera_coords = extrinsic_transform(
+            world_coords, theta_x, theta_y, theta_z, origin_x, origin_y, origin_z
+        )
 
         assert camera_coords.shape[0] == 4, "Should have 4 coordinate dimensions"
         assert camera_coords.shape[1] == n_points, "Should preserve number of points"
@@ -237,7 +275,9 @@ class TestCoordinateTransformProperties:
 
         # Should be nearly identical (accounting for numerical precision)
         expected = world_coords.T
-        assert np.allclose(camera_coords, expected, rtol=1e-14), "Identity transform failed"
+        assert np.allclose(
+            camera_coords, expected, rtol=1e-14
+        ), "Identity transform failed"
 
     @given(angle=st.floats(min_value=-np.pi, max_value=np.pi, allow_nan=False))
     def test_extrinsic_transform_rotation_properties(self, angle):
@@ -251,9 +291,15 @@ class TestCoordinateTransformProperties:
         # Check that distances between points are preserved
         for i in range(3):
             for j in range(i + 1, 3):
-                original_dist = np.linalg.norm(world_coords[i, :3] - world_coords[j, :3])
-                rotated_dist = np.linalg.norm(camera_coords[:3, i] - camera_coords[:3, j])
-                assert abs(original_dist - rotated_dist) < 1e-14, "Rotation should preserve distances"
+                original_dist = np.linalg.norm(
+                    world_coords[i, :3] - world_coords[j, :3]
+                )
+                rotated_dist = np.linalg.norm(
+                    camera_coords[:3, i] - camera_coords[:3, j]
+                )
+                assert (
+                    abs(original_dist - rotated_dist) < 1e-14
+                ), "Rotation should preserve distances"
 
 
 class TestLimbArcProperties:
@@ -267,13 +313,21 @@ class TestLimbArcProperties:
         fov=st.floats(min_value=10, max_value=60),
         w=detector_sizes,
     )
-    @settings(max_examples=20, deadline=10000)  # Limit examples due to computational cost
-    def test_limb_arc_output_dimensions(self, radius, n_pix_x, n_pix_y, altitude, fov, w):
+    @settings(
+        max_examples=20, deadline=10000
+    )  # Limit examples due to computational cost
+    def test_limb_arc_output_dimensions(
+        self, radius, n_pix_x, n_pix_y, altitude, fov, w
+    ):
         """Limb arc should return array matching image width."""
         try:
-            y_pixel = limb_arc(r=radius, n_pix_x=n_pix_x, n_pix_y=n_pix_y, h=altitude, fov=fov, w=w)
+            y_pixel = limb_arc(
+                r=radius, n_pix_x=n_pix_x, n_pix_y=n_pix_y, h=altitude, fov=fov, w=w
+            )
 
-            assert len(y_pixel) == n_pix_x, f"Output length {len(y_pixel)} should match n_pix_x {n_pix_x}"
+            assert (
+                len(y_pixel) == n_pix_x
+            ), f"Output length {len(y_pixel)} should match n_pix_x {n_pix_x}"
             assert np.all(np.isfinite(y_pixel)), "All y-coordinates should be finite"
 
         except (AssertionError, ValueError) as e:
@@ -291,13 +345,20 @@ class TestLimbArcProperties:
         """Limb arc should be reasonably continuous (no huge jumps)."""
         try:
             y_pixel = limb_arc(
-                r=radius, n_pix_x=n_pix_x, n_pix_y=n_pix_y, h=altitude, fov=30.0, w=0.01  # Fixed reasonable values
+                r=radius,
+                n_pix_x=n_pix_x,
+                n_pix_y=n_pix_y,
+                h=altitude,
+                fov=30.0,
+                w=0.01,  # Fixed reasonable values
             )
 
             # Check for reasonable continuity (no jumps larger than image dimensions)
             if len(y_pixel) > 1:
                 max_jump = np.max(np.abs(np.diff(y_pixel)))
-                assert max_jump < 10 * n_pix_y, f"Maximum jump {max_jump} too large for image size {n_pix_y}"
+                assert (
+                    max_jump < 10 * n_pix_y
+                ), f"Maximum jump {max_jump} too large for image size {n_pix_y}"
 
         except (AssertionError, ValueError, IndexError):
             # Some parameter combinations may be invalid or cause edge cases
@@ -307,7 +368,10 @@ class TestLimbArcProperties:
 class TestNumericalStabilityProperties:
     """Property-based tests for numerical stability across functions."""
 
-    @given(radius=st.floats(min_value=1e3, max_value=1e8), altitude=st.floats(min_value=1e-3, max_value=1e6))
+    @given(
+        radius=st.floats(min_value=1e3, max_value=1e8),
+        altitude=st.floats(min_value=1e-3, max_value=1e6),
+    )
     def test_horizon_functions_numerical_stability(self, radius, altitude):
         """Test that horizon calculations remain stable across wide parameter ranges."""
         try:
@@ -324,7 +388,10 @@ class TestNumericalStabilityProperties:
             # Some extreme parameter combinations may cause expected failures
             assume(False)
 
-    @given(param1=st.floats(min_value=1e-6, max_value=1e6), param2=st.floats(min_value=1.0, max_value=179.0))
+    @given(
+        param1=st.floats(min_value=1e-6, max_value=1e6),
+        param2=st.floats(min_value=1.0, max_value=179.0),
+    )
     def test_camera_functions_numerical_stability(self, param1, param2):
         """Test that camera optic calculations remain stable."""
         try:
@@ -333,9 +400,15 @@ class TestNumericalStabilityProperties:
             w1 = detector_size(param1, param2)
             fov1 = field_of_view(param1, param2 / 100)  # Scale param2 for detector size
 
-            assert np.isfinite(f1) and f1 > 0, "Focal length should be finite and positive"
-            assert np.isfinite(w1) and w1 > 0, "Detector size should be finite and positive"
-            assert np.isfinite(fov1) and 0 < fov1 < 180, "FOV should be finite and in valid range"
+            assert (
+                np.isfinite(f1) and f1 > 0
+            ), "Focal length should be finite and positive"
+            assert (
+                np.isfinite(w1) and w1 > 0
+            ), "Detector size should be finite and positive"
+            assert (
+                np.isfinite(fov1) and 0 < fov1 < 180
+            ), "FOV should be finite and in valid range"
 
         except (ValueError, OverflowError, ZeroDivisionError):
             # Some parameter combinations may cause expected numerical issues
