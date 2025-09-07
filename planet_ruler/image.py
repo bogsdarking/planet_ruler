@@ -33,7 +33,7 @@ def gradient_break(im_arr: np.ndarray,
                    log: bool = False,
                    y_min: int = 0,
                    y_max: int = -1,
-                   window_length: int = 501,
+                   window_length: int = None,
                    polyorder: int = 1,
                    deriv: int = 0,
                    delta: int = 1):
@@ -56,6 +56,23 @@ def gradient_break(im_arr: np.ndarray,
     Returns:
         image array (np.ndarray)
     """
+    # Auto-calculate window_length if not provided
+    if window_length is None:
+        # Use ~10% of image height, with reasonable bounds
+        window_length = min(501, max(5, int(0.1 * im_arr.shape[0])))
+        # Ensure odd window length for savgol_filter
+        if window_length % 2 == 0:
+            window_length -= 1
+    else:
+        # Validate provided window_length against image dimensions
+        max_window = im_arr.shape[0] - 1
+        if max_window % 2 == 0:
+            max_window -= 1
+        if window_length > max_window:
+            window_length = max(5, max_window)
+            if window_length % 2 == 0:
+                window_length -= 1
+    
     grad = abs(np.gradient(im_arr.sum(axis=2), axis=0))
 
     if log:
