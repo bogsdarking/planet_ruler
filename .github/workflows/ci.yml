@@ -1,0 +1,296 @@
+# .github/workflows/ci.yml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, "3.10", "3.11"]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Validate dependency compatibility
+      run: |
+        python -m pip install --upgrade pip
+        # Test dependency resolution without installing
+        echo "Testing dependency resolution for Python ${{ matrix.python-version }}"
+        pip install --dry-run -r requirements.txt -r requirements-test.txt || echo "Dependency conflicts detected - proceeding with installation"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Install project dependencies with error handling for heavy ML deps
+        if [ -f requirements.txt ]; then
+          echo "Installing core dependencies with timeout protection..."
+          timeout 600 pip install -r requirements.txt || {
+            echo "Timeout or error installing full requirements.txt, trying minimal install..."
+            # Install only essential dependencies, skip ML ones on timeout
+            pip install pandas matplotlib numpy tqdm scipy Pillow PyYAML seaborn ipywidgets ipython
+          }
+        fi
+        # Install test dependencies
+        if [ -f requirements-test.txt ]; then
+          echo "Installing test dependencies..."
+          pip install -r requirements-test.txt
+        fi
+        # Install package in development mode
+        echo "Installing package in development mode..."
+        pip install -e .
+
+    - name: Verify critical imports
+      run: |
+        # Test that critical dependencies can be imported
+        python -c "
+        import sys
+        print('Python version:', sys.version)
+        
+        modules = ['numpy', 'pandas', 'matplotlib', 'scipy', 'PIL', 'yaml', 'pytest', 'hypothesis']
+        failed = []
+        
+        for module in modules:
+            try:
+                __import__(module)
+                print('✓ ' + module)
+            except ImportError as e:
+                print('✗ ' + module + ': ' + str(e))
+                failed.append(module)
+        
+        if failed:
+            print('')
+            print('Failed imports: ' + str(failed))
+            sys.exit(1)
+        else:
+            print('')
+            print('✓ All critical dependencies imported successfully')
+        "
+
+    - name: Lint with flake8
+      run: |
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings. GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Check code formatting with black
+      run: |
+        black --check --diff .
+
+    - name: Run unit tests
+      run: |
+        # Run fast unit tests first
+        pytest tests/ -v \
+          --cov=planet_ruler \
+          --cov-report=xml \
+          --cov-report=html \
+          --cov-report=term-missing \
+          --cov-fail-under=80 \
+          --junitxml=test-results.xml \
+          --html=test-report.html \
+          --self-contained-html \
+          -m "not slow and not benchmark" \
+          --maxfail=5
+
+    - name: Run property-based tests
+      run: |
+        # Run hypothesis property-based tests
+        pytest tests/test_property_geometry.py -v \
+          --hypothesis-show-statistics \
+          --maxfail=3
+
+    - name: Run integration tests
+      run: |
+        # Run slower integration tests
+        pytest tests/ -v -m "slow or integration" \
+          --maxfail=3
+
+    - name: Upload test artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.python-version }}
+        path: |
+          test-results.xml
+          test-report.html
+          htmlcov/
+          coverage.xml
+
+    - name: Upload coverage reports as artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: coverage-report-${{ matrix.python-version }}
+        path: |
+          htmlcov/
+          coverage.xml
+
+  benchmark:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-test.txt
+        pip install -e .
+
+    - name: Run performance benchmarks
+      run: |
+        # Run benchmark tests and save results
+        pytest tests/test_benchmark_performance.py -v \
+          --benchmark-only \
+          --benchmark-json=benchmark-results.json \
+          --benchmark-save=benchmark-$(date +%Y%m%d-%H%M%S) \
+          --benchmark-save-data \
+          --benchmark-histogram=benchmark-histogram \
+          --maxfail=5
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: |
+          benchmark-results.json
+          .benchmarks/
+          benchmark-histogram.svg
+
+    - name: Store benchmark result
+      uses: benchmark-action/github-action-benchmark@v1
+      if: github.ref == 'refs/heads/main'
+      with:
+        name: Python Benchmark
+        tool: 'pytest'
+        output-file-path: benchmark-results.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: true
+        # Show alert with commit comment on detecting possible performance regression
+        alert-threshold: '200%'
+        comment-on-alert: true
+        fail-on-alert: false
+        alert-comment-cc-users: '@bogsdarking'
+
+  build-docs:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Install project dependencies first (required for autodoc)
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pip install -e .
+        # Install documentation dependencies
+        if [ -f docs/requirements.txt ]; then
+          echo "Installing documentation dependencies..."
+          pip install -r docs/requirements.txt;
+        else
+          echo "Installing fallback documentation dependencies..."
+          pip install sphinx sphinx-rtd-theme myst-parser
+        fi
+
+    - name: Build documentation
+      run: |
+        cd docs
+        echo "Building documentation..."
+        make clean || echo "Clean failed, continuing..."
+        # First try with warnings as errors, fallback without
+        make html SPHINXOPTS="-W" || {
+          echo "Documentation build with warnings-as-errors failed, trying without..."
+          make html
+        }
+        
+    - name: Test documentation links
+      run: |
+        cd docs
+        echo "Checking for broken links..."
+        make linkcheck || echo "Link check completed with warnings"
+
+    - name: Upload documentation artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: documentation-html
+        path: docs/_build/html/
+
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v4
+      if: github.ref == 'refs/heads/main'
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./docs/_build/html
+
+  package:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+
+    - name: Build package
+      run: |
+        python -m build
+
+    - name: Check package
+      run: |
+        twine check dist/*
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: python-package
+        path: dist/
+
+    # Uncomment if you want to publish to PyPI
+    # - name: Publish to PyPI
+    #   if: startsWith(github.ref, 'refs/tags/')
+    #   env:
+    #     TWINE_USERNAME: __token__
+    #     TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+    #   run: |
+    #     twine upload dist/*

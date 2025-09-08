@@ -29,14 +29,16 @@ def load_image(filepath: str) -> np.ndarray:
     return im_arr
 
 
-def gradient_break(im_arr: np.ndarray,
-                   log: bool = False,
-                   y_min: int = 0,
-                   y_max: int = -1,
-                   window_length: int = 501,
-                   polyorder: int = 1,
-                   deriv: int = 0,
-                   delta: int = 1):
+def gradient_break(
+    im_arr: np.ndarray,
+    log: bool = False,
+    y_min: int = 0,
+    y_max: int = -1,
+    window_length: int = None,
+    polyorder: int = 1,
+    deriv: int = 0,
+    delta: int = 1,
+):
     """
     Scan each vertical line of an image for the maximum change
     in brightness gradient -- usually corresponds to a horizon.
@@ -56,6 +58,23 @@ def gradient_break(im_arr: np.ndarray,
     Returns:
         image array (np.ndarray)
     """
+    # Auto-calculate window_length if not provided
+    if window_length is None:
+        # Use ~10% of image height, with reasonable bounds
+        window_length = min(501, max(5, int(0.1 * im_arr.shape[0])))
+        # Ensure odd window length for savgol_filter
+        if window_length % 2 == 0:
+            window_length -= 1
+    else:
+        # Validate provided window_length against image dimensions
+        max_window = im_arr.shape[0] - 1
+        if max_window % 2 == 0:
+            max_window -= 1
+        if window_length > max_window:
+            window_length = max(5, max_window)
+            if window_length % 2 == 0:
+                window_length -= 1
+
     grad = abs(np.gradient(im_arr.sum(axis=2), axis=0))
 
     if log:
@@ -67,153 +86,32 @@ def gradient_break(im_arr: np.ndarray,
     breaks = []
     for i in range(im_arr.shape[1]):
         y = grad[:, i]
-        yhat = savgol_filter(y, window_length=window_length,
-                             polyorder=polyorder, deriv=deriv, delta=delta)
+        yhat = savgol_filter(
+            y,
+            window_length=window_length,
+            polyorder=polyorder,
+            deriv=deriv,
+            delta=delta,
+        )
 
         yhathat = np.diff(yhat)
         m = np.argmax(yhathat[y_min:y_max])
-        breaks += [m+y_min]
+        breaks += [m + y_min]
     breaks = np.array(breaks)
 
     return breaks
 
 
-class StringDrop:
-    def __init__(self, image):
-        self.image = image
-        self.gradient = None
-        self.topography = None
-        self.force_map = None
-        self.tilt = None
-        self.smoothing_window = None
-        self.string_positions = None
-
-    def transverse_force(
-            self,
-            x: int,
-            y: np.ndarray) -> float:
-        """
-        Compute the transverse (sideways) force at a position
-        on a 1-D topography.
-
-        Args:
-            x (int): Coordinate where force is computed.
-            y (np.ndarray): 1D topographic map.
-        Returns:
-            force (float): Force in the dimension given, positive
-                in the increasing index direction.
-        """
-        try:
-            m = np.diff(y)[x]
-        except IndexError:
-            m = 0
-        theta = np.arctan(m)
-        return -np.sin(theta)
-
-    def compute_force_map(
-            self,
-            tilt: float = 0.05,
-            smoothing_window: int = 50):
-        """
-        Compute the force a point will feel at any point
-        in a 2D topography.
-
-        Args:
-            tilt (float): Tilt of the topography. Lifts the
-                top end up by giving every column a
-                height = tilt * x component.
-            smoothing_window (int): Length of window for smoothing
-                each column.
-        """
-        # skip if already run with same parameters
-        if self.tilt == tilt and smoothing_window == smoothing_window:
-            return None
-        else:
-            self.tilt = tilt
-            self.smoothing_window = smoothing_window
-
-        self.gradient = abs(np.gradient(self.image, axis=0))
-
-        self.topography = np.zeros_like(self.gradient)
-        for j in range(self.gradient.shape[1]):
-            y = self.gradient[:, j]
-            x = np.arange(len(y))
-            # smooth the topography along y-axis lines, adding a minor tilt to establish movement towards basin
-            # todo automate tilt level
-            self.topography[:, j] = pd.Series(y).rolling(smoothing_window).mean() - tilt*x
-        m = np.diff(self.topography, axis=0)
-        theta = np.arctan(m)
-        self.force_map = -np.sin(theta)
-        # back-fill smoothed image with repeats of first viable row
-        self.force_map[:smoothing_window-1, :] = np.nanmedian(self.force_map[smoothing_window-1, :])
-
-    def drop_string(
-            self,
-            start: int = 10,
-            steps: int = 1000000,
-            g: float = 150,
-            m: float = 5,
-            k: float = 3e-1,
-            friction: float = 0.00,
-            t_step: float = 0.01,
-            max_acc: float = 1,
-            max_vel: float = 2) -> np.ndarray:
-        """
-        Simulate the string dropping on our topography.
-
-        Args:
-            start (int): Starting y-value (from the top) for simulation.
-            steps (int): Number of time steps.
-            g (float): Force of gravity (points down into the image).
-            m (float): Density of the string (per pixel).
-            k (float): Spring constant (for string tension).
-            friction (float): Friction coefficient.
-            t_step (float): Length of time step.
-            max_acc (float): Maximum acceleration.
-            max_vel (float): Maximum velocity.
-
-        Returns:
-            position (np.ndarray): Y-locations of the string for each column.
-        """
-        # todo add parameter sets by name 'safe', 'fast', etc.
-        position = np.ones(self.gradient.shape[1]) * start
-        vel = np.zeros(self.gradient.shape[1])
-        f_spring_left = np.zeros(self.gradient.shape[1])
-        f_spring_right = np.zeros(self.gradient.shape[1])
-
-        positions = []
-        # todo automate steps to convergence criterion
-        for _ in tqdm(range(steps)):
-
-            f_grav = self.force_map[position.astype(int),
-                                    np.arange(self.force_map.shape[1])] * g
-            f_spring_left[1:] = np.diff(position) * k
-            f_spring_right[:-1] = np.diff(position) * k
-            acc = f_grav + f_spring_left + f_spring_right
-            acc = np.clip(acc / m, -max_acc, max_acc)
-
-            distance = vel*t_step + acc*0.5*t_step**2
-            position += distance
-            position = np.clip(position, 0, self.gradient.shape[0]-1)
-            vel += acc * t_step
-            vel -= distance * friction
-            vel = np.clip(vel, -max_vel, max_vel)
-            positions.append(position)
-
-        self.string_positions = positions
-        return position
-
-
 class ImageSegmentation:
-    def __init__(self,
-                 image: np.ndarray,
-                 segmenter: str = 'segment-anything'):
+    def __init__(self, image: np.ndarray, segmenter: str = "segment-anything"):
         self.image = image
         self.segmenter = segmenter
         self._masks = None
 
-        if segmenter == 'segment-anything':
-            self.model_path = kagglehub.model_download("metaresearch/segment-anything/pyTorch/vit-b")
+        if segmenter == "segment-anything":
+            self.model_path = kagglehub.model_download(
+                "metaresearch/segment-anything/pyTorch/vit-b"
+            )
         else:
             self.model_path = None
             raise ValueError(f"segmenter must be one of [segment-anything]")
@@ -229,34 +127,40 @@ class ImageSegmentation:
         limb = np.array(limb).astype(float)
         # handling of blips (sometimes the image edges confuse segmenters)
         # set big jumps to NaN
-        limb[abs(np.diff(limb, n=1, append=limb[-1])) > 10 * abs(
-            np.nanmean(np.diff(limb, n=1, append=limb[-1])))] = np.nan
+        limb[
+            abs(np.diff(limb, n=1, append=limb[-1]))
+            > 10 * abs(np.nanmean(np.diff(limb, n=1, append=limb[-1])))
+        ] = np.nan
         # set their immediate neighbors to NaN
         limb[np.isnan(np.diff(limb, n=1, append=limb[-1]))] = np.nan
         nan_mask = np.isnan(limb)
         # interpolate them back in
-        limb[nan_mask] = np.interp(np.flatnonzero(nan_mask), np.flatnonzero(~nan_mask), limb[~nan_mask])
+        limb[nan_mask] = np.interp(
+            np.flatnonzero(nan_mask), np.flatnonzero(~nan_mask), limb[~nan_mask]
+        )
 
         return np.array(limb)
 
     def segment(self) -> np.ndarray:
-        if self.segmenter == 'segment-anything':
+        if self.segmenter == "segment-anything":
             sam = sam_model_registry["vit_b"](checkpoint=f"{self.model_path}/model.pth")
             mask_generator = SamAutomaticMaskGenerator(sam)
             masks = mask_generator.generate(self.image)
             self._masks = masks
             # combine first two (should be above/below)
-            mask = (1 - masks[0]['segmentation']) * masks[1]['segmentation']
+            mask = (1 - masks[0]["segmentation"]) * masks[1]["segmentation"]
 
             return self.limb_from_mask(mask)
 
 
-def smooth_limb(y: np.ndarray,
-                method: str = 'rolling-median',
-                window_length: int = 50,
-                polyorder: int = 1,
-                deriv: int = 0,
-                delta=1) -> np.ndarray:
+def smooth_limb(
+    y: np.ndarray,
+    method: str = "rolling-median",
+    window_length: int = 50,
+    polyorder: int = 1,
+    deriv: int = 0,
+    delta=1,
+) -> np.ndarray:
     """
     Smooth the limb position values.
 
@@ -276,34 +180,43 @@ def smooth_limb(y: np.ndarray,
     Returns:
         position (np.ndarray): Y-locations of the smoothed string for each column.
     """
-    assert method in ['bin-interpolate', 'savgol', 'rolling-mean', 'rolling-median']
+    assert method in ["bin-interpolate", "savgol", "rolling-mean", "rolling-median"]
 
-    if method == 'bin-interpolate':
+    if method == "bin-interpolate":
         binned = []
         x = []
         for i in range(len(y[::window_length])):
-            binned += [np.mean(y[i*window_length:i*window_length+window_length])]
-            x += [i*window_length+int(0.5*window_length)]
+            binned += [
+                np.mean(y[i * window_length : i * window_length + window_length])
+            ]
+            x += [i * window_length + int(0.5 * window_length)]
         binned = np.array(binned)
         x = np.array(x)
 
         if polyorder == 1:
-            kind = 'linear'
+            kind = "linear"
         elif polyorder == 2:
-            kind = 'quadratic'
+            kind = "quadratic"
         elif polyorder == 0:
-            kind = 'nearest'
+            kind = "nearest"
         else:
-            raise AttributeError(f'polyorder {polyorder} not supported for bin-interpolate')
-        interp = interp1d(x, binned, kind=kind, fill_value='extrapolate')
+            raise AttributeError(
+                f"polyorder {polyorder} not supported for bin-interpolate"
+            )
+        interp = interp1d(x, binned, kind=kind, fill_value="extrapolate")
 
         limb = interp(np.arange(len(y)))
-    elif method == 'savgol':
-        limb =  savgol_filter(y, window_length=window_length, polyorder=polyorder,
-                              deriv=deriv, delta=delta)
-    elif method == 'rolling-mean':
+    elif method == "savgol":
+        limb = savgol_filter(
+            y,
+            window_length=window_length,
+            polyorder=polyorder,
+            deriv=deriv,
+            delta=delta,
+        )
+    elif method == "rolling-mean":
         limb = pd.Series(y).rolling(window_length).mean()
-    elif method == 'rolling-median':
+    elif method == "rolling-median":
         limb = pd.Series(y).rolling(window_length).median()
     else:
         raise ValueError(f"Did not recognize smoothing method {method}")
@@ -312,6 +225,7 @@ def smooth_limb(y: np.ndarray,
     limb[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), limb[~mask])
 
     return limb
+
 
 def fill_nans(limb: np.ndarray) -> np.ndarray:
     """

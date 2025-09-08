@@ -1,8 +1,7 @@
 import numpy as np
 
 
-def horizon_distance(r: float,
-                     h: float) -> float:
+def horizon_distance(r: float, h: float) -> float:
     """
     Estimate the distance to the horizon (limb) given a height
     and radius.
@@ -13,11 +12,10 @@ def horizon_distance(r: float,
     Returns:
         d (float): Distance in same units as inputs.
     """
-    return np.sqrt(h**2 + 2*h*r)
+    return np.sqrt(h**2 + 2 * h * r)
 
 
-def limb_camera_angle(r: float,
-                      h: float) -> float:
+def limb_camera_angle(r: float, h: float) -> float:
     """
     The angle the camera must tilt in theta_x or theta_y
     to center the limb. Complement of theta (angle of limb
@@ -33,8 +31,7 @@ def limb_camera_angle(r: float,
     return theta
 
 
-def focal_length(w: float,
-                 fov: float) -> float:
+def focal_length(w: float, fov: float) -> float:
     """
     The size of the CCD (inferred) based on focal length and
     field of view.
@@ -49,8 +46,7 @@ def focal_length(w: float,
     return w / (2 * np.tan(0.5 * fov * np.pi / 180))
 
 
-def detector_size(f: float,
-                  fov: float) -> float:
+def detector_size(f: float, fov: float) -> float:
     """
     The size of the CCD (inferred) based on focal length and
     field of view.
@@ -63,11 +59,10 @@ def detector_size(f: float,
         detector size (float): Width of CCD (m).
     """
 
-    return 2 * f * np.tan(fov * np.pi / 180. / 2)
+    return 2 * f * np.tan(fov * np.pi / 180.0 / 2)
 
 
-def field_of_view(f: float,
-                  w: float) -> float:
+def field_of_view(f: float, w: float) -> float:
     """
     The size of the CCD (inferred) based on focal length and
     field of view.
@@ -79,15 +74,17 @@ def field_of_view(f: float,
         fov (float): Field of view, assuming square (degrees).
     """
 
-    return 2 * np.arctan(w / (2 * f)) * 180. / np.pi
+    return 2 * np.arctan(w / (2 * f)) * 180.0 / np.pi
 
 
-def intrinsic_transform(camera_coords: np.ndarray,
-                        f: float = 1,
-                        px: float = 1,
-                        py: float = 1,
-                        x0: float = 0,
-                        y0: float = 0) -> np.ndarray:
+def intrinsic_transform(
+    camera_coords: np.ndarray,
+    f: float = 1,
+    px: float = 1,
+    py: float = 1,
+    x0: float = 0,
+    y0: float = 0,
+) -> np.ndarray:
     """
     Transform from camera coordinates into image coordinates.
 
@@ -106,11 +103,9 @@ def intrinsic_transform(camera_coords: np.ndarray,
         pixel_coords (np.ndarray): Coordinates in image space.
     """
     # note the intentional extension to 3x4 (for homogenous coords)
-    transform = np.array([
-        [float(f)/px, 0, x0, 0],
-        [0, float(f)/py, y0, 0],
-        [0, 0, 1, 0]
-    ])
+    transform = np.array(
+        [[float(f) / px, 0, x0, 0], [0, float(f) / py, y0, 0], [0, 0, 1, 0]]
+    )
 
     # todo allow for shear/etc.
 
@@ -123,13 +118,15 @@ def intrinsic_transform(camera_coords: np.ndarray,
     return pixel_coords
 
 
-def extrinsic_transform(world_coords,
-                        theta_x: float = 0,
-                        theta_y: float = 0,
-                        theta_z: float = 0,
-                        origin_x: float = 0,
-                        origin_y: float = 0,
-                        origin_z: float = 0) -> np.ndarray:
+def extrinsic_transform(
+    world_coords,
+    theta_x: float = 0,
+    theta_y: float = 0,
+    theta_z: float = 0,
+    origin_x: float = 0,
+    origin_y: float = 0,
+    origin_z: float = 0,
+) -> np.ndarray:
     """
     Transform from world coordinates into camera coordinates.
     Note that for a limb calculation we will define origin_x/y/z
@@ -155,23 +152,29 @@ def extrinsic_transform(world_coords,
         camera_coords (np.ndarray): Coordinates in camera space.
     """
 
-    x_rotation = np.array([
-        [1, 0, 0],
-        [0, np.cos(theta_x), -np.sin(theta_x)],
-        [0, np.sin(theta_x), np.cos(theta_x)]
-    ])
+    x_rotation = np.array(
+        [
+            [1, 0, 0],
+            [0, np.cos(theta_x), -np.sin(theta_x)],
+            [0, np.sin(theta_x), np.cos(theta_x)],
+        ]
+    )
 
-    y_rotation = np.array([
-        [np.cos(theta_y), 0, np.sin(theta_y)],
-        [0, 1, 0],
-        [-np.sin(theta_y), 0, np.cos(theta_y)]
-    ])
+    y_rotation = np.array(
+        [
+            [np.cos(theta_y), 0, np.sin(theta_y)],
+            [0, 1, 0],
+            [-np.sin(theta_y), 0, np.cos(theta_y)],
+        ]
+    )
 
-    z_rotation = np.array([
-        [np.cos(theta_z), -np.sin(theta_z), 0],
-        [np.sin(theta_z), np.cos(theta_z), 0],
-        [0, 0, 1]
-    ])
+    z_rotation = np.array(
+        [
+            [np.cos(theta_z), -np.sin(theta_z), 0],
+            [np.sin(theta_z), np.cos(theta_z), 0],
+            [0, 0, 1],
+        ]
+    )
 
     rotation = x_rotation @ y_rotation @ z_rotation
 
@@ -190,24 +193,25 @@ def extrinsic_transform(world_coords,
     return camera_coords
 
 
-def limb_arc(r: float,
-             n_pix_x: int,
-             n_pix_y: int,
-             h: float = 1,
-             f: float = None,
-             fov: float = None,
-             w: float = None,
-             x0: float = 0,
-             y0: float = 0,
-             theta_x: float = 0,
-             theta_y: float = 0,
-             theta_z: float = 0,
-             origin_x: float = 0,
-             origin_y: float = 0,
-             origin_z: float = 0,
-             return_full: bool = False,
-             num_sample: int = 5000
-             ) -> np.ndarray:
+def limb_arc(
+    r: float,
+    n_pix_x: int,
+    n_pix_y: int,
+    h: float = 1,
+    f: float = None,
+    fov: float = None,
+    w: float = None,
+    x0: float = 0,
+    y0: float = 0,
+    theta_x: float = 0,
+    theta_y: float = 0,
+    theta_z: float = 0,
+    origin_x: float = 0,
+    origin_y: float = 0,
+    origin_z: float = 0,
+    return_full: bool = False,
+    num_sample: int = 5000,
+) -> np.ndarray:
     """
     Calculate the limb orientation in an image given the physical
     parameters of the system.
@@ -242,7 +246,7 @@ def limb_arc(r: float,
      Returns:
          camera_coords (np.ndarray): Coordinates in camera space --
             will be a set of y positions to correspond to the given x.
-     """
+    """
 
     # origin_* is the position of the origin of the world coordinate system
     # expressed in coordinates of the camera-centered coordinate system
@@ -255,8 +259,9 @@ def limb_arc(r: float,
     # todo diffraction correction?
     #     r = r * 1.2
 
-    assert f is None or fov is None or w is None,\
-        "Cannot specify focal length, field of view, and detector size. Set one of them to None."
+    assert (
+        f is None or fov is None or w is None
+    ), "Cannot specify focal length, field of view, and detector size. Set one of them to None."
 
     if f is None:
         f = focal_length(w, fov)
@@ -270,11 +275,7 @@ def limb_arc(r: float,
 
     # using field of view and distance we can get linear
     # size of pixels in the projection plane (note: uses thin lens)
-    pxy = (
-        2 * (1 / f - 1 / d) ** -1
-        * np.tan(0.5 * fov * np.pi / 180)
-        / n_pix_x
-    )
+    pxy = 2 * (1 / f - 1 / d) ** -1 * np.tan(0.5 * fov * np.pi / 180) / n_pix_x
 
     # todo allow for auto-calculation of sample density
     # num_sample = int(np.pi / dphi)
@@ -293,8 +294,13 @@ def limb_arc(r: float,
 
     camera_coords = extrinsic_transform(
         world_coords=world_coords,
-        theta_x=theta_x, theta_y=theta_y, theta_z=theta_z,
-        origin_x=origin_x, origin_y=origin_y, origin_z=origin_z)
+        theta_x=theta_x,
+        theta_y=theta_y,
+        theta_z=theta_z,
+        origin_x=origin_x,
+        origin_y=origin_y,
+        origin_z=origin_z,
+    )
 
     all_in_front = all(camera_coords[2, :] > 0)
     all_behind = all(camera_coords[2, :] < 0)
@@ -306,8 +312,8 @@ def limb_arc(r: float,
         camera_coords = camera_coords[:, cut]
 
     pixel_coords = intrinsic_transform(
-        camera_coords=camera_coords,
-        f=f, px=pxy, py=pxy, x0=x0, y0=y0)
+        camera_coords=camera_coords, f=f, px=pxy, py=pxy, x0=x0, y0=y0
+    )
 
     if return_full:
         return pixel_coords
