@@ -1,10 +1,96 @@
+# OS and system files
 *.DS_Store
-*.npy
-build
-dist
-*egg-info*
-*.p
-.ipynb_checkpoints
-.idea
-*.csv
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
 *.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# Testing
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+htmlcov/
+test-results.xml
+test-report.html
+
+# Documentation
+docs/_build/
+docs/_static/
+docs/generated/
+
+# Data files
+*.npy
+*.csv
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.p
+
+# Benchmarks
+.benchmarks/
+benchmark-results.json
+benchmark-histogram.svg
