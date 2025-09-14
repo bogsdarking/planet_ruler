@@ -118,17 +118,6 @@ class LimbObservation(PlanetObservation):
 
     def detect_limb(
         self,
-        tilt: float = 0.05,
-        smoothing_window: int = 50,
-        start: int = 10,
-        steps: int = 1000000,
-        g: float = 150,
-        m: float = 5,
-        k: float = 3e-1,
-        friction: float = 0.0,
-        t_step: float = 0.01,
-        max_acc: float = 1,
-        max_vel: float = 2,
         log: bool = False,
         y_min: int = 0,
         y_max: int = -1,
@@ -143,20 +132,6 @@ class LimbObservation(PlanetObservation):
         Kwargs are passed to the method.
 
         Args:
-            tilt (float): Tilt of the topography. Lifts the
-                top end up by giving every column a
-                height = tilt * x component.
-            smoothing_window (int): Length of window for smoothing
-                each column.
-            start (int): Starting y-value (from the top) for simulation.
-            steps (int): Number of time steps.
-            g (float): Force of gravity (points down into the image).
-            m (float): Density of the string (per pixel).
-            k (float): Spring constant (for string tension).
-            friction (float): Friction coefficient.
-            t_step (float): Length of time step.
-            max_acc (float): Maximum acceleration.
-            max_vel (float): Maximum velocity.
             log (bool): Use the log(gradient). Sometimes good for
             smoothing.
             y_min (int): Minimum y-position to consider.

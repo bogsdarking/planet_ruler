@@ -19,8 +19,16 @@ def load_demo_parameters(demo):
             "true_radius": 1188,
             "image_filepath": "../demo/images/PIA19948.tif",
             "fit_config": "../config/pluto-new-horizons.yaml",
-            "limb_config": json.load(open("../config/pluto_limb_1.json", "r")),
-            "limb_save": "pluto_limb.npy",
+            "limb_config": {
+                "log": False,
+                "y_min": 0,
+                "y_max": -1,
+                "window_length": 501,
+                "polyorder": 1,
+                "deriv": 0,
+                "delta": 1,
+                "segmenter": "segment-anything"
+            },            "limb_save": "pluto_limb.npy",
             "parameter_walkthrough": "../demo/pluto_init.md",
             "preamble": "../demo/pluto_preamble.md",
         }
@@ -30,8 +38,16 @@ def load_demo_parameters(demo):
             "true_radius": 58232,
             "image_filepath": "../demo/images/PIA21341.jpg",
             "fit_config": "../config/saturn-cassini-1.yaml",
-            "limb_config": json.load(open("../config/saturn_limb_1.json", "r")),
-            "limb_save": "saturn_limb_1.npy",
+            "limb_config": {
+                "log": False,
+                "y_min": 0,
+                "y_max": -1,
+                "window_length": 501,
+                "polyorder": 1,
+                "deriv": 0,
+                "delta": 1,
+                "segmenter": "segment-anything"
+            },            "limb_save": "saturn_limb_1.npy",
             "parameter_walkthrough": "../demo/saturn_init_1.md",
             "preamble": "../demo/saturn_preamble_1.md",
         }
@@ -41,8 +57,16 @@ def load_demo_parameters(demo):
             "true_radius": 58232,
             "image_filepath": "../demo/images/saturn_ciclops_5769_13427_1.jpg",
             "fit_config": "../config/saturn-cassini-2.yaml",
-            "limb_config": json.load(open("../config/saturn_limb_2.json", "r")),
-            "limb_save": "saturn_limb_2.npy",
+            "limb_config": {
+                "log": False,
+                "y_min": 0,
+                "y_max": -1,
+                "window_length": 501,
+                "polyorder": 1,
+                "deriv": 0,
+                "delta": 1,
+                "segmenter": "segment-anything"
+            },            "limb_save": "saturn_limb_2.npy",
             "parameter_walkthrough": "../demo/saturn_init_2.md",
             "preamble": "../demo/saturn_preamble_2.md",
         }
@@ -52,7 +76,16 @@ def load_demo_parameters(demo):
             "true_radius": 6371,
             "image_filepath": "../demo/images/50644513538_56228a2027_o.jpg",
             "fit_config": "../config/earth_iss_1.yaml",
-            "limb_config": json.load(open("../config/saturn_limb_2.json", "r")),
+            "limb_config": {
+                "log": False,
+                "y_min": 0,
+                "y_max": -1,
+                "window_length": 501,
+                "polyorder": 1,
+                "deriv": 0,
+                "delta": 1,
+                "segmenter": "segment-anything"
+            },
             "limb_save": "earth_limb_1.npy",
             "parameter_walkthrough": "../demo/earth_init_1.md",
             "preamble": "../demo/earth_preamble_1.md",
