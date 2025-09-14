@@ -84,29 +84,30 @@ class TestLoadDemoParameters:
         demo.value = value
         return demo
 
-    @patch("planet_ruler.demo.json.load")
-    @patch("planet_ruler.demo.open")
-    def test_load_demo_parameters_pluto(self, mock_open_func, mock_json_load):
+    def test_load_demo_parameters_pluto(self):
         """Test loading Pluto demo parameters."""
         demo = self.create_mock_demo(1)
 
-        # Mock JSON config loading
-        mock_limb_config = {"limb_method": "gradient-break", "window_length": 501}
-        mock_json_load.return_value = mock_limb_config
-
         result = load_demo_parameters(demo)
 
-        # Verify JSON file was loaded
-        mock_open_func.assert_called_once_with("../config/pluto_limb_1.json", "r")
-        mock_json_load.assert_called_once()
-
         # Verify parameter structure
+        expected_limb_config = {
+            "log": False,
+            "y_min": 0,
+            "y_max": -1,
+            "window_length": 501,
+            "polyorder": 1,
+            "deriv": 0,
+            "delta": 1,
+            "segmenter": "segment-anything"
+        }
+        
         expected_params = {
             "target": "Pluto",
             "true_radius": 1188,
             "image_filepath": "../demo/images/PIA19948.tif",
             "fit_config": "../config/pluto-new-horizons.yaml",
-            "limb_config": mock_limb_config,
+            "limb_config": expected_limb_config,
             "limb_save": "pluto_limb.npy",
             "parameter_walkthrough": "../demo/pluto_init.md",
             "preamble": "../demo/pluto_preamble.md",
@@ -115,75 +116,87 @@ class TestLoadDemoParameters:
         assert result == expected_params
         assert result["target"] == "Pluto"
         assert result["true_radius"] == 1188
-        assert result["limb_config"] == mock_limb_config
+        assert result["limb_config"] == expected_limb_config
 
-    @patch("planet_ruler.demo.json.load")
-    @patch("planet_ruler.demo.open")
-    def test_load_demo_parameters_saturn_1(self, mock_open_func, mock_json_load):
+    def test_load_demo_parameters_saturn_1(self):
         """Test loading Saturn-1 demo parameters."""
         demo = self.create_mock_demo(2)
 
-        mock_limb_config = {"limb_method": "segmentation", "smooth_method": "savgol"}
-        mock_json_load.return_value = mock_limb_config
-
         result = load_demo_parameters(demo)
 
-        # Verify correct JSON file loaded
-        mock_open_func.assert_called_once_with("../config/saturn_limb_1.json", "r")
-
         # Verify Saturn-1 specific parameters
+        expected_limb_config = {
+            "log": False,
+            "y_min": 0,
+            "y_max": -1,
+            "window_length": 501,
+            "polyorder": 1,
+            "deriv": 0,
+            "delta": 1,
+            "segmenter": "segment-anything"
+        }
+        
         assert result["target"] == "Saturn"
         assert result["true_radius"] == 58232
         assert result["image_filepath"] == "../demo/images/PIA21341.jpg"
         assert result["fit_config"] == "../config/saturn-cassini-1.yaml"
+        assert result["limb_config"] == expected_limb_config
         assert result["limb_save"] == "saturn_limb_1.npy"
         assert result["parameter_walkthrough"] == "../demo/saturn_init_1.md"
         assert result["preamble"] == "../demo/saturn_preamble_1.md"
 
-    @patch("planet_ruler.demo.json.load")
-    @patch("planet_ruler.demo.open")
-    def test_load_demo_parameters_saturn_2(self, mock_open_func, mock_json_load):
+    def test_load_demo_parameters_saturn_2(self):
         """Test loading Saturn-2 demo parameters."""
         demo = self.create_mock_demo(3)
 
-        mock_limb_config = {"limb_method": "gradient-break", "log": True}
-        mock_json_load.return_value = mock_limb_config
-
         result = load_demo_parameters(demo)
 
-        # Verify correct JSON file loaded
-        mock_open_func.assert_called_once_with("../config/saturn_limb_2.json", "r")
-
         # Verify Saturn-2 specific parameters
+        expected_limb_config = {
+            "log": False,
+            "y_min": 0,
+            "y_max": -1,
+            "window_length": 501,
+            "polyorder": 1,
+            "deriv": 0,
+            "delta": 1,
+            "segmenter": "segment-anything"
+        }
+        
         assert result["target"] == "Saturn"
         assert result["true_radius"] == 58232
         assert (
             result["image_filepath"] == "../demo/images/saturn_ciclops_5769_13427_1.jpg"
         )
         assert result["fit_config"] == "../config/saturn-cassini-2.yaml"
+        assert result["limb_config"] == expected_limb_config
         assert result["limb_save"] == "saturn_limb_2.npy"
         assert result["parameter_walkthrough"] == "../demo/saturn_init_2.md"
         assert result["preamble"] == "../demo/saturn_preamble_2.md"
 
-    @patch("planet_ruler.demo.json.load")
-    @patch("planet_ruler.demo.open")
-    def test_load_demo_parameters_earth(self, mock_open_func, mock_json_load):
+    def test_load_demo_parameters_earth(self):
         """Test loading Earth demo parameters."""
         demo = self.create_mock_demo(4)
 
-        mock_limb_config = {"limb_method": "gradient-break", "window_length": 301}
-        mock_json_load.return_value = mock_limb_config
-
         result = load_demo_parameters(demo)
 
-        # Note: Earth demo uses saturn_limb_2.json config (as per code)
-        mock_open_func.assert_called_once_with("../config/saturn_limb_2.json", "r")
-
         # Verify Earth specific parameters
+        expected_limb_config = {
+            "log": False,
+            "y_min": 0,
+            "y_max": -1,
+            "window_length": 501,
+            "polyorder": 1,
+            "deriv": 0,
+            "delta": 1,
+            "segmenter": "segment-anything"
+        }
+        
         assert result["target"] == "Earth"
         assert result["true_radius"] == 6371
         assert result["image_filepath"] == "../demo/images/50644513538_56228a2027_o.jpg"
         assert result["fit_config"] == "../config/earth_iss_1.yaml"
+        assert result["limb_config"] == expected_limb_config
         assert result["limb_save"] == "earth_limb_1.npy"
         assert result["parameter_walkthrough"] == "../demo/earth_init_1.md"
         assert result["preamble"] == "../demo/earth_preamble_1.md"
@@ -212,15 +225,8 @@ class TestLoadDemoParameters:
 
         assert result is None
 
-    @patch("planet_ruler.demo.json.load")
-    @patch("planet_ruler.demo.open")
-    def test_load_demo_parameters_all_demos_have_required_keys(
-        self, mock_open_func, mock_json_load
-    ):
+    def test_load_demo_parameters_all_demos_have_required_keys(self):
         """Test that all demo configurations have required parameter keys."""
-        mock_limb_config = {"test": "config"}
-        mock_json_load.return_value = mock_limb_config
-
         required_keys = {
             "target",
             "true_radius",
@@ -241,32 +247,20 @@ class TestLoadDemoParameters:
             assert all(key in result for key in required_keys)
             assert len(result) == len(required_keys)  # No extra keys
 
-    @patch("planet_ruler.demo.json.load")
-    @patch("planet_ruler.demo.open")
-    def test_load_demo_parameters_file_path_consistency(
-        self, mock_open_func, mock_json_load
-    ):
-        """Test that file paths follow expected patterns."""
-        mock_json_load.return_value = {}
-
+    def test_load_demo_parameters_limb_save_path_consistency(self):
+        """Test that limb save paths follow expected patterns."""
         # Test path patterns for each demo
         demo_configs = [
-            (1, "../config/pluto_limb_1.json", "pluto_limb.npy"),
-            (2, "../config/saturn_limb_1.json", "saturn_limb_1.npy"),
-            (3, "../config/saturn_limb_2.json", "saturn_limb_2.npy"),
-            (
-                4,
-                "../config/saturn_limb_2.json",
-                "earth_limb_1.npy",
-            ),  # Earth uses Saturn config
+            (1, "pluto_limb.npy"),
+            (2, "saturn_limb_1.npy"),
+            (3, "saturn_limb_2.npy"),
+            (4, "earth_limb_1.npy"),
         ]
 
-        for demo_value, expected_config_path, expected_save_path in demo_configs:
-            mock_open_func.reset_mock()
+        for demo_value, expected_save_path in demo_configs:
             demo = self.create_mock_demo(demo_value)
             result = load_demo_parameters(demo)
 
-            mock_open_func.assert_called_once_with(expected_config_path, "r")
             assert result["limb_save"] == expected_save_path
 
 
@@ -372,91 +366,110 @@ class TestDemoIntegration:
     """Integration tests for demo workflow."""
 
     @patch("planet_ruler.demo.widgets")
-    @patch("planet_ruler.demo.json.load")
-    @patch("planet_ruler.demo.open")
-    def test_dropdown_to_parameters_workflow(
-        self, mock_open_func, mock_json_load, mock_widgets
-    ):
+    def test_dropdown_to_parameters_workflow(self, mock_widgets):
         """Test complete workflow from dropdown creation to parameter loading."""
         # Setup dropdown
         mock_dropdown = Mock()
         mock_dropdown.value = 1  # Pluto
         mock_widgets.Dropdown.return_value = mock_dropdown
 
-        # Setup JSON loading
-        mock_limb_config = {"limb_method": "gradient-break"}
-        mock_json_load.return_value = mock_limb_config
-
         # Create dropdown and load parameters
         dropdown = make_dropdown()
         params = load_demo_parameters(dropdown)
 
         # Verify workflow
+        expected_limb_config = {
+            "log": False,
+            "y_min": 0,
+            "y_max": -1,
+            "window_length": 501,
+            "polyorder": 1,
+            "deriv": 0,
+            "delta": 1,
+            "segmenter": "segment-anything"
+        }
+        
         assert params["target"] == "Pluto"
-        assert params["limb_config"] == mock_limb_config
+        assert params["limb_config"] == expected_limb_config
         assert dropdown == mock_dropdown
 
     def test_parameter_consistency_across_demos(self):
         """Test that parameter structures are consistent across all demos."""
+        # Load all demo configurations
+        all_params = []
+        for value in [1, 2, 3, 4]:
+            demo = Mock()
+            demo.value = value
+            params = load_demo_parameters(demo)
+            all_params.append(params)
 
-        with patch("planet_ruler.demo.json.load") as mock_json_load, patch(
-            "planet_ruler.demo.open"
-        ):
+        # Verify all have same keys
+        first_keys = set(all_params[0].keys())
+        for params in all_params[1:]:
+            assert set(params.keys()) == first_keys
 
-            mock_json_load.return_value = {}
-
-            # Load all demo configurations
-            all_params = []
-            for value in [1, 2, 3, 4]:
-                demo = Mock()
-                demo.value = value
-                params = load_demo_parameters(demo)
-                all_params.append(params)
-
-            # Verify all have same keys
-            first_keys = set(all_params[0].keys())
-            for params in all_params[1:]:
-                assert set(params.keys()) == first_keys
-
-            # Verify data types
-            for params in all_params:
-                assert isinstance(params["target"], str)
-                assert isinstance(params["true_radius"], int)
-                assert isinstance(params["image_filepath"], str)
-                assert isinstance(params["fit_config"], str)
-                assert isinstance(params["limb_save"], str)
-                assert isinstance(params["parameter_walkthrough"], str)
-                assert isinstance(params["preamble"], str)
+        # Verify data types
+        for params in all_params:
+            assert isinstance(params["target"], str)
+            assert isinstance(params["true_radius"], int)
+            assert isinstance(params["image_filepath"], str)
+            assert isinstance(params["fit_config"], str)
+            assert isinstance(params["limb_config"], dict)
+            assert isinstance(params["limb_save"], str)
+            assert isinstance(params["parameter_walkthrough"], str)
+            assert isinstance(params["preamble"], str)
+            
+        # Verify limb_config has consistent structure across all demos
+        expected_limb_keys = {
+            "log", "y_min", "y_max", "window_length", 
+            "polyorder", "deriv", "delta", "segmenter"
+        }
+        for params in all_params:
+            assert set(params["limb_config"].keys()) == expected_limb_keys
 
 
 # Error handling and edge cases
 class TestDemoErrorHandling:
     """Test error handling and edge cases."""
 
-    @patch("planet_ruler.demo.json.load")
-    @patch("planet_ruler.demo.open")
-    def test_load_demo_parameters_json_error(self, mock_open_func, mock_json_load):
-        """Test handling of JSON loading errors."""
-        demo = Mock()
-        demo.value = 1
+    def test_load_demo_parameters_valid_limb_config_structure(self):
+        """Test that limb_config has valid structure for all demos."""
+        for demo_value in [1, 2, 3, 4]:
+            demo = Mock()
+            demo.value = demo_value
+            result = load_demo_parameters(demo)
+            
+            limb_config = result["limb_config"]
+            
+            # Verify required limb_config keys and types
+            assert isinstance(limb_config["log"], bool)
+            assert isinstance(limb_config["y_min"], int)
+            assert isinstance(limb_config["y_max"], int)
+            assert isinstance(limb_config["window_length"], int)
+            assert isinstance(limb_config["polyorder"], int)
+            assert isinstance(limb_config["deriv"], int)
+            assert isinstance(limb_config["delta"], int)
+            assert isinstance(limb_config["segmenter"], str)
+            
+            # Verify reasonable values
+            assert limb_config["window_length"] > 0
+            assert limb_config["polyorder"] >= 0
+            assert limb_config["segmenter"] == "segment-anything"
 
-        # Simulate JSON decode error
-        mock_json_load.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
-
-        with pytest.raises(json.JSONDecodeError):
-            load_demo_parameters(demo)
-
-    @patch("planet_ruler.demo.json.load")
-    @patch("planet_ruler.demo.open")
-    def test_load_demo_parameters_file_not_found(self, mock_open_func, mock_json_load):
-        """Test handling when config file doesn't exist."""
-        demo = Mock()
-        demo.value = 1
-
-        mock_open_func.side_effect = FileNotFoundError("Config file not found")
-
-        with pytest.raises(FileNotFoundError):
-            load_demo_parameters(demo)
+    def test_load_demo_parameters_limb_config_consistency(self):
+        """Test that all demos have identical limb_config structures."""
+        # Load all demo configurations
+        all_limb_configs = []
+        for value in [1, 2, 3, 4]:
+            demo = Mock()
+            demo.value = value
+            params = load_demo_parameters(demo)
+            all_limb_configs.append(params["limb_config"])
+        
+        # All limb configs should be identical
+        first_config = all_limb_configs[0]
+        for config in all_limb_configs[1:]:
+            assert config == first_config
 
     def test_load_demo_parameters_none_demo(self):
         """Test handling of None demo object."""
@@ -475,12 +488,8 @@ class TestDemoErrorHandling:
 class TestDemoDataValidation:
     """Test validation of demo data and configurations."""
 
-    @patch("planet_ruler.demo.json.load")
-    @patch("planet_ruler.demo.open")
-    def test_radius_values_are_reasonable(self, mock_open_func, mock_json_load):
+    def test_radius_values_are_reasonable(self):
         """Test that radius values are within reasonable ranges."""
-        mock_json_load.return_value = {}
-
         expected_radii = {
             1: 1188,  # Pluto (km)
             2: 58232,  # Saturn (km)
@@ -496,12 +505,8 @@ class TestDemoDataValidation:
             assert params["true_radius"] == expected_radius
             assert params["true_radius"] > 0  # Positive radius
 
-    @patch("planet_ruler.demo.json.load")
-    @patch("planet_ruler.demo.open")
-    def test_file_paths_have_correct_extensions(self, mock_open_func, mock_json_load):
+    def test_file_paths_have_correct_extensions(self):
         """Test that file paths have expected extensions."""
-        mock_json_load.return_value = {}
-
         for demo_value in [1, 2, 3, 4]:
             demo = Mock()
             demo.value = demo_value
