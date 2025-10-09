@@ -47,7 +47,8 @@ def load_demo_parameters(demo):
                 "deriv": 0,
                 "delta": 1,
                 "segmenter": "segment-anything"
-            },            "limb_save": "saturn_limb_1.npy",
+            },
+            "limb_save": "saturn_limb_1.npy",
             "parameter_walkthrough": "../demo/saturn_init_1.md",
             "preamble": "../demo/saturn_preamble_1.md",
         }
@@ -66,7 +67,8 @@ def load_demo_parameters(demo):
                 "deriv": 0,
                 "delta": 1,
                 "segmenter": "segment-anything"
-            },            "limb_save": "saturn_limb_2.npy",
+            },
+            "limb_save": "saturn_limb_2.npy",
             "parameter_walkthrough": "../demo/saturn_init_2.md",
             "preamble": "../demo/saturn_preamble_2.md",
         }
