@@ -41,10 +41,10 @@ class TestDemoCommandEdgeCases:
 class TestDemoCommandAdvanced:
     """Test the demo command functionality with advanced scenarios."""
 
-    @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "jupyter"))
     @patch("planet_ruler.cli.Path")
+    @patch("subprocess.run")
     def test_demo_command_interactive_subprocess_error(
-        self, mock_path, mock_subprocess, capsys
+        self, mock_subprocess, mock_path, capsys
     ):
         """Test interactive demo with subprocess error."""
         # Mock path for notebook
@@ -53,6 +53,10 @@ class TestDemoCommandAdvanced:
         mock_notebook_path.__truediv__.return_value.__truediv__.return_value = (
             "notebook.ipynb"
         )
+        
+        # Create the subprocess error in a Python 3.8 compatible way
+        subprocess_error = subprocess.CalledProcessError(1, "jupyter")
+        mock_subprocess.side_effect = subprocess_error
 
         args = MagicMock()
         args.interactive = True
