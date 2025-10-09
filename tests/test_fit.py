@@ -4,11 +4,11 @@ import numpy as np
 import pandas as pd
 from unittest.mock import MagicMock, Mock
 from planet_ruler.fit import (
-    unpack_parameters, 
-    pack_parameters, 
+    unpack_parameters,
+    pack_parameters,
     CostFunction,
     calculate_parameter_uncertainty,
-    format_parameter_result
+    format_parameter_result,
 )
 
 
@@ -347,27 +347,31 @@ class TestCalculateParameterUncertainty:
         obs = Mock()
         obs.init_parameter_values = {"r": 6371000, "h": 10000, "f": 0.05}
         obs.best_parameters = {"r": 6371500, "h": 9800}
-        
+
         # Mock fit_results with population data
         obs.fit_results = Mock()
-        obs.fit_results.population = np.array([
-            [6371000, 9900, 0.051],
-            [6371200, 9850, 0.049],
-            [6371800, 9750, 0.052],
-            [6372000, 9700, 0.048],
-            [6371400, 9950, 0.050],
-        ])
-        
+        obs.fit_results.population = np.array(
+            [
+                [6371000, 9900, 0.051],
+                [6371200, 9850, 0.049],
+                [6371800, 9750, 0.052],
+                [6372000, 9700, 0.048],
+                [6371400, 9950, 0.050],
+            ]
+        )
+
         return obs
 
-    @pytest.fixture 
+    @pytest.fixture
     def mock_population_df(self):
         """Create a mock population DataFrame"""
-        return pd.DataFrame({
-            'r': [6371000, 6371200, 6371800, 6372000, 6371400],
-            'h': [9900, 9850, 9750, 9700, 9950],
-            'f': [0.051, 0.049, 0.052, 0.048, 0.050]
-        })
+        return pd.DataFrame(
+            {
+                "r": [6371000, 6371200, 6371800, 6372000, 6371400],
+                "h": [9900, 9850, 9750, 9700, 9950],
+                "f": [0.051, 0.049, 0.052, 0.048, 0.050],
+            }
+        )
 
     def test_missing_best_parameters(self):
         """Test error when observation lacks best_parameters"""
@@ -375,25 +379,35 @@ class TestCalculateParameterUncertainty:
         obs.init_parameter_values = {"r": 6371000}
         # Create mock without best_parameters
         del obs.best_parameters
-        
-        with pytest.raises(AttributeError, match="must have completed fit with best_parameters"):
+
+        with pytest.raises(
+            AttributeError, match="must have completed fit with best_parameters"
+        ):
             calculate_parameter_uncertainty(obs)
 
     def test_parameter_not_found(self, mock_observation_basic):
         """Test error when requested parameter not in fitted results"""
         with pytest.raises(ValueError, match="Parameter 'invalid_param' not found"):
-            calculate_parameter_uncertainty(mock_observation_basic, parameter="invalid_param")
+            calculate_parameter_uncertainty(
+                mock_observation_basic, parameter="invalid_param"
+            )
 
     def test_auto_method_detection_success(self, mock_observation_basic, monkeypatch):
         """Test automatic method detection with differential evolution data"""
         # Mock the unpack function to return our test data
-        mock_unpack = Mock(return_value=pd.DataFrame({
-            'r': [6371000, 6371200, 6371800, 6372000, 6371400],
-        }))
-        monkeypatch.setattr("planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack)
-        
+        mock_unpack = Mock(
+            return_value=pd.DataFrame(
+                {
+                    "r": [6371000, 6371200, 6371800, 6372000, 6371400],
+                }
+            )
+        )
+        monkeypatch.setattr(
+            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+        )
+
         result = calculate_parameter_uncertainty(mock_observation_basic, method="auto")
-        
+
         assert result["method"] == "differential_evolution"
         assert result["parameter"] == "r"
         assert "value" in result
@@ -406,83 +420,105 @@ class TestCalculateParameterUncertainty:
         obs.best_parameters = {"r": 6371500}
         # Remove fit_results to simulate missing data
         del obs.fit_results
-        
-        with pytest.raises(ValueError, match="No supported uncertainty method detected"):
+
+        with pytest.raises(
+            ValueError, match="No supported uncertainty method detected"
+        ):
             calculate_parameter_uncertainty(obs, method="auto")
 
     def test_differential_evolution_missing_data(self, mock_observation_basic):
         """Test error when DE method requested but population data missing"""
         # Remove the population attribute
-        delattr(mock_observation_basic.fit_results, 'population')
-        
-        with pytest.raises(AttributeError, match="Differential evolution posteriors not available"):
-            calculate_parameter_uncertainty(mock_observation_basic, method="differential_evolution")
+        delattr(mock_observation_basic.fit_results, "population")
 
-    def test_differential_evolution_std_uncertainty(self, mock_observation_basic, monkeypatch):
+        with pytest.raises(
+            AttributeError, match="Differential evolution posteriors not available"
+        ):
+            calculate_parameter_uncertainty(
+                mock_observation_basic, method="differential_evolution"
+            )
+
+    def test_differential_evolution_std_uncertainty(
+        self, mock_observation_basic, monkeypatch
+    ):
         """Test DE method with standard deviation uncertainty"""
-        mock_df = pd.DataFrame({'r': [6371000, 6371200, 6371800, 6372000, 6371400]})
+        mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr("planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack)
-        
-        result = calculate_parameter_uncertainty(
-            mock_observation_basic, 
-            method="differential_evolution", 
-            uncertainty_type="std"
+        monkeypatch.setattr(
+            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
         )
-        
-        expected_std = mock_df['r'].std()
+
+        result = calculate_parameter_uncertainty(
+            mock_observation_basic,
+            method="differential_evolution",
+            uncertainty_type="std",
+        )
+
+        expected_std = mock_df["r"].std()
         assert result["method"] == "differential_evolution"
         assert result["type"] == "std"
         assert np.isclose(result["uncertainty"], expected_std)
         assert result["parameter"] == "r"
 
-    def test_differential_evolution_ptp_uncertainty(self, mock_observation_basic, monkeypatch):
+    def test_differential_evolution_ptp_uncertainty(
+        self, mock_observation_basic, monkeypatch
+    ):
         """Test DE method with peak-to-peak uncertainty"""
-        mock_df = pd.DataFrame({'r': [6371000, 6371200, 6371800, 6372000, 6371400]})
+        mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr("planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack)
-        
+        monkeypatch.setattr(
+            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+        )
+
         result = calculate_parameter_uncertainty(
             mock_observation_basic,
             method="differential_evolution",
-            uncertainty_type="ptp"
+            uncertainty_type="ptp",
         )
-        
-        expected_ptp = mock_df['r'].max() - mock_df['r'].min()
+
+        expected_ptp = mock_df["r"].max() - mock_df["r"].min()
         assert result["type"] == "ptp"
         assert np.isclose(result["uncertainty"], expected_ptp)
 
-    def test_differential_evolution_iqr_uncertainty(self, mock_observation_basic, monkeypatch):
+    def test_differential_evolution_iqr_uncertainty(
+        self, mock_observation_basic, monkeypatch
+    ):
         """Test DE method with interquartile range uncertainty"""
-        mock_df = pd.DataFrame({'r': [6371000, 6371200, 6371800, 6372000, 6371400]})
+        mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr("planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack)
-        
-        result = calculate_parameter_uncertainty(
-            mock_observation_basic,
-            method="differential_evolution", 
-            uncertainty_type="iqr"
+        monkeypatch.setattr(
+            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
         )
-        
-        expected_iqr = mock_df['r'].quantile(0.75) - mock_df['r'].quantile(0.25)
-        assert result["type"] == "iqr"
-        assert np.isclose(result["uncertainty"], expected_iqr)
 
-    def test_differential_evolution_ci_uncertainty(self, mock_observation_basic, monkeypatch):
-        """Test DE method with confidence interval uncertainty"""
-        mock_df = pd.DataFrame({'r': [6371000, 6371200, 6371800, 6372000, 6371400]})
-        mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr("planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack)
-        
         result = calculate_parameter_uncertainty(
             mock_observation_basic,
             method="differential_evolution",
-            uncertainty_type="ci"
+            uncertainty_type="iqr",
         )
-        
-        expected_lower = mock_df['r'].quantile(0.025)
-        expected_upper = mock_df['r'].quantile(0.975)
-        
+
+        expected_iqr = mock_df["r"].quantile(0.75) - mock_df["r"].quantile(0.25)
+        assert result["type"] == "iqr"
+        assert np.isclose(result["uncertainty"], expected_iqr)
+
+    def test_differential_evolution_ci_uncertainty(
+        self, mock_observation_basic, monkeypatch
+    ):
+        """Test DE method with confidence interval uncertainty"""
+        mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
+        mock_unpack = Mock(return_value=mock_df)
+        monkeypatch.setattr(
+            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+        )
+
+        result = calculate_parameter_uncertainty(
+            mock_observation_basic,
+            method="differential_evolution",
+            uncertainty_type="ci",
+        )
+
+        expected_lower = mock_df["r"].quantile(0.025)
+        expected_upper = mock_df["r"].quantile(0.975)
+
         assert result["type"] == "ci"
         assert isinstance(result["uncertainty"], dict)
         assert "lower" in result["uncertainty"]
@@ -493,100 +529,128 @@ class TestCalculateParameterUncertainty:
 
     def test_scale_factor_application(self, mock_observation_basic, monkeypatch):
         """Test that scale factor is correctly applied to results"""
-        mock_df = pd.DataFrame({'r': [6371000, 6371200, 6371800, 6372000, 6371400]})
+        mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr("planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack)
-        
+        monkeypatch.setattr(
+            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+        )
+
         scale_factor = 1000.0  # Convert to km
         result = calculate_parameter_uncertainty(
-            mock_observation_basic,
-            scale_factor=scale_factor
+            mock_observation_basic, scale_factor=scale_factor
         )
-        
+
         # Check that values are scaled correctly
         # The fitted value comes from combining init_parameter_values and best_parameters
         final_params = mock_observation_basic.init_parameter_values.copy()
         final_params.update(mock_observation_basic.best_parameters)
-        expected_value = final_params['r'] / scale_factor
-        expected_uncertainty = mock_df['r'].std() / scale_factor
-        
+        expected_value = final_params["r"] / scale_factor
+        expected_uncertainty = mock_df["r"].std() / scale_factor
+
         assert result["scale_factor"] == scale_factor
         assert np.isclose(result["value"], expected_value)
         assert np.isclose(result["uncertainty"], expected_uncertainty)
 
     def test_different_parameter(self, mock_observation_basic, monkeypatch):
         """Test uncertainty calculation for different parameter"""
-        mock_df = pd.DataFrame({
-            'r': [6371000, 6371200, 6371800, 6372000, 6371400],
-            'h': [9900, 9850, 9750, 9700, 9950]
-        })
-        mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr("planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack)
-        
-        result = calculate_parameter_uncertainty(
-            mock_observation_basic,
-            parameter="h"
+        mock_df = pd.DataFrame(
+            {
+                "r": [6371000, 6371200, 6371800, 6372000, 6371400],
+                "h": [9900, 9850, 9750, 9700, 9950],
+            }
         )
-        
+        mock_unpack = Mock(return_value=mock_df)
+        monkeypatch.setattr(
+            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+        )
+
+        result = calculate_parameter_uncertainty(mock_observation_basic, parameter="h")
+
         assert result["parameter"] == "h"
-        expected_uncertainty = mock_df['h'].std()
+        expected_uncertainty = mock_df["h"].std()
         assert np.isclose(result["uncertainty"], expected_uncertainty)
 
     def test_parameter_not_in_population(self, mock_observation_basic, monkeypatch):
         """Test error when parameter not found in population data"""
-        mock_df = pd.DataFrame({'r': [6371000, 6371200]})  # Missing 'h' parameter
+        mock_df = pd.DataFrame({"r": [6371000, 6371200]})  # Missing 'h' parameter
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr("planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack)
-        
-        with pytest.raises(ValueError, match="Parameter 'h' not found in population posteriors"):
+        monkeypatch.setattr(
+            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+        )
+
+        with pytest.raises(
+            ValueError, match="Parameter 'h' not found in population posteriors"
+        ):
             calculate_parameter_uncertainty(mock_observation_basic, parameter="h")
 
     def test_unsupported_uncertainty_type(self, mock_observation_basic, monkeypatch):
         """Test error for unsupported uncertainty type"""
-        mock_df = pd.DataFrame({'r': [6371000, 6371200, 6371800]})
+        mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800]})
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr("planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack)
-        
-        with pytest.raises(ValueError, match="Unsupported uncertainty type: invalid_type"):
+        monkeypatch.setattr(
+            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+        )
+
+        with pytest.raises(
+            ValueError, match="Unsupported uncertainty type: invalid_type"
+        ):
             calculate_parameter_uncertainty(
-                mock_observation_basic,
-                uncertainty_type="invalid_type"
+                mock_observation_basic, uncertainty_type="invalid_type"
             )
 
     def test_unsupported_method(self, mock_observation_basic):
         """Test error for unsupported uncertainty method"""
-        with pytest.raises(ValueError, match="Unsupported uncertainty calculation method"):
-            calculate_parameter_uncertainty(mock_observation_basic, method="invalid_method")
+        with pytest.raises(
+            ValueError, match="Unsupported uncertainty calculation method"
+        ):
+            calculate_parameter_uncertainty(
+                mock_observation_basic, method="invalid_method"
+            )
 
     def test_bootstrap_not_implemented(self, mock_observation_basic):
         """Test that bootstrap method raises NotImplementedError"""
-        with pytest.raises(NotImplementedError, match="Bootstrap uncertainty calculation not yet implemented"):
+        with pytest.raises(
+            NotImplementedError,
+            match="Bootstrap uncertainty calculation not yet implemented",
+        ):
             calculate_parameter_uncertainty(mock_observation_basic, method="bootstrap")
 
     def test_hessian_not_implemented(self, mock_observation_basic):
         """Test that hessian method raises NotImplementedError"""
-        with pytest.raises(NotImplementedError, match="Hessian-based uncertainty calculation not yet implemented"):
+        with pytest.raises(
+            NotImplementedError,
+            match="Hessian-based uncertainty calculation not yet implemented",
+        ):
             calculate_parameter_uncertainty(mock_observation_basic, method="hessian")
 
     def test_import_error_handling(self, mock_observation_basic, monkeypatch):
         """Test handling of import error for unpack function"""
+
         # Mock import to raise ImportError
         def mock_import_error(*args, **kwargs):
             raise ImportError("Mocked import error")
-        
-        monkeypatch.setattr("planet_ruler.observation.unpack_diff_evol_posteriors", mock_import_error)
-        
-        with pytest.raises(ImportError, match="Could not import unpack_diff_evol_posteriors function"):
-            calculate_parameter_uncertainty(mock_observation_basic, method="differential_evolution")
+
+        monkeypatch.setattr(
+            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_import_error
+        )
+
+        with pytest.raises(
+            ImportError, match="Could not import unpack_diff_evol_posteriors function"
+        ):
+            calculate_parameter_uncertainty(
+                mock_observation_basic, method="differential_evolution"
+            )
 
     def test_raw_data_inclusion(self, mock_observation_basic, monkeypatch):
         """Test that raw data is included in results"""
-        mock_df = pd.DataFrame({'r': [6371000, 6371200, 6371800, 6372000, 6371400]})
+        mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr("planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack)
-        
+        monkeypatch.setattr(
+            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+        )
+
         result = calculate_parameter_uncertainty(mock_observation_basic)
-        
+
         assert result["raw_data"] is not None
         assert isinstance(result["raw_data"], np.ndarray)
         assert len(result["raw_data"]) == len(mock_df)
@@ -601,9 +665,9 @@ class TestFormatParameterResult:
             "value": 6371.5,
             "uncertainty": 2.3,
             "parameter": "r",
-            "type": "std"
+            "type": "std",
         }
-        
+
         result = format_parameter_result(uncertainty_result, units="km")
         expected = "r = 6371.5 ±2.3 km"
         assert result == expected
@@ -614,9 +678,9 @@ class TestFormatParameterResult:
             "value": 10.2,
             "uncertainty": 1.8,
             "parameter": "h",
-            "type": "ptp"
+            "type": "ptp",
         }
-        
+
         result = format_parameter_result(uncertainty_result, units="km")
         expected = "h = 10.2 range ±1.8 km"
         assert result == expected
@@ -627,9 +691,9 @@ class TestFormatParameterResult:
             "value": 0.051,
             "uncertainty": 0.003,
             "parameter": "f",
-            "type": "iqr"
+            "type": "iqr",
         }
-        
+
         result = format_parameter_result(uncertainty_result, units="m")
         expected = "f = 0.1 IQR ±0.0 m"
         assert result == expected
@@ -638,15 +702,11 @@ class TestFormatParameterResult:
         """Test formatting confidence interval uncertainty"""
         uncertainty_result = {
             "value": 6371.5,
-            "uncertainty": {
-                "lower": 6369.2,
-                "upper": 6373.8,
-                "width": 4.6
-            },
+            "uncertainty": {"lower": 6369.2, "upper": 6373.8, "width": 4.6},
             "parameter": "r",
-            "type": "ci"
+            "type": "ci",
         }
-        
+
         result = format_parameter_result(uncertainty_result, units="km")
         expected = "r = 6371.5 km (95% CI: 6369.2-6373.8 km)"
         assert result == expected
@@ -657,9 +717,9 @@ class TestFormatParameterResult:
             "value": 6371.5,
             "uncertainty": 2.3,
             "parameter": "r",
-            "type": "unknown_type"
+            "type": "unknown_type",
         }
-        
+
         result = format_parameter_result(uncertainty_result, units="km")
         expected = "r = 6371.5 ±2.3 km"
         assert result == expected
@@ -670,9 +730,9 @@ class TestFormatParameterResult:
             "value": 6371.5,
             "uncertainty": 2.3,
             "parameter": "r",
-            "type": "std"
+            "type": "std",
         }
-        
+
         result = format_parameter_result(uncertainty_result)
         expected = "r = 6371.5 ±2.3 "
         assert result == expected
@@ -683,9 +743,9 @@ class TestFormatParameterResult:
             "value": 6371.555555,
             "uncertainty": 2.333333,
             "parameter": "r",
-            "type": "std"
+            "type": "std",
         }
-        
+
         result = format_parameter_result(uncertainty_result, units="km")
         expected = "r = 6371.6 ±2.3 km"
         assert result == expected
@@ -697,12 +757,12 @@ class TestFormatParameterResult:
             "uncertainty": {
                 "lower": 6369.222222,
                 "upper": 6373.888888,
-                "width": 4.666666
+                "width": 4.666666,
             },
             "parameter": "r",
-            "type": "ci"
+            "type": "ci",
         }
-        
+
         result = format_parameter_result(uncertainty_result, units="km")
         expected = "r = 6371.6 km (95% CI: 6369.2-6373.9 km)"
         assert result == expected
@@ -711,20 +771,40 @@ class TestFormatParameterResult:
         """Test formatting for different parameter names"""
         test_cases = [
             ("radius", "radius = 6371.5 ±2.3 km"),
-            ("height", "height = 10.2 ±1.8 km"), 
+            ("height", "height = 10.2 ±1.8 km"),
             ("focal_length", "focal_length = 0.1 ±0.0 m"),
-            ("theta_x", "theta_x = 0.5 ±0.1 degrees")
+            ("theta_x", "theta_x = 0.5 ±0.1 degrees"),
         ]
-        
+
         for param_name, expected in test_cases:
             uncertainty_result = {
-                "value": 6371.5 if param_name == "radius" else (10.2 if param_name == "height" else (0.051 if param_name == "focal_length" else 0.52)),
-                "uncertainty": 2.3 if param_name == "radius" else (1.8 if param_name == "height" else (0.003 if param_name == "focal_length" else 0.08)),
+                "value": (
+                    6371.5
+                    if param_name == "radius"
+                    else (
+                        10.2
+                        if param_name == "height"
+                        else (0.051 if param_name == "focal_length" else 0.52)
+                    )
+                ),
+                "uncertainty": (
+                    2.3
+                    if param_name == "radius"
+                    else (
+                        1.8
+                        if param_name == "height"
+                        else (0.003 if param_name == "focal_length" else 0.08)
+                    )
+                ),
                 "parameter": param_name,
-                "type": "std"
+                "type": "std",
             }
-            
-            units = "km" if param_name in ["radius", "height"] else ("m" if param_name == "focal_length" else "degrees")
+
+            units = (
+                "km"
+                if param_name in ["radius", "height"]
+                else ("m" if param_name == "focal_length" else "degrees")
+            )
             result = format_parameter_result(uncertainty_result, units=units)
             assert result == expected
 
