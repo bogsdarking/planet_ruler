@@ -131,13 +131,13 @@ Expected Output::
    ✓ Parameter fitting completed
    
    RESULTS:
-   r = 6371.2 ±12.4 km
-   h = 418.3 ±8.7 km
+   r = 5516 ± 37 km
+   h = 418.3 ± 8.7 km
    
    Validation:
    Known Earth radius: 6371 km
-   Absolute error: 0.2 km
-   Relative error: 0.003%
+   Absolute error: 855 km
+   Relative error: 13.4%
 
 Example 2: Pluto from New Horizons Spacecraft
 --------------------------------------------
@@ -206,13 +206,13 @@ Expected Output::
    PLUTO RADIUS FROM NEW HORIZONS  
    ==================================================
    RESULTS:
-   r = 1188.4 ±45.2 km
-   h = 18.2 ±1.1 Mm
+   r = 1432 ± 31 km
+   h = 18.2 ± 1.1 Mm
    
    Validation:
    Known Pluto radius: 1188 km
-   Absolute error: 0 km
-   Relative error: 0.0%
+   Absolute error: 244 km
+   Relative error: 20.6%
 
 Example 3: Saturn from Cassini Spacecraft
 ----------------------------------------
@@ -225,11 +225,11 @@ Dataset Details
 * **Mission**: Cassini-Huygens mission to Saturn
 * **Distance**: ~1.2 billion km (very distant observation)  
 * **Camera**: NAC (Narrow Angle Camera)
-* **Expected radius**: ~60,268 km (Saturn equatorial radius)
-* **Challenge**: Extreme distance, ring system interference
+* **Expected radius**: ~58,232 km (Saturn radius)
+* **Challenge**: Extreme distance, potentially complex limb shape
 
-Analysis with Ring Masking
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Analysis Code
+~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -243,24 +243,12 @@ Analysis with Ring Masking
    print("SATURN RADIUS FROM CASSINI")
    print("="*50)
    
-   # Saturn's rings can interfere - use advanced segmentation
-   saturn_obs.detect_limb(
-       method="segmentation",
-       points_per_side=64,  # Very high resolution
-       crop_n_layers=2,     # Multi-scale processing
-       min_mask_region_area=5000  # Filter small ring segments
-   )
+   # Detect limb using segmentation
+   saturn_obs.detect_limb(method="segmentation")
+   saturn_obs.smooth_limb()
    
-   # Extra smoothing for ring interference
-   saturn_obs.smooth_limb(method="rolling-median", window_length=25)
-   
-   # Robust fitting with more iterations
-   saturn_obs.fit_limb(
-       method="differential_evolution",
-       maxiter=2000,
-       popsize=25,
-       atol=1e-8  # Higher precision
-   )
+   # Fit with additional iterations for distant object
+   saturn_obs.fit_limb(maxiter=1500, seed=42)
    
    # Results
    saturn_radius = calculate_parameter_uncertainty(
@@ -274,11 +262,11 @@ Analysis with Ring Masking
    print(f"95% CI: {saturn_radius['uncertainty']['lower']:.0f} - {saturn_radius['uncertainty']['upper']:.0f} km")
    
    # Validation
-   known_saturn_radius = 60268.0  # Equatorial radius
+   known_saturn_radius = 58232.0  # True radius for comparison
    fitted_value = saturn_radius["value"]
    
    print(f"\nValidation:")
-   print(f"Known Saturn equatorial radius: {known_saturn_radius:.0f} km")
+   print(f"Known Saturn radius: {known_saturn_radius:.0f} km")
    print(f"Fitted radius: {fitted_value:.0f} km")
    
    # Check if within confidence interval
@@ -289,6 +277,22 @@ Analysis with Ring Masking
        print("✓ Known radius is within 95% confidence interval")
    else:
        print("⚠ Known radius outside confidence interval")
+
+Expected Output::
+
+   ==================================================
+   SATURN RADIUS FROM CASSINI
+   ==================================================
+   RESULTS:
+   r = 65402 ± 593 km
+   95% CI: 64043 - 66406 km
+   
+   Validation:
+   Known Saturn radius: 58232 km
+   Fitted radius: 65402 km
+   Absolute error: 7170 km
+   Relative error: 12.3%
+   ⚠ Known radius outside confidence interval
 
 Example 4: Comparative Analysis Across Planets
 ---------------------------------------------
@@ -323,7 +327,7 @@ Multi-Planet Comparison
            "name": "Saturn (Cassini)", 
            "image": "demo/images/saturn_cassini.jpg",
            "config": "config/saturn-cassini-1.yaml",
-           "known_radius": 60268.0,
+           "known_radius": 58232.0,
            "known_distance": 1200000.0  # Thousand km
        }
    ]
@@ -529,6 +533,14 @@ To run these examples, ensure you have:
    .. code-block:: bash
    
       pip install matplotlib seaborn pandas
+
+=== SUMMARY TABLE ===
+
+Planet    | Estimated ± 1σ     | 95% CI Range      | True Value | Error
+----------|--------------------|--------------------|------------|-------
+Earth     |   5516 ±   37 km |   5488 -  5636 km |   6371 km |  13.4%
+Saturn-1  |  65402 ±  593 km |  64043 - 66406 km |  58232 km |  12.3%
+Pluto     |   1432 ±   31 km |   1379 -  1526 km |   1188 km |  20.6%
 
 For the complete example notebooks, see the `notebooks/` directory in the Planet Ruler repository.
 
