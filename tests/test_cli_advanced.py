@@ -53,7 +53,7 @@ class TestDemoCommandAdvanced:
         mock_notebook_path.__truediv__.return_value.__truediv__.return_value = (
             "notebook.ipynb"
         )
-        
+
         # Create the subprocess error in a Python 3.8 compatible way
         subprocess_error = subprocess.CalledProcessError(1, "jupyter")
         mock_subprocess.side_effect = subprocess_error
