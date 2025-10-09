@@ -171,7 +171,7 @@ planet-ruler demo --planet earth
 ### Requirements
 - **Python 3.8+**
 - **RAM**: 4GB+ recommended (for AI models)
-- **Storage**: ~2GB for full installation with models
+- **Storage**: ~2GB for full installation with models1
 
 ### Install Options
 
@@ -214,6 +214,7 @@ cd planet_ruler
 
 # Full development environment
 pip install -e .
+pip install -r requirements.txt
 pip install -r requirements-test.txt
 
 # Run tests to verify
@@ -409,7 +410,7 @@ obs.plot()            # Show results
 # Fork the repo, then:
 git clone https://github.com/YOUR_USERNAME/planet_ruler.git
 cd planet_ruler
-pip install -e . && pip install -r requirements-test.txt
+pip install -e . && pip install -r requirements.txt && pip install -r requirements-test.txt
 pytest tests/ -v  # Verify everything works
 ```
 
