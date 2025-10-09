@@ -27,8 +27,9 @@ def load_demo_parameters(demo):
                 "polyorder": 1,
                 "deriv": 0,
                 "delta": 1,
-                "segmenter": "segment-anything"
-            },            "limb_save": "pluto_limb.npy",
+                "segmenter": "segment-anything",
+            },
+            "limb_save": "pluto_limb.npy",
             "parameter_walkthrough": "../demo/pluto_init.md",
             "preamble": "../demo/pluto_preamble.md",
         }
@@ -46,7 +47,7 @@ def load_demo_parameters(demo):
                 "polyorder": 1,
                 "deriv": 0,
                 "delta": 1,
-                "segmenter": "segment-anything"
+                "segmenter": "segment-anything",
             },
             "limb_save": "saturn_limb_1.npy",
             "parameter_walkthrough": "../demo/saturn_init_1.md",
@@ -66,7 +67,7 @@ def load_demo_parameters(demo):
                 "polyorder": 1,
                 "deriv": 0,
                 "delta": 1,
-                "segmenter": "segment-anything"
+                "segmenter": "segment-anything",
             },
             "limb_save": "saturn_limb_2.npy",
             "parameter_walkthrough": "../demo/saturn_init_2.md",
@@ -86,7 +87,7 @@ def load_demo_parameters(demo):
                 "polyorder": 1,
                 "deriv": 0,
                 "delta": 1,
-                "segmenter": "segment-anything"
+                "segmenter": "segment-anything",
             },
             "limb_save": "earth_limb_1.npy",
             "parameter_walkthrough": "../demo/earth_init_1.md",

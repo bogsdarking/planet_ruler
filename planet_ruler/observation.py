@@ -92,19 +92,19 @@ class LimbObservation(PlanetObservation):
         self.fit = None
         self.best_parameters = None
         self.fit_results = None
-    
+
     def analyze(
         self,
         detect_limb_kwargs: dict = None,
         fit_limb_kwargs: dict = None,
-    ) -> 'LimbObservation':
+    ) -> "LimbObservation":
         """
         Perform complete limb analysis: detection + fitting in one call.
-        
+
         Args:
             detect_limb_kwargs (dict): Optional arguments for detect_limb()
             fit_limb_kwargs (dict): Optional arguments for fit_limb()
-            
+
         Returns:
             self: For method chaining
         """
@@ -112,83 +112,86 @@ class LimbObservation(PlanetObservation):
             detect_limb_kwargs = {}
         if fit_limb_kwargs is None:
             fit_limb_kwargs = {}
-            
+
         self.detect_limb(**detect_limb_kwargs)
         self.fit_limb(**fit_limb_kwargs)
-        
+
         return self
-    
+
     @property
     def radius_km(self) -> float:
         """
         Get the fitted planetary radius in kilometers.
-        
+
         Returns:
             float: Planetary radius in km, or 0 if not fitted
         """
         if self.best_parameters is None:
             return 0.0
-        return self.best_parameters.get('r', 0.0) / 1000.0
-    
+        return self.best_parameters.get("r", 0.0) / 1000.0
+
     @property
     def altitude_km(self) -> float:
         """
         Get the observer altitude in kilometers.
-        
+
         Returns:
             float: Observer altitude in km, or 0 if not fitted
         """
         if self.best_parameters is None:
             return 0.0
-        return self.best_parameters.get('h', 0.0) / 1000.0
-    
+        return self.best_parameters.get("h", 0.0) / 1000.0
+
     @property
     def focal_length_mm(self) -> float:
         """
         Get the camera focal length in millimeters.
-        
+
         Returns:
             float: Focal length in mm, or 0 if not fitted
         """
         if self.best_parameters is None:
             return 0.0
-        return self.best_parameters.get('f', 0.0) * 1000.0
-    
+        return self.best_parameters.get("f", 0.0) * 1000.0
+
     @property
     def radius_uncertainty(self) -> float:
         """
         Get parameter uncertainty for radius using differential evolution posteriors.
-        
+
         Returns:
             float: Radius uncertainty in km, or 0 if not available
         """
-        if not hasattr(self, 'fit_results') or not hasattr(self.fit_results, 'population'):
+        if not hasattr(self, "fit_results") or not hasattr(
+            self.fit_results, "population"
+        ):
             return 0.0
-        
+
         try:
             from planet_ruler.fit import calculate_parameter_uncertainty
+
             result = calculate_parameter_uncertainty(
-                self, 
-                parameter='r', 
+                self,
+                parameter="r",
                 scale_factor=1000.0,  # Convert to km
-                uncertainty_type='std'
+                uncertainty_type="std",
             )
-            return result['uncertainty']
+            return result["uncertainty"]
         except Exception:
             return 0.0
-    
+
     def plot_3d(self, **kwargs) -> None:
         """
         Create 3D visualization of the planetary geometry.
-        
+
         Args:
             **kwargs: Arguments passed to plot_3d_solution
         """
         from planet_ruler.plot import plot_3d_solution
-        
+
         if self.best_parameters is None:
             raise ValueError("Must fit limb before plotting 3D solution")
-        
+
         plot_3d_solution(**self.best_parameters, **kwargs)
 
     def load_fit_config(self, fit_config: str) -> None:
@@ -224,7 +227,7 @@ class LimbObservation(PlanetObservation):
         deriv: int = 0,
         delta: int = 1,
         segmenter: str = "segment-anything",
-    ) -> 'LimbObservation':
+    ) -> "LimbObservation":
         """
         Use the instance-defined method to find the limb in our observation.
         Kwargs are passed to the method.
@@ -282,7 +285,7 @@ class LimbObservation(PlanetObservation):
         max_iter: int = 15000,
         n_jobs: int = 1,
         seed: int = 0,
-    ) -> 'LimbObservation':
+    ) -> "LimbObservation":
         """
         Fit the current limb using minimizer of choice.
 

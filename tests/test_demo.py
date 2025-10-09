@@ -99,9 +99,9 @@ class TestLoadDemoParameters:
             "polyorder": 1,
             "deriv": 0,
             "delta": 1,
-            "segmenter": "segment-anything"
+            "segmenter": "segment-anything",
         }
-        
+
         expected_params = {
             "target": "Pluto",
             "true_radius": 1188,
@@ -133,9 +133,9 @@ class TestLoadDemoParameters:
             "polyorder": 1,
             "deriv": 0,
             "delta": 1,
-            "segmenter": "segment-anything"
+            "segmenter": "segment-anything",
         }
-        
+
         assert result["target"] == "Saturn"
         assert result["true_radius"] == 58232
         assert result["image_filepath"] == "../demo/images/PIA21341.jpg"
@@ -160,9 +160,9 @@ class TestLoadDemoParameters:
             "polyorder": 1,
             "deriv": 0,
             "delta": 1,
-            "segmenter": "segment-anything"
+            "segmenter": "segment-anything",
         }
-        
+
         assert result["target"] == "Saturn"
         assert result["true_radius"] == 58232
         assert (
@@ -189,9 +189,9 @@ class TestLoadDemoParameters:
             "polyorder": 1,
             "deriv": 0,
             "delta": 1,
-            "segmenter": "segment-anything"
+            "segmenter": "segment-anything",
         }
-        
+
         assert result["target"] == "Earth"
         assert result["true_radius"] == 6371
         assert result["image_filepath"] == "../demo/images/50644513538_56228a2027_o.jpg"
@@ -386,9 +386,9 @@ class TestDemoIntegration:
             "polyorder": 1,
             "deriv": 0,
             "delta": 1,
-            "segmenter": "segment-anything"
+            "segmenter": "segment-anything",
         }
-        
+
         assert params["target"] == "Pluto"
         assert params["limb_config"] == expected_limb_config
         assert dropdown == mock_dropdown
@@ -418,11 +418,17 @@ class TestDemoIntegration:
             assert isinstance(params["limb_save"], str)
             assert isinstance(params["parameter_walkthrough"], str)
             assert isinstance(params["preamble"], str)
-            
+
         # Verify limb_config has consistent structure across all demos
         expected_limb_keys = {
-            "log", "y_min", "y_max", "window_length", 
-            "polyorder", "deriv", "delta", "segmenter"
+            "log",
+            "y_min",
+            "y_max",
+            "window_length",
+            "polyorder",
+            "deriv",
+            "delta",
+            "segmenter",
         }
         for params in all_params:
             assert set(params["limb_config"].keys()) == expected_limb_keys
@@ -438,9 +444,9 @@ class TestDemoErrorHandling:
             demo = Mock()
             demo.value = demo_value
             result = load_demo_parameters(demo)
-            
+
             limb_config = result["limb_config"]
-            
+
             # Verify required limb_config keys and types
             assert isinstance(limb_config["log"], bool)
             assert isinstance(limb_config["y_min"], int)
@@ -450,7 +456,7 @@ class TestDemoErrorHandling:
             assert isinstance(limb_config["deriv"], int)
             assert isinstance(limb_config["delta"], int)
             assert isinstance(limb_config["segmenter"], str)
-            
+
             # Verify reasonable values
             assert limb_config["window_length"] > 0
             assert limb_config["polyorder"] >= 0
@@ -465,7 +471,7 @@ class TestDemoErrorHandling:
             demo.value = value
             params = load_demo_parameters(demo)
             all_limb_configs.append(params["limb_config"])
-        
+
         # All limb configs should be identical
         first_config = all_limb_configs[0]
         for config in all_limb_configs[1:]:
