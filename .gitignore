@@ -1,5 +1,6 @@
 # OS and system files
 .vscode
+.coverage
 *.DS_Store
 .DS_Store?
 ._*
