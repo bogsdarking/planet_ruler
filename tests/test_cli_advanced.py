@@ -43,20 +43,10 @@ class TestDemoCommandAdvanced:
 
     @patch("planet_ruler.cli.Path")
     @patch("subprocess.run")
-    @patch("builtins.__import__")
     def test_demo_command_interactive_subprocess_error(
-        self, mock_import, mock_subprocess, mock_path, capsys
+        self, mock_subprocess, mock_path, capsys
     ):
         """Test interactive demo with subprocess error."""
-
-        # Mock the import to succeed for jupyter_core.command
-        def mock_import_func(name, *args, **kwargs):
-            if name == "jupyter_core.command":
-                return MagicMock()  # Mock successful import
-            return __import__(name, *args, **kwargs)
-
-        mock_import.side_effect = mock_import_func
-
         # Mock path for notebook
         mock_notebook_path = MagicMock()
         mock_path.return_value.parent.parent = mock_notebook_path
