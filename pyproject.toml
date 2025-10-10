@@ -7,8 +7,8 @@ name = "planet_ruler"
 authors = [
     {name = "Brandon Anderson", email = "bogsdarking@proton.me"}
 ]
-description = "A tool to infer the radius of the planet you are sitting on."
-version = "1.0"
+description = "Measure planetary radii from horizon photographs using computer vision and geometry"
+version = "1.1.0"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
@@ -26,14 +26,28 @@ dependencies = [
     "segment-anything>=1.0,<2.0.0; python_version>='3.8'",
 ]
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Education",
 ]
 
 [project.urls]
-Homepage = "https://github.com/bogsdarking/planet-ruler"
-Issues = "https://github.com/bogsdarking/planet-ruler/issues"
+Homepage = "https://github.com/bogsdarking/planet_ruler"
+Repository = "https://github.com/bogsdarking/planet_ruler"
+Issues = "https://github.com/bogsdarking/planet_ruler/issues"
+Documentation = "https://planet-ruler.readthedocs.io"
 
 [tool.hatch.build.targets.wheel]
 packages = ["planet_ruler"]
