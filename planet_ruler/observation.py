@@ -93,6 +93,107 @@ class LimbObservation(PlanetObservation):
         self.best_parameters = None
         self.fit_results = None
 
+    def analyze(
+        self,
+        detect_limb_kwargs: dict = None,
+        fit_limb_kwargs: dict = None,
+    ) -> "LimbObservation":
+        """
+        Perform complete limb analysis: detection + fitting in one call.
+
+        Args:
+            detect_limb_kwargs (dict): Optional arguments for detect_limb()
+            fit_limb_kwargs (dict): Optional arguments for fit_limb()
+
+        Returns:
+            self: For method chaining
+        """
+        if detect_limb_kwargs is None:
+            detect_limb_kwargs = {}
+        if fit_limb_kwargs is None:
+            fit_limb_kwargs = {}
+
+        self.detect_limb(**detect_limb_kwargs)
+        self.fit_limb(**fit_limb_kwargs)
+
+        return self
+
+    @property
+    def radius_km(self) -> float:
+        """
+        Get the fitted planetary radius in kilometers.
+
+        Returns:
+            float: Planetary radius in km, or 0 if not fitted
+        """
+        if self.best_parameters is None:
+            return 0.0
+        return self.best_parameters.get("r", 0.0) / 1000.0
+
+    @property
+    def altitude_km(self) -> float:
+        """
+        Get the observer altitude in kilometers.
+
+        Returns:
+            float: Observer altitude in km, or 0 if not fitted
+        """
+        if self.best_parameters is None:
+            return 0.0
+        return self.best_parameters.get("h", 0.0) / 1000.0
+
+    @property
+    def focal_length_mm(self) -> float:
+        """
+        Get the camera focal length in millimeters.
+
+        Returns:
+            float: Focal length in mm, or 0 if not fitted
+        """
+        if self.best_parameters is None:
+            return 0.0
+        return self.best_parameters.get("f", 0.0) * 1000.0
+
+    @property
+    def radius_uncertainty(self) -> float:
+        """
+        Get parameter uncertainty for radius using differential evolution posteriors.
+
+        Returns:
+            float: Radius uncertainty in km, or 0 if not available
+        """
+        if not hasattr(self, "fit_results") or not hasattr(
+            self.fit_results, "population"
+        ):
+            return 0.0
+
+        try:
+            from planet_ruler.fit import calculate_parameter_uncertainty
+
+            result = calculate_parameter_uncertainty(
+                self,
+                parameter="r",
+                scale_factor=1000.0,  # Convert to km
+                uncertainty_type="std",
+            )
+            return result["uncertainty"]
+        except Exception:
+            return 0.0
+
+    def plot_3d(self, **kwargs) -> None:
+        """
+        Create 3D visualization of the planetary geometry.
+
+        Args:
+            **kwargs: Arguments passed to plot_3d_solution
+        """
+        from planet_ruler.plot import plot_3d_solution
+
+        if self.best_parameters is None:
+            raise ValueError("Must fit limb before plotting 3D solution")
+
+        plot_3d_solution(**self.best_parameters, **kwargs)
+
     def load_fit_config(self, fit_config: str) -> None:
         """
         Load the fit configuration from file, setting all parameters
@@ -118,17 +219,6 @@ class LimbObservation(PlanetObservation):
 
     def detect_limb(
         self,
-        tilt: float = 0.05,
-        smoothing_window: int = 50,
-        start: int = 10,
-        steps: int = 1000000,
-        g: float = 150,
-        m: float = 5,
-        k: float = 3e-1,
-        friction: float = 0.0,
-        t_step: float = 0.01,
-        max_acc: float = 1,
-        max_vel: float = 2,
         log: bool = False,
         y_min: int = 0,
         y_max: int = -1,
@@ -137,26 +227,12 @@ class LimbObservation(PlanetObservation):
         deriv: int = 0,
         delta: int = 1,
         segmenter: str = "segment-anything",
-    ) -> None:
+    ) -> "LimbObservation":
         """
         Use the instance-defined method to find the limb in our observation.
         Kwargs are passed to the method.
 
         Args:
-            tilt (float): Tilt of the topography. Lifts the
-                top end up by giving every column a
-                height = tilt * x component.
-            smoothing_window (int): Length of window for smoothing
-                each column.
-            start (int): Starting y-value (from the top) for simulation.
-            steps (int): Number of time steps.
-            g (float): Force of gravity (points down into the image).
-            m (float): Density of the string (per pixel).
-            k (float): Spring constant (for string tension).
-            friction (float): Friction coefficient.
-            t_step (float): Length of time step.
-            max_acc (float): Maximum acceleration.
-            max_vel (float): Maximum velocity.
             log (bool): Use the log(gradient). Sometimes good for
             smoothing.
             y_min (int): Minimum y-position to consider.
@@ -189,6 +265,7 @@ class LimbObservation(PlanetObservation):
 
         self._raw_limb = self.features["limb"].copy()
         self._plot_functions["limb"] = plot_limb
+        return self
 
     def smooth_limb(self, fill_nan=True, **kwargs) -> None:
         """
@@ -205,10 +282,10 @@ class LimbObservation(PlanetObservation):
     def fit_limb(
         self,
         loss_function: str = "l2",
-        max_iter: int = 1000,
+        max_iter: int = 15000,
         n_jobs: int = 1,
         seed: int = 0,
-    ) -> None:
+    ) -> "LimbObservation":
         """
         Fit the current limb using minimizer of choice.
 
@@ -264,6 +341,7 @@ class LimbObservation(PlanetObservation):
         self.best_parameters = working_parameters
         self.features["fitted_limb"] = self.cost_function.evaluate(self.best_parameters)
         self._plot_functions["fitted_limb"] = plot_limb
+        return self
 
     def save_limb(self, filepath: str) -> None:
         """
