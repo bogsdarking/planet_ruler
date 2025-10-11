@@ -18,17 +18,17 @@ import planet_ruler as pr
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """Load configuration from YAML or JSON file."""
-    config_path = Path(config_path)
-    if not config_path.exists():
-        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+    config_file = Path(config_path)
+    if not config_file.exists():
+        raise FileNotFoundError(f"Configuration file not found: {config_file}")
 
-    with open(config_path, "r") as f:
-        if config_path.suffix.lower() in [".yaml", ".yml"]:
+    with open(config_file, "r") as f:
+        if config_file.suffix.lower() in [".yaml", ".yml"]:
             return yaml.safe_load(f)
-        elif config_path.suffix.lower() == ".json":
+        elif config_file.suffix.lower() == ".json":
             return json.load(f)
         else:
-            raise ValueError(f"Unsupported config format: {config_path.suffix}")
+            raise ValueError(f"Unsupported config format: {config_file.suffix}")
 
 
 def main():
@@ -56,7 +56,8 @@ Examples:
         "--camera-config",
         "-c",
         type=str,
-        help="Path to camera configuration YAML/JSON file",
+        required=True,
+        help="Path to camera configuration YAML/JSON file (required)",
     )
     measure_parser.add_argument(
         "--output", "-o", type=str, help="Output file for results (JSON format)"
@@ -66,6 +67,15 @@ Examples:
     )
     measure_parser.add_argument(
         "--save-plots", type=str, help="Directory to save visualization plots"
+    )
+
+    # Detection method
+    measure_parser.add_argument(
+        "--detection-method",
+        "-d",
+        choices=["manual", "gradient-break", "segmentation"],
+        default="manual",
+        help="Limb detection method (default: manual)",
     )
 
     # Quick measurement parameters (alternative to config file)
@@ -126,15 +136,13 @@ def measure_command(args):
 
     print(f"Loading image: {args.image}")
 
-    # Load configuration if provided
-    config = {}
-    if args.camera_config:
-        try:
-            config = load_config(args.camera_config)
-            print(f"Loaded camera configuration from: {args.camera_config}")
-        except Exception as e:
-            print(f"Error loading configuration: {e}", file=sys.stderr)
-            return 1
+    # Load configuration (now required)
+    try:
+        config = load_config(args.camera_config)
+        print(f"Loaded camera configuration from: {args.camera_config}")
+    except Exception as e:
+        print(f"Error loading configuration: {e}", file=sys.stderr)
+        return 1
 
     # Override with command-line parameters
     if args.altitude is not None:
@@ -145,8 +153,12 @@ def measure_command(args):
         config["sensor_width_mm"] = args.sensor_width
 
     try:
-        # Create observation
-        obs = pr.LimbObservation(args.image)
+        # Create observation with detection method
+        obs = pr.LimbObservation(
+            args.image,
+            fit_config=args.camera_config,
+            limb_detection=args.detection_method,
+        )
 
         # Apply configuration
         if config:
@@ -154,7 +166,7 @@ def measure_command(args):
                 if hasattr(obs, key):
                     setattr(obs, key, value)
 
-        print("Detecting horizon/limb...")
+        print(f"Detecting horizon/limb using {args.detection_method} method...")
         obs.detect_limb()
 
         print("Fitting limb model...")
@@ -190,11 +202,15 @@ def measure_command(args):
 
         # Save plots if requested
         if args.save_plots:
+            import matplotlib.pyplot as plt
+
             os.makedirs(args.save_plots, exist_ok=True)
             plot_path = os.path.join(
                 args.save_plots, f"{Path(args.image).stem}_analysis.png"
             )
-            obs.plot(save_path=plot_path)
+            obs.plot(show=False)
+            plt.savefig(plot_path)
+            plt.close()
             print(f"Plot saved to: {plot_path}")
 
         return 0
@@ -259,7 +275,7 @@ def list_command(args):
     if config_dir.exists():
         for config_file in config_dir.glob("*.yaml"):
             try:
-                config = load_config(config_file)
+                config = load_config(str(config_file))
                 name = config_file.stem
                 description = config.get("description", "No description available")
                 print(f"  {name:<20} - {description}")

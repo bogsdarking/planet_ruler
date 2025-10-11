@@ -13,6 +13,8 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch, mock_open, MagicMock, call
 from io import StringIO
+from PIL import Image
+import numpy as np
 
 # Add the planet_ruler package to the path for testing
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -152,6 +154,271 @@ class TestConfigurationWorkflow:
 
             # Test numeric precision is preserved
             assert loaded_config["sensor_width_mm"] == 15.6
+
+        finally:
+            os.unlink(config_path)
+
+
+class TestManualDetectionMethodIntegration:
+    """Test manual detection method integration with advanced scenarios."""
+
+    @patch("planet_ruler.cli.pr.LimbObservation")
+    @patch("planet_ruler.cli.load_config")
+    @patch("os.path.exists")
+    def test_manual_detection_with_yaml_config(
+        self, mock_exists, mock_load_config, mock_limb_observation, capsys
+    ):
+        """Test manual detection method with YAML configuration."""
+        # Mock file existence for both image and config
+        mock_exists.return_value = True
+
+        mock_load_config.return_value = {
+            "altitude_km": 408,
+            "focal_length_mm": 50,
+            "sensor_width_mm": 36,
+            "description": "ISS Camera Configuration",
+        }
+
+        # Mock successful observation
+        mock_obs = MagicMock()
+        mock_obs.radius_km = 6371.0
+        mock_obs.radius_uncertainty = 50.0
+        mock_obs.altitude_km = 408.0
+        mock_obs.focal_length_mm = 50.0
+        mock_obs.detect_limb.return_value = mock_obs
+        mock_obs.fit_limb.return_value = mock_obs
+        mock_limb_observation.return_value = mock_obs
+
+        args = MagicMock()
+        args.image = "test_image.jpg"
+        args.camera_config = "config.yaml"
+        args.detection_method = "manual"
+        args.altitude = None
+        args.focal_length = None
+        args.sensor_width = None
+        args.output = None
+        args.plot = False
+        args.save_plots = None
+
+        result = cli.measure_command(args)
+        assert result == 0
+
+        # Verify configuration was loaded
+        mock_load_config.assert_called_once_with("config.yaml")
+
+        # Verify LimbObservation was called with correct parameters
+        mock_limb_observation.assert_called_once_with(
+            "test_image.jpg", fit_config="config.yaml", limb_detection="manual"
+        )
+
+        # Verify methods were called
+        mock_obs.detect_limb.assert_called_once()
+        mock_obs.fit_limb.assert_called_once()
+
+        captured = capsys.readouterr()
+        assert "Loading image: test_image.jpg" in captured.out
+        assert "Loaded camera configuration from: config.yaml" in captured.out
+        assert "Detecting horizon/limb using manual method..." in captured.out
+        assert "Estimated planetary radius: 6371" in captured.out
+
+    @patch("planet_ruler.cli.pr.LimbObservation")
+    @patch("planet_ruler.cli.load_config")
+    @patch("os.path.exists")
+    def test_manual_detection_with_json_config(
+        self, mock_exists, mock_load_config, mock_limb_observation
+    ):
+        """Test manual detection method with JSON configuration."""
+        # Mock file existence for both image and config
+        mock_exists.return_value = True
+
+        config_data = {
+            "altitude_km": 100.5,
+            "focal_length_mm": 24.0,
+            "sensor_width_mm": 15.6,
+            "description": "Drone survey configuration",
+        }
+        mock_load_config.return_value = config_data
+
+        mock_obs = MagicMock()
+        mock_obs.radius_km = 6371.0
+        mock_obs.radius_uncertainty = 50.0
+        mock_obs.altitude_km = 100.5
+        mock_obs.focal_length_mm = 24.0
+        mock_obs.detect_limb.return_value = mock_obs
+        mock_obs.fit_limb.return_value = mock_obs
+        mock_limb_observation.return_value = mock_obs
+
+        args = MagicMock()
+        args.image = "test_image.jpg"
+        args.camera_config = "config.json"
+        args.detection_method = "manual"
+        args.altitude = None
+        args.focal_length = None
+        args.sensor_width = None
+        args.output = None
+        args.plot = False
+        args.save_plots = None
+
+        result = cli.measure_command(args)
+        assert result == 0
+
+        # Verify configuration was loaded and applied
+        mock_load_config.assert_called_once_with("config.json")
+        mock_limb_observation.assert_called_once_with(
+            "test_image.jpg", fit_config="config.json", limb_detection="manual"
+        )
+        mock_obs.detect_limb.assert_called_once()
+        mock_obs.fit_limb.assert_called_once()
+
+    @patch("planet_ruler.cli.pr.LimbObservation")
+    @patch("planet_ruler.cli.load_config")
+    @patch("os.path.exists")
+    def test_manual_detection_parameter_override(
+        self, mock_exists, mock_load_config, mock_limb_observation
+    ):
+        """Test manual detection with command-line parameter overrides."""
+        # Mock file existence for both image and config
+        mock_exists.return_value = True
+
+        config_data = {"altitude_km": 400, "focal_length_mm": 50, "sensor_width_mm": 36}
+        mock_load_config.return_value = config_data
+
+        mock_obs = MagicMock()
+        mock_obs.radius_km = 6371.0
+        mock_obs.radius_uncertainty = 50.0
+        mock_obs.altitude_km = 500.0  # Should be overridden value
+        mock_obs.focal_length_mm = 85.0  # Should be overridden value
+        mock_obs.detect_limb.return_value = mock_obs
+        mock_obs.fit_limb.return_value = mock_obs
+        mock_limb_observation.return_value = mock_obs
+
+        args = MagicMock()
+        args.image = "test_image.jpg"
+        args.camera_config = "config.yaml"
+        args.detection_method = "manual"
+        args.altitude = 500.0  # Override config value
+        args.focal_length = 85.0  # Override config value
+        args.sensor_width = 24.0  # Override config value
+        args.output = None
+        args.plot = False
+        args.save_plots = None
+
+        result = cli.measure_command(args)
+        assert result == 0
+
+        # Verify the config was loaded but values were overridden
+        mock_load_config.assert_called_once_with("config.yaml")
+
+        # We can't easily test the setattr calls, but we can verify the observation was created
+        mock_limb_observation.assert_called_once_with(
+            "test_image.jpg", fit_config="config.yaml", limb_detection="manual"
+        )
+
+        # Check that setattr was called to override configuration
+        # (We can't easily test the exact setattr calls with our current mock setup)
+        mock_obs.detect_limb.assert_called_once()
+        mock_obs.fit_limb.assert_called_once()
+
+    @patch("os.path.exists")
+    @patch("planet_ruler.cli.load_config")
+    def test_manual_detection_config_error_handling(
+        self, mock_load_config, mock_exists, capsys
+    ):
+        """Test error handling when config loading fails with manual method."""
+        mock_exists.return_value = True
+        mock_load_config.side_effect = Exception("Invalid YAML syntax")
+
+        args = MagicMock()
+        args.image = "test.jpg"
+        args.camera_config = "broken_config.yaml"
+        args.detection_method = "manual"
+        args.altitude = None
+        args.focal_length = None
+        args.sensor_width = None
+        args.output = None
+        args.plot = False
+        args.save_plots = None
+
+        result = cli.measure_command(args)
+        assert result == 1
+
+        captured = capsys.readouterr()
+        assert "Error loading configuration" in captured.err
+
+    @patch("planet_ruler.cli.pr.LimbObservation")
+    @patch("planet_ruler.cli.load_config")
+    @patch("os.path.exists")
+    def test_manual_detection_observation_error(
+        self, mock_exists, mock_load_config, mock_limb_observation, capsys
+    ):
+        """Test error handling when observation fails with manual method."""
+        # Mock file existence for both image and config
+        mock_exists.return_value = True
+
+        config_data = {"altitude_km": 408, "focal_length_mm": 50, "sensor_width_mm": 36}
+        mock_load_config.return_value = config_data
+
+        # Mock observation to raise an exception
+        mock_limb_observation.side_effect = Exception("Manual annotation failed")
+
+        args = MagicMock()
+        args.image = "test_image.jpg"
+        args.camera_config = "config.yaml"
+        args.detection_method = "manual"
+        args.altitude = None
+        args.focal_length = None
+        args.sensor_width = None
+        args.output = None
+        args.plot = False
+        args.save_plots = None
+
+        result = cli.measure_command(args)
+        assert result == 1
+
+        captured = capsys.readouterr()
+        assert "Manual annotation failed" in captured.err
+
+
+class TestManualDetectionWorkflows:
+    """Test complete workflows with manual detection method."""
+
+    def test_manual_detection_config_roundtrip(self):
+        """Test complete config loading workflow for manual detection."""
+        # Create a test configuration that would be used with manual detection
+        config_data = {
+            "altitude_km": 408,
+            "focal_length_mm": 50,
+            "sensor_width_mm": 36,
+            "description": "Manual annotation test configuration",
+            "camera_model": "Canon EOS R5",
+            "detection_settings": {
+                "method": "manual",
+                "annotation_zoom": 2.0,
+                "default_stretch": 1.0,
+            },
+        }
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        ) as config_file:
+            yaml.dump(config_data, config_file)
+            config_path = config_file.name
+
+        try:
+            # Test configuration loading
+            loaded_config = cli.load_config(config_path)
+
+            # Verify all manual detection relevant fields are preserved
+            assert loaded_config["altitude_km"] == 408
+            assert loaded_config["focal_length_mm"] == 50
+            assert loaded_config["sensor_width_mm"] == 36
+            assert (
+                loaded_config["description"] == "Manual annotation test configuration"
+            )
+            assert loaded_config["camera_model"] == "Canon EOS R5"
+            assert loaded_config["detection_settings"]["method"] == "manual"
+            assert loaded_config["detection_settings"]["annotation_zoom"] == 2.0
+            assert loaded_config["detection_settings"]["default_stretch"] == 1.0
 
         finally:
             os.unlink(config_path)

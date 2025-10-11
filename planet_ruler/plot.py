@@ -41,6 +41,10 @@ def plot_limb(
         s (int): Size of marker.
         alpha (float): Opacity of markers.
     """
+    # brighten if the annotations are sparse
+    if len(y[y == y]) < 20:
+        s = 40
+        alpha = 0.8
     plt.scatter(np.arange(len(y)), y, c=c, s=s, alpha=alpha)
     if show:
         plt.show()

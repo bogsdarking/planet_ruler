@@ -33,10 +33,10 @@ The image module handles computer vision tasks:
 
 * **Image loading**: `load_image` - loads and validates image files
 * **Horizon detection**: `gradient_break` - detects horizon using gradient analysis
-* **Image segmentation**: `ImageSegmentation` class with Segment Anything integration
+* **Image segmentation**: `ImageSegmentation` class with Segment Anything integration (optional)
 * **Limb processing**: `smooth_limb`, `fill_nans` - post-processing operations
 
-Observation Module  
+Observation Module
 ~~~~~~~~~~~~~~~~~
 
 .. automodule:: planet_ruler.observation
@@ -47,9 +47,25 @@ Observation Module
 The observation module provides high-level interfaces:
 
 * **PlanetObservation**: Base class for planetary observations
-* **LimbObservation**: Complete workflow for limb-based radius fitting
+* **LimbObservation**: Complete workflow for limb-based radius fitting (default: manual annotation)
 * **Visualization**: `plot_full_limb`, `plot_segmentation_masks`
 * **Results processing**: `unpack_diff_evol_posteriors`, `package_results`
+
+Annotation Module
+~~~~~~~~~~~~~~~~
+
+.. automodule:: planet_ruler.annotate
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+The annotation module provides interactive manual limb detection:
+
+* **TkLimbAnnotator**: Interactive GUI for manual horizon point selection
+* **Point management**: Add, remove, and edit limb points with mouse interaction
+* **Image controls**: Zoom, pan, and contrast adjustment for precise annotation
+* **File I/O**: Save and load annotation sessions to/from JSON files
+* **Target generation**: Convert point annotations to dense limb arrays
 
 Fitting and Optimization
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -123,6 +139,21 @@ Computer vision and image analysis:
    planet_ruler.image.smooth_limb
    planet_ruler.image.fill_nans
 
+Manual Annotation Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Interactive limb detection and annotation:
+
+.. autosummary::
+   :toctree: generated/
+
+   planet_ruler.annotate.TkLimbAnnotator
+   planet_ruler.annotate.TkLimbAnnotator.run
+   planet_ruler.annotate.TkLimbAnnotator.get_target
+   planet_ruler.annotate.TkLimbAnnotator.generate_target
+   planet_ruler.annotate.TkLimbAnnotator.save_points
+   planet_ruler.annotate.TkLimbAnnotator.load_points
+
 Coordinate Transform Functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -192,7 +223,13 @@ LimbObservation
    :undoc-members:
    :show-inheritance:
 
-Complete workflow class for limb-based planetary radius determination. Includes horizon detection, limb fitting, and uncertainty analysis.
+Complete workflow class for limb-based planetary radius determination. Default detection method is interactive manual annotation. Includes horizon detection, limb fitting, and uncertainty analysis.
+
+**Detection Methods Available:**
+
+* **manual** (default): Interactive GUI for precise point selection
+* **segmentation**: AI-powered automatic detection (requires PyTorch + Segment Anything)
+* **gradient-break**: Legacy gradient-based detection
 
 ImageSegmentation
 ~~~~~~~~~~~~~~~~
@@ -202,7 +239,25 @@ ImageSegmentation
    :undoc-members:
    :show-inheritance:
 
-Advanced image segmentation using Segment Anything model. Provides automated mask generation and limb extraction from complex images.
+Advanced image segmentation using Segment Anything model (optional dependency). Provides automated mask generation and limb extraction from complex images.
+
+TkLimbAnnotator
+~~~~~~~~~~~~~~
+
+.. autoclass:: planet_ruler.annotate.TkLimbAnnotator
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Interactive GUI for manual limb annotation. Provides precise user control over horizon detection with no additional dependencies required.
+
+**Key Features:**
+
+* **Interactive point selection**: Left click to add points, right click to remove
+* **Zoom and pan**: Mouse wheel zoom, drag to pan for precise annotation
+* **Contrast adjustment**: Arrow keys to adjust image stretch/brightness
+* **Session management**: Save ('s') and load ('l') annotation sessions
+* **Target generation**: Convert sparse points to dense limb arrays
 
 Constants and Configuration
 --------------------------
