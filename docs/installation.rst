@@ -22,10 +22,11 @@ Core dependencies include:
 * **Pillow** ≥8.0.0: Image loading and processing
 * **PyYAML** ≥5.4.0: Configuration file parsing
 * **tqdm** ≥4.60.0: Progress bars
+* **Tkinter**: GUI toolkit for manual annotation (usually included with Python)
 
-Optional dependencies:
+Optional dependencies for advanced features:
 
-* **Segment Anything** ≥1.0 (Python 3.8+): Advanced image segmentation
+* **Segment Anything** ≥1.0 (Python 3.8+): AI-powered automatic segmentation (alternative to manual annotation)
 * **PyTorch** ≥1.11.0: Required for Segment Anything
 * **Seaborn** ≥0.11.0: Statistical plotting
 * **IPython** ≥7.16.0: Interactive computing (for notebooks)
@@ -39,6 +40,12 @@ From PyPI (Recommended)
 .. code-block:: bash
 
    pip install planet-ruler
+   
+**Optional: For AI segmentation support:**
+
+.. code-block:: bash
+
+   pip install planet-ruler segment-anything torch
 
 From Source
 ~~~~~~~~~~~

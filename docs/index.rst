@@ -25,7 +25,8 @@ Key Features
 ------------
 
 * **Multi-planetary Support**: Earth, Pluto, Saturn scenarios with spacecraft camera specifications
-* **Advanced Image Processing**: Gradient-based horizon detection, limb smoothing, and segmentation
+* **Advanced Image Processing**: Gradient-based horizon detection, AI-powered segmentation, and manual annotation
+* **Interactive Annotation**: Manual limb point selection with intuitive GUI interface
 * **Robust Optimization**: Differential evolution and cost function analysis
 * **Comprehensive Testing**: 200+ tests including integration tests with real mission data
 * **Performance Benchmarking**: Optimized computational workflows
@@ -60,9 +61,13 @@ Here's how to determine planetary radius from a horizon photograph with uncertai
        fit_config="config/earth_iss_1.yaml"  # Contains camera specs and altitude
    )
    
-   # Detect horizon in the image
-   observation.detect_limb(method="gradient-break")
+   # Detect horizon in the image using AI segmentation (recommended)
+   observation.detect_limb(method="segmentation")
    observation.smooth_limb(method="rolling-median", window_length=15)
+   
+   # Alternative detection methods:
+   # observation.detect_limb(method="gradient-break")  # Legacy method
+   # observation.detect_limb(method="manual")          # Interactive GUI annotation
    
    # Fit model to determine planetary radius
    observation.fit_limb()
