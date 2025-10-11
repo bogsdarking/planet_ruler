@@ -70,7 +70,7 @@ planet-ruler --help
 import planet_ruler as pr
 
 # Basic analysis
-obs = pr.LimbObservation("photo.jpg", "config/earth_iss.yaml")
+obs = pr.LimbObservation("photo.jpg", "camera_config.yaml")
 obs.detect_limb()  # AI-powered horizon detection
 obs.fit_limb()     # Optimize planetary parameters
 obs.plot()         # Visualize results
@@ -82,10 +82,10 @@ print(f"Fitted parameters: {obs.best_parameters}")
 ### Command Line
 ```bash
 # Measure planetary radius from image
-planet-ruler measure photo.jpg --camera-config config/earth_iss.yaml
+planet-ruler measure photo.jpg --camera-config camera_config.yaml
 
 # Choose detection method (segmentation, gradient-break, or manual)
-planet-ruler measure photo.jpg --camera-config config/earth_iss.yaml --detection-method manual
+planet-ruler measure photo.jpg --camera-config camera_config.yaml --detection-method manual
 
 # Try built-in examples
 planet-ruler demo --planet earth
