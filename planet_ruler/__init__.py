@@ -8,5 +8,26 @@ from . import geometry
 from . import image
 from . import observation
 from . import plot
+from . import annotate
 
-__all__ = ["demo", "fit", "geometry", "image", "observation", "plot"]
+# Main classes for user-facing API
+from .observation import LimbObservation, PlanetObservation
+from .annotate import TkLimbAnnotator
+
+__all__ = [
+    # Modules
+    "demo",
+    "fit",
+    "geometry",
+    "image",
+    "observation",
+    "plot",
+    "annotate",
+    # Main classes
+    "LimbObservation",
+    "PlanetObservation",
+    "TkLimbAnnotator",
+]
+
+# Version information
+__version__ = "1.2.0"

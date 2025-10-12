@@ -85,11 +85,11 @@ class TestPlotLimb:
         mock_plt.scatter.assert_called_once()
         call_args, call_kwargs = mock_plt.scatter.call_args
 
-        # Check basic parameters
+        # Check basic parameters - sparse data (7 < 20 points) triggers brightening
         assert len(call_args) == 2  # x, y data
         assert call_kwargs["c"] == "y"
-        assert call_kwargs["s"] == 10
-        assert call_kwargs["alpha"] == 0.2
+        assert call_kwargs["s"] == 40  # Brightened for sparse data
+        assert call_kwargs["alpha"] == 0.8  # Brightened for sparse data
 
         # Check that x and y arrays have same length
         x_arg, y_arg = call_args
@@ -109,8 +109,9 @@ class TestPlotLimb:
         call_args, call_kwargs = mock_plt.scatter.call_args
 
         assert call_kwargs["c"] == "red"
-        assert call_kwargs["s"] == 20
-        assert call_kwargs["alpha"] == 0.8
+        # Sparse data (5 < 20 points) overrides s and alpha for visibility
+        assert call_kwargs["s"] == 40  # Overridden for sparse data
+        assert call_kwargs["alpha"] == 0.8  # Custom alpha matches sparse default
 
         mock_plt.show.assert_not_called()
 
@@ -139,10 +140,19 @@ class TestPlotLimb:
 
         plot_limb(limb_data, show=True, c="blue", s=50, alpha=1.0)
 
+        # Verify the actual call made - single point triggers sparse data behavior
+        mock_plt.scatter.assert_called_once()
+        call_args, call_kwargs = mock_plt.scatter.call_args
+
         expected_x = np.array([0])
-        mock_plt.scatter.assert_called_once_with(
-            expected_x, limb_data, c="blue", s=50, alpha=1.0
-        )
+        np.testing.assert_array_equal(call_args[0], expected_x)
+        np.testing.assert_array_equal(call_args[1], limb_data)
+
+        assert call_kwargs["c"] == "blue"
+        # Single point (1 < 20) overrides s and alpha for visibility
+        assert call_kwargs["s"] == 40
+        assert call_kwargs["alpha"] == 0.8
+
         mock_plt.show.assert_called_once()
 
 

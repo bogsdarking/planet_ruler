@@ -10,6 +10,7 @@ import yaml
 import tempfile
 import pytest
 import subprocess
+import numpy as np
 from pathlib import Path
 from unittest.mock import patch, mock_open, MagicMock, call
 from io import StringIO
@@ -142,7 +143,10 @@ class TestMainFunction:
         assert result == 1
         mock_print_help.assert_called_once()
 
-    @patch("sys.argv", ["planet-ruler", "measure", "test.jpg"])
+    @patch(
+        "sys.argv",
+        ["planet-ruler", "measure", "test.jpg", "--camera-config", "config.yaml"],
+    )
     @patch("planet_ruler.cli.measure_command")
     def test_main_measure_command(self, mock_measure_command):
         """Test main function with measure command."""
@@ -169,7 +173,10 @@ class TestMainFunction:
         assert result == 0
         mock_list_command.assert_called_once()
 
-    @patch("sys.argv", ["planet-ruler", "measure", "test.jpg"])
+    @patch(
+        "sys.argv",
+        ["planet-ruler", "measure", "test.jpg", "--camera-config", "config.yaml"],
+    )
     @patch("planet_ruler.cli.measure_command")
     def test_main_keyboard_interrupt(self, mock_measure_command):
         """Test main function handling KeyboardInterrupt."""
@@ -180,7 +187,10 @@ class TestMainFunction:
             assert result == 1
             assert "Operation cancelled by user" in fake_stderr.getvalue()
 
-    @patch("sys.argv", ["planet-ruler", "measure", "test.jpg"])
+    @patch(
+        "sys.argv",
+        ["planet-ruler", "measure", "test.jpg", "--camera-config", "config.yaml"],
+    )
     @patch("planet_ruler.cli.measure_command")
     def test_main_exception_handling(self, mock_measure_command):
         """Test main function handling general exceptions."""
@@ -236,6 +246,155 @@ class TestMeasureCommand:
         assert result == 1
 
         captured = capsys.readouterr()
+        assert "Error loading configuration" in captured.err
+
+
+class TestMeasureCommandManualDetection:
+    """Test the measure command with manual detection method."""
+
+    @patch("os.path.exists")
+    @patch("planet_ruler.cli.load_config")
+    @patch("planet_ruler.cli.pr.LimbObservation")
+    def test_measure_command_manual_method_success(
+        self, mock_limb_observation, mock_load_config, mock_exists, capsys
+    ):
+        """Test measure command with manual detection method success."""
+
+        # Mock both image file and config file existence
+        def mock_exists_side_effect(path):
+            return path in ["test.jpg", "config.yaml"]
+
+        mock_exists.side_effect = mock_exists_side_effect
+
+        mock_load_config.return_value = {
+            "altitude_km": 408,
+            "focal_length_mm": 50,
+            "sensor_width_mm": 36,
+        }
+
+        # Mock the observation object and its methods
+        mock_obs = MagicMock()
+        mock_obs.radius_km = 6371.0
+        mock_obs.altitude_km = 408.0
+        mock_obs.focal_length_mm = 50.0
+        mock_obs.radius_uncertainty = 100.0  # Add uncertainty attribute
+        mock_obs.detect_limb.return_value = None
+        mock_obs.fit_limb.return_value = None
+
+        # Configure hasattr to return True for the attributes we need
+        def mock_hasattr(obj, attr):
+            return attr in ["altitude_km", "focal_length_mm", "radius_uncertainty"]
+
+        mock_limb_observation.return_value = mock_obs
+
+        args = MagicMock()
+        args.image = "test.jpg"
+        args.camera_config = "config.yaml"
+        args.detection_method = "manual"
+        args.altitude = None
+        args.focal_length = None
+        args.sensor_width = None
+        args.output = None
+        args.plot = False
+        args.save_plots = None
+
+        result = cli.measure_command(args)
+        assert result == 0
+
+        # Verify LimbObservation was called with manual detection method
+        mock_limb_observation.assert_called_once()
+        call_args = mock_limb_observation.call_args
+        assert call_args[1]["limb_detection"] == "manual"
+
+        # Verify that the observation methods were called
+        mock_obs.detect_limb.assert_called_once()
+        mock_obs.fit_limb.assert_called_once()
+
+    @patch("os.path.exists")
+    @patch("planet_ruler.cli.load_config")
+    @patch("planet_ruler.cli.pr.LimbObservation")
+    def test_measure_command_all_detection_methods(
+        self, mock_limb_observation, mock_load_config, mock_exists
+    ):
+        """Test measure command with all supported detection methods."""
+
+        # Mock both image file and config file existence
+        def mock_exists_side_effect(path):
+            return path in ["test.jpg", "config.yaml"]
+
+        mock_exists.side_effect = mock_exists_side_effect
+
+        mock_load_config.return_value = {
+            "altitude_km": 408,
+            "focal_length_mm": 50,
+            "sensor_width_mm": 36,
+        }
+
+        # Mock the observation object and its methods
+        mock_obs = MagicMock()
+        mock_obs.radius_km = 6371.0
+        mock_obs.altitude_km = 408.0
+        mock_obs.focal_length_mm = 50.0
+        mock_obs.radius_uncertainty = 100.0  # Add uncertainty attribute
+        mock_obs.detect_limb.return_value = None
+        mock_obs.fit_limb.return_value = None
+        mock_limb_observation.return_value = mock_obs
+
+        # Test each detection method
+        for method in ["gradient-break", "segmentation", "manual"]:
+            mock_limb_observation.reset_mock()
+            mock_obs.reset_mock()
+
+            args = MagicMock()
+            args.image = "test.jpg"
+            args.camera_config = "config.yaml"
+            args.detection_method = method
+            args.altitude = None
+            args.focal_length = None
+            args.sensor_width = None
+            args.output = None
+            args.plot = False
+            args.save_plots = None
+
+            result = cli.measure_command(args)
+            assert result == 0
+
+            # Verify correct detection method was passed
+            call_args = mock_limb_observation.call_args
+            assert call_args[1]["limb_detection"] == method
+
+            # Verify that the observation methods were called
+            mock_obs.detect_limb.assert_called_once()
+            mock_obs.fit_limb.assert_called_once()
+
+    @patch("os.path.exists")
+    def test_measure_command_missing_camera_config_with_manual(
+        self, mock_exists, capsys
+    ):
+        """Test measure command with manual method but missing camera config."""
+
+        # Mock image exists but config doesn't
+        def mock_exists_side_effect(path):
+            return path == "test.jpg"
+
+        mock_exists.side_effect = mock_exists_side_effect
+
+        args = MagicMock()
+        args.image = "test.jpg"
+        args.camera_config = None  # Missing required camera config
+        args.detection_method = "manual"
+        args.altitude = None
+        args.focal_length = None
+        args.sensor_width = None
+        args.output = None
+        args.plot = False
+        args.save_plots = None
+
+        result = cli.measure_command(args)
+        assert result == 1
+
+        captured = capsys.readouterr()
+        # Check for the actual error message we get when loading config fails
         assert "Error loading configuration" in captured.err
 
 
@@ -391,6 +550,53 @@ class TestArgumentParsing:
         assert args.altitude == 400.0
         assert args.focal_length == 50.0
         assert args.sensor_width == 36.0
+
+    def test_measure_command_detection_method_args(self):
+        """Test measure command with detection method argument parsing."""
+        import argparse
+
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers(dest="command")
+        measure_parser = subparsers.add_parser("measure")
+        measure_parser.add_argument("image")
+        measure_parser.add_argument("--camera-config", "-c", required=True)
+        measure_parser.add_argument(
+            "--detection-method",
+            choices=["gradient-break", "segmentation", "manual"],
+            default="gradient-break",
+        )
+
+        # Test default detection method
+        args = parser.parse_args(
+            ["measure", "test.jpg", "--camera-config", "config.yaml"]
+        )
+        assert args.detection_method == "gradient-break"
+
+        # Test manual detection method
+        args = parser.parse_args(
+            [
+                "measure",
+                "test.jpg",
+                "--camera-config",
+                "config.yaml",
+                "--detection-method",
+                "manual",
+            ]
+        )
+        assert args.detection_method == "manual"
+
+        # Test segmentation detection method
+        args = parser.parse_args(
+            [
+                "measure",
+                "test.jpg",
+                "--camera-config",
+                "config.yaml",
+                "--detection-method",
+                "segmentation",
+            ]
+        )
+        assert args.detection_method == "segmentation"
 
     def test_demo_command_args(self):
         """Test demo command argument parsing."""

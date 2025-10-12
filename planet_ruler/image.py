@@ -4,8 +4,22 @@ from scipy.signal import savgol_filter
 from scipy.interpolate import interp1d
 from tqdm.notebook import tqdm
 from PIL import Image
-import kagglehub
-from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
+import logging
+
+# Optional ML dependencies - gracefully handle import failures
+try:
+    import kagglehub
+    from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
+
+    HAS_SEGMENT_ANYTHING = True
+except ImportError:
+    HAS_SEGMENT_ANYTHING = False
+    kagglehub = None
+    SamAutomaticMaskGenerator = None
+    sam_model_registry = None
+    logging.warning(
+        "segment-anything and/or kagglehub not available. AI-powered horizon detection will be disabled."
+    )
 
 
 def load_image(filepath: str) -> np.ndarray:
@@ -109,6 +123,11 @@ class ImageSegmentation:
         self._masks = None
 
         if segmenter == "segment-anything":
+            if not HAS_SEGMENT_ANYTHING:
+                raise ImportError(
+                    "segment-anything dependencies not available. "
+                    "Install with: pip install 'planet_ruler[ml]' or conda install pytorch torchvision segment-anything"
+                )
             self.model_path = kagglehub.model_download(
                 "metaresearch/segment-anything/pyTorch/vit-b"
             )
@@ -143,6 +162,11 @@ class ImageSegmentation:
 
     def segment(self) -> np.ndarray:
         if self.segmenter == "segment-anything":
+            if not HAS_SEGMENT_ANYTHING:
+                raise ImportError(
+                    "segment-anything dependencies not available. "
+                    "Install with: pip install 'planet_ruler[ml]' or conda install pytorch torchvision segment-anything"
+                )
             sam = sam_model_registry["vit_b"](checkpoint=f"{self.model_path}/model.pth")
             mask_generator = SamAutomaticMaskGenerator(sam)
             masks = mask_generator.generate(self.image)
@@ -151,6 +175,9 @@ class ImageSegmentation:
             mask = (1 - masks[0]["segmentation"]) * masks[1]["segmentation"]
 
             return self.limb_from_mask(mask)
+
+        # This should never be reached given current validation, but adding for completeness
+        raise ValueError(f"Unknown segmenter: {self.segmenter}")
 
 
 def smooth_limb(

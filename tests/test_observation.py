@@ -297,6 +297,136 @@ class TestLimbObservation:
 
             os.unlink(tmp_file.name)
 
+    @patch("planet_ruler.observation.TkLimbAnnotator")
+    def test_detect_limb_manual(
+        self, mock_annotator_class, sample_horizon_image, config_file
+    ):
+        """Test limb detection using manual method"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(
+                image_filepath=tmp_file.name,
+                fit_config=config_file,
+                limb_detection="manual",
+            )
+
+            # Mock annotator and its methods
+            mock_annotator = Mock()
+            expected_limb = np.random.random(image_data.shape[1])
+            mock_annotator.get_target.return_value = expected_limb
+            mock_annotator.run = Mock()
+            mock_annotator_class.return_value = mock_annotator
+
+            obs.detect_limb()
+
+            # Verify annotator was created with correct parameters
+            mock_annotator_class.assert_called_once_with(
+                image_path=tmp_file.name, initial_stretch=1.0
+            )
+            mock_annotator.run.assert_called_once()
+            mock_annotator.get_target.assert_called_once()
+
+            # Verify limb was registered
+            assert np.array_equal(obs.features["limb"], expected_limb)
+            assert np.array_equal(obs._raw_limb, expected_limb)
+
+            os.unlink(tmp_file.name)
+
+    @patch("planet_ruler.observation.TkLimbAnnotator")
+    def test_detect_limb_manual_with_default_stretch(
+        self, mock_annotator_class, sample_horizon_image, config_file
+    ):
+        """Test manual limb detection uses default stretch value"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(
+                image_filepath=tmp_file.name,
+                fit_config=config_file,
+                limb_detection="manual",
+            )
+
+            # Mock annotator
+            mock_annotator = Mock()
+            expected_limb = np.random.random(image_data.shape[1])
+            mock_annotator.get_target.return_value = expected_limb
+            mock_annotator.run = Mock()
+            mock_annotator_class.return_value = mock_annotator
+
+            # Manual method uses fixed initial_stretch of 1.0
+            obs.detect_limb()
+
+            # Verify annotator was created with default stretch
+            mock_annotator_class.assert_called_once_with(
+                image_path=tmp_file.name, initial_stretch=1.0
+            )
+
+            os.unlink(tmp_file.name)
+
+    @patch("planet_ruler.observation.TkLimbAnnotator")
+    def test_detect_limb_manual_no_target_returned(
+        self, mock_annotator_class, sample_horizon_image, config_file
+    ):
+        """Test manual limb detection when annotator returns None"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(
+                image_filepath=tmp_file.name,
+                fit_config=config_file,
+                limb_detection="manual",
+            )
+
+            # Mock annotator to return None (insufficient points)
+            mock_annotator = Mock()
+            mock_annotator.get_target.return_value = None
+            mock_annotator.run = Mock()
+            mock_annotator_class.return_value = mock_annotator
+
+            # Should handle None gracefully (no limb registered)
+            obs.detect_limb()
+
+            # Verify annotator was called but no limb registered
+            mock_annotator_class.assert_called_once()
+            mock_annotator.run.assert_called_once()
+            mock_annotator.get_target.assert_called_once()
+
+            # limb should not be in features since None was returned
+            assert "limb" not in obs.features
+
+            os.unlink(tmp_file.name)
+
+    def test_manual_method_in_valid_detection_methods(
+        self, sample_horizon_image, config_file
+    ):
+        """Test that 'manual' is accepted as a valid limb detection method"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            # Should not raise assertion error
+            obs = LimbObservation(
+                image_filepath=tmp_file.name,
+                fit_config=config_file,
+                limb_detection="manual",
+            )
+
+            assert obs.limb_detection == "manual"
+
+            os.unlink(tmp_file.name)
+
     @patch("planet_ruler.observation.smooth_limb")
     @patch("planet_ruler.observation.fill_nans")
     def test_smooth_limb(

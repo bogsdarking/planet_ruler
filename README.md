@@ -10,11 +10,15 @@
 
 **Got a horizon photo? Measure your planet in 3 lines of code!**
 
+</div>
+
 ```python
 import planet_ruler as pr
-obs = pr.LimbObservation("horizon_photo.jpg")
+obs = pr.LimbObservation("horizon_photo.jpg", "config/camera.yaml")
 obs.detect_limb().fit_limb()  # → Planet radius: 6,234 km
 ```
+
+<div align="center">
 
 [Try Interactive Demo](notebooks/limb_demo.ipynb) • [Documentation](https://planet-ruler.readthedocs.io) • [Discussions](https://github.com/bogsdarking/planet_ruler/discussions)
 
@@ -70,7 +74,7 @@ planet-ruler --help
 import planet_ruler as pr
 
 # Basic analysis
-obs = pr.LimbObservation("photo.jpg", "config/earth_iss.yaml")
+obs = pr.LimbObservation("photo.jpg", "camera_config.yaml")
 obs.detect_limb()  # AI-powered horizon detection
 obs.fit_limb()     # Optimize planetary parameters
 obs.plot()         # Visualize results
@@ -81,10 +85,11 @@ print(f"Fitted parameters: {obs.best_parameters}")
 
 ### Command Line
 ```bash
-# Note: Full CLI is under development
-# For now, use Python API:
-import planet_ruler as pr
-obs = pr.LimbObservation("photo.jpg", "config/earth_iss.yaml")
+# Measure planetary radius from image
+planet-ruler measure photo.jpg --camera-config camera_config.yaml
+
+# Choose detection method (segmentation, gradient-break, or manual)
+planet-ruler measure photo.jpg --camera-config camera_config.yaml --detection-method manual
 
 # Try built-in examples
 planet-ruler demo --planet earth
@@ -130,9 +135,8 @@ planet-ruler demo --planet earth
 <tr>
 <td width="50%">
 
-**AI-Powered Detection**
-- Segment Anything model for horizon detection
-- Automatic limb/edge identification
+**Flexible Detection**
+- Manual, algorithmic, or AI feature extraction
 - Robust to image noise and artifacts
 
 **Advanced Camera Models**
@@ -148,14 +152,12 @@ planet-ruler demo --planet earth
 <td width="50%">
 
 **Scientific Rigor**
-- Parameter uncertainty estimation from optimization populations
-- Differential evolution optimization
+- Robust optimization and uncertainty estimation
 - Mathematical validation with property tests
 
 **Rich Visualizations**
-- Interactive plots with matplotlib
+- Interactive plots
 - 3D planetary geometry views
-- Step-by-step analysis breakdown
 
 **Multiple Interfaces**
 - Python API for scripting
@@ -238,41 +240,25 @@ params = load_demo_parameters(demo)
 ```
 
 ### Use Your Own Photo
-<table>
-<tr>
-<td width="50%">
-
-**With Camera Config:**
 ```python
 import planet_ruler as pr
 
-# Best accuracy with camera specs
+# Requires camera configuration file
 obs = pr.LimbObservation(
-    "your_photo.jpg", 
+    "your_photo.jpg",
     "config/your_camera.yaml"
 )
-obs.detect_limb()
-obs.fit_limb()
-```
 
-</td>
-<td width="50%">
+# Choose detection method: 'segmentation', 'gradient-break', or 'manual'
+obs.limb_detection = 'manual'  # For interactive annotation
+# or set during initialization:
+# obs = pr.LimbObservation("photo.jpg", "config.yaml", limb_detection='manual')
 
-**Quick & Simple:**
-```python
-import planet_ruler as pr
-
-# Basic analysis
-obs = pr.LimbObservation("your_photo.jpg")
 obs.detect_limb()
 obs.fit_limb()
 
 print(f"Fitted radius: {obs.best_parameters['r']/1000:.0f} km")
 ```
-
-</td>
-</tr>
-</table>
 
 ### Camera Configuration Template
 ```yaml
@@ -339,12 +325,14 @@ plot_3d_solution(**obs.best_parameters)  # 3D planetary geometry view
 
 ### Example 3: Command Line Usage
 ```bash
-# Note: CLI is under development
-# Use Python API for full functionality:
-import planet_ruler as pr
-obs = pr.LimbObservation("airplane_horizon.jpg", "config/your_setup.yaml")
-obs.detect_limb()
-obs.fit_limb()
+# Basic measurement
+planet-ruler measure airplane_horizon.jpg --camera-config config/your_setup.yaml
+
+# With manual limb detection (interactive GUI)
+planet-ruler measure airplane_horizon.jpg --camera-config config/your_setup.yaml --detection-method manual
+
+# With plots and output saving
+planet-ruler measure photo.jpg --camera-config config.yaml --plot --output results.json
 
 # Run Saturn demo (in Jupyter notebook)
 from planet_ruler.demo import make_dropdown, load_demo_parameters

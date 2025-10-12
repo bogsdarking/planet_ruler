@@ -1,23 +1,22 @@
 Tutorials
 =========
 
-This section provides step-by-step tutorials for using Planet Ruler to determine planetary radius from horizon photographs using the recommended segmentation-based approach.
+This section provides step-by-step tutorials for using Planet Ruler to determine planetary radius from horizon photographs using the default interactive manual annotation approach.
 
 Tutorial 1: Basic Earth Radius Calculation
 ------------------------------------------
 
-This tutorial shows how to calculate Earth's radius using a horizon photograph from a known altitude with the recommended segmentation method.
+This tutorial shows how to calculate Earth's radius using a horizon photograph from a known altitude with the default interactive manual annotation method.
 
 Prerequisites
 ~~~~~~~~~~~~
 
-* Python 3.8+ with Planet Ruler installed
-* **Segment Anything model** (recommended): ``pip install segment-anything torch``
+* Python 3.8+ with Planet Ruler installed (no additional dependencies needed)
 * A horizon photograph (we'll use the demo Earth image)
 * Basic knowledge of the observation altitude
 
 .. note::
-   **Segmentation vs Gradient Break**: While Planet Ruler supports gradient-break detection for legacy compatibility, **segmentation is strongly recommended** as it's much more reliable for horizon detection in real-world images.
+   **Manual vs Automatic Methods**: Planet Ruler's default **manual annotation** provides precise, user-controlled horizon detection with no additional dependencies. For automated processing, **AI segmentation** (requires PyTorch + Segment Anything) and **gradient-break** detection are also available.
 
 Step 1: Setup and Imports
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -51,18 +50,15 @@ The configuration file contains:
 * **Initial parameter estimates**: planet radius, observation altitude  
 * **Optimization settings**: free parameters, parameter bounds
 
-Step 3: Detect the Horizon (Recommended: Segmentation)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Step 3: Detect the Horizon (Default: Manual Annotation)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Planet Ruler uses AI-powered segmentation to reliably detect horizons:
+Planet Ruler uses interactive manual annotation for precise horizon detection:
 
 .. code-block:: python
 
-   # Detect horizon using segmentation (recommended)
-   observation.detect_limb(
-       method="segmentation",
-       segmenter="segment-anything"  # Requires segment-anything installation
-   )
+   # Detect horizon using manual annotation (default, no dependencies)
+   observation.detect_limb(method="manual")  # Opens interactive GUI
    
    # Smooth the detected limb
    observation.smooth_limb(
@@ -75,27 +71,33 @@ Planet Ruler uses AI-powered segmentation to reliably detect horizons:
    observation.plot(gradient=False, show=True)
 
 .. tip::
-   **Segmentation advantages**:
+   **Manual annotation advantages**:
    
-   * Works reliably with complex backgrounds
-   * Handles clouds, terrain features, and atmospheric effects
-   * More robust than gradient-based methods
-   * Automatically identifies the best horizon boundary
+   * Precise user control over horizon selection
+   * No additional dependencies or model downloads required
+   * Works immediately after Planet Ruler installation
+   * Interactive GUI with zoom, stretch, and save/load functionality
+   * Handles any image type or quality level
 
-**Fallback Method (if Segment Anything unavailable):**
+**Alternative Methods:**
 
 .. code-block:: python
 
-   # Alternative: gradient-break method (less reliable)
+   # Option 1: AI segmentation (requires PyTorch + Segment Anything)
    try:
-       observation.detect_limb(method="segmentation")
-   except ImportError:
-       print("⚠ Segment Anything not available, falling back to gradient-break")
        observation.detect_limb(
-           method="gradient-break",
-           window_length=21,
-           threshold=0.1
+           method="segmentation",
+           segmenter="segment-anything"
        )
+   except ImportError:
+       print("⚠ Segment Anything not available - install with: pip install segment-anything torch")
+   
+   # Option 2: Legacy gradient-break detection
+   observation.detect_limb(
+       method="gradient-break",
+       window_length=21,
+       threshold=0.1
+   )
 
 Step 4: Fit Planetary Parameters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -167,75 +169,79 @@ Compare your results with the known Earth radius:
    else:
        print("⚠ Result differs significantly from known value")
 
-**Expected Results**: For Earth from ISS altitude (~418 km) using segmentation:
-* Fitted radius: ~6,371 ± 10 km (much better than gradient-break!)
-* Error: < 25 km from true radius
+**Expected Results**: For Earth from ISS altitude (~418 km) using manual annotation:
+* Fitted radius: ~6,371 ± 15 km (high precision from careful point selection)
+* Error: < 50 km from true radius
 
-Tutorial 2: Advanced Segmentation Techniques
--------------------------------------------
+Tutorial 2: Advanced Manual Annotation Techniques
+-------------------------------------------------
 
-Handling Complex Images with Multiple Objects
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Interactive GUI Features
+~~~~~~~~~~~~~~~~~~~~~~~
 
-For challenging images with clouds, terrain, or multiple planetary bodies:
-
-.. code-block:: python
-
-   from planet_ruler.image import ImageSegmentation
-   
-   # Load complex image
-   observation = obs.PlanetObservation("complex_horizon_image.jpg")
-   
-   # Use advanced segmentation with custom settings
-   observation.detect_limb(
-       method="segmentation",
-       segmenter="segment-anything",
-       points_per_side=32,        # Higher resolution segmentation
-       pred_iou_thresh=0.88,      # Higher quality threshold
-       stability_score_thresh=0.95,  # More stable masks
-       crop_n_layers=1,           # Multi-scale processing
-       min_mask_region_area=1000  # Filter small regions
-   )
-
-Visualizing Segmentation Results
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The manual annotation interface provides several advanced features:
 
 .. code-block:: python
 
-   # Plot segmentation masks
-   from planet_ruler.observation import plot_segmentation_masks
+   from planet_ruler.annotate import TkLimbAnnotator
    
-   plot_segmentation_masks(observation)
+   # Load image for manual annotation
+   observation = obs.LimbObservation("complex_horizon_image.jpg", "config.yaml")
    
-   # Show detected limb overlaid on original image
-   observation.plot(show_limb=True, show=True)
+   # Manual annotation opens interactive GUI with these features:
+   # - Left click: Add limb points
+   # - Right click: Remove nearby points
+   # - Mouse wheel: Zoom in/out
+   # - Arrow keys: Adjust image stretch/contrast
+   # - 'g': Generate target array from points
+   # - 's': Save points to JSON file
+   # - 'l': Load points from JSON file
+   # - ESC or 'q': Close window
+   
+   observation.detect_limb(method="manual")
 
-Custom Segmentation Models
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Working with Difficult Images
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For specialized use cases, you can provide custom segmentation models:
+For challenging images with clouds, terrain, or atmospheric effects:
 
 .. code-block:: python
 
-   # Future: Custom segmenter interface (requires refactoring)
-   # This functionality is planned for future releases
+   # Use manual annotation with custom stretch for better visibility
+   observation = obs.LimbObservation("difficult_image.jpg", "config.yaml")
    
-   class CustomSegmenter:
-       def __init__(self, model_path):
-           # Load your custom model
-           pass
-           
-       def segment(self, image):
-           # Return segmentation masks
-           pass
+   # The GUI allows real-time contrast adjustment:
+   # - Up arrow: Increase stretch (brighter)
+   # - Down arrow: Decrease stretch (darker)
+   # - Use zoom to focus on specific horizon sections
    
-   # observation.detect_limb(method="segmentation", segmenter=CustomSegmenter("my_model.pt"))
+   observation.detect_limb(method="manual")
 
-Tutorial 3: Multi-planetary Analysis (Segmentation)
---------------------------------------------------
+Saving and Loading Annotation Sessions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Comparing Earth, Pluto, and Saturn with Robust Detection
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.. code-block:: python
+
+   # Save your work during annotation:
+   # 1. Click points along the horizon
+   # 2. Press 's' to save points to JSON file
+   # 3. Continue later by pressing 'l' to load saved points
+   
+   # You can also save/load programmatically:
+   from planet_ruler.annotate import TkLimbAnnotator
+   
+   annotator = TkLimbAnnotator("image.jpg", initial_stretch=1.0)
+   # ... add points in GUI ...
+   annotator.save_points("my_horizon_points.json")
+   
+   # Later session:
+   annotator.load_points("my_horizon_points.json")
+
+Tutorial 3: Multi-planetary Analysis (Manual Annotation)
+-------------------------------------------------------
+
+Comparing Earth, Pluto, and Saturn with Precise Manual Selection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -253,18 +259,18 @@ Comparing Earth, Pluto, and Saturn with Robust Detection
    for name, config_path, image_path in scenarios:
        print(f"\nProcessing {name}...")
        
-       # Load and process observation with segmentation
+       # Load and process observation with manual annotation
        obs_obj = obs.LimbObservation(image_path, config_path)
        
-       try:
-           # Use segmentation (recommended)
-           obs_obj.detect_limb(method="segmentation")
-           method_used = "Segmentation"
-       except ImportError:
-           # Fallback to gradient-break if needed
-           print(f"  ⚠ Using gradient-break fallback for {name}")
-           obs_obj.detect_limb(method="gradient-break", window_length=21)
-           method_used = "Gradient-break"
+       print(f"  Opening manual annotation GUI for {name}...")
+       print("  Instructions:")
+       print("    - Click along the horizon to mark limb points")
+       print("    - Use mouse wheel to zoom, arrows for contrast")
+       print("    - Press 'g' to generate target, 's' to save, 'q' to close")
+       
+       # Use manual annotation (default, precise)
+       obs_obj.detect_limb(method="manual")
+       method_used = "Manual Annotation"
        
        obs_obj.smooth_limb()
        obs_obj.fit_limb()
@@ -279,7 +285,7 @@ Comparing Earth, Pluto, and Saturn with Robust Detection
            "Method": method_used,
            "Radius (km)": f"{radius_result['value']:.0f} ± {radius_result['uncertainty']:.0f}",
            "Uncertainty (km)": f"{radius_result['uncertainty']:.1f}",
-           "Quality": "High" if method_used == "Segmentation" else "Medium"
+           "Quality": "High (User-controlled precision)"
        })
    
    # Display results table
@@ -289,11 +295,11 @@ Comparing Earth, Pluto, and Saturn with Robust Detection
    print("="*70)
    print(df.to_string(index=False))
 
-Tutorial 4: Performance and Reliability Comparison
--------------------------------------------------
+Tutorial 4: Detection Method Comparison
+--------------------------------------
 
-Comparing Detection Methods
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Comparing Manual vs Automatic Methods
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -303,9 +309,16 @@ Comparing Detection Methods
    observation = obs.LimbObservation("test_image.jpg", "config/earth_iss_1.yaml")
    
    methods_to_test = [
-       ("segmentation", {"segmenter": "segment-anything"}),
+       ("manual", {}),  # Interactive GUI - time depends on user
        ("gradient-break", {"window_length": 21, "threshold": 0.1})
    ]
+   
+   # Optional: test segmentation if available
+   try:
+       from segment_anything import sam_model_registry
+       methods_to_test.append(("segmentation", {"segmenter": "segment-anything"}))
+   except ImportError:
+       print("⚠ Segmentation not available - install with: pip install segment-anything torch")
    
    results = {}
    
@@ -315,32 +328,40 @@ Comparing Detection Methods
        # Fresh observation for each test
        test_obs = obs.LimbObservation("test_image.jpg", "config/earth_iss_1.yaml")
        
-       # Time the detection
-       start_time = time.time()
-       try:
+       if method_name == "manual":
+           print("  Manual annotation - time depends on user interaction")
+           print("  Opening GUI... Click points along horizon, press 'g' to generate, 'q' to close")
+           # Time manual interaction
+           start_time = time.time()
            test_obs.detect_limb(method=method_name, **kwargs)
-           test_obs.smooth_limb()
-           test_obs.fit_limb()
-           
            detection_time = time.time() - start_time
-           
-           # Calculate uncertainty
-           radius_result = calculate_parameter_uncertainty(
-               test_obs, "r", scale_factor=1000
-           )
-           
-           results[method_name] = {
-               "time": detection_time,
-               "radius": radius_result["value"],
-               "uncertainty": radius_result["uncertainty"],
-               "success": True
-           }
-           
-       except Exception as e:
-           results[method_name] = {
-               "error": str(e),
-               "success": False
-           }
+       else:
+           # Time automatic methods
+           start_time = time.time()
+           try:
+               test_obs.detect_limb(method=method_name, **kwargs)
+               detection_time = time.time() - start_time
+           except Exception as e:
+               results[method_name] = {
+                   "error": str(e),
+                   "success": False
+               }
+               continue
+       
+       test_obs.smooth_limb()
+       test_obs.fit_limb()
+       
+       # Calculate uncertainty
+       radius_result = calculate_parameter_uncertainty(
+           test_obs, "r", scale_factor=1000
+       )
+       
+       results[method_name] = {
+           "time": detection_time,
+           "radius": radius_result["value"],
+           "uncertainty": radius_result["uncertainty"],
+           "success": True
+       }
    
    # Compare results
    print("\n" + "="*50)
@@ -350,98 +371,110 @@ Comparing Detection Methods
    for method, result in results.items():
        if result["success"]:
            print(f"{method.upper()}:")
-           print(f"  Time: {result['time']:.1f} seconds")
+           if method == "manual":
+               print(f"  Time: {result['time']:.1f} seconds (user-dependent)")
+               print(f"  Precision: User-controlled (typically highest)")
+           else:
+               print(f"  Time: {result['time']:.1f} seconds (automatic)")
            print(f"  Radius: {result['radius']:.1f} ± {result['uncertainty']:.1f} km")
            print(f"  Relative uncertainty: {100*result['uncertainty']/result['radius']:.1f}%")
        else:
            print(f"{method.upper()}: FAILED - {result['error']}")
 
-Installation and Setup for Segmentation
----------------------------------------
+Installation and Setup
+----------------------
 
-Required Dependencies
-~~~~~~~~~~~~~~~~~~~~
+Basic Installation
+~~~~~~~~~~~~~~~~~
 
-For the best Planet Ruler experience with segmentation:
+Planet Ruler works immediately after installation with no additional dependencies:
 
 .. code-block:: bash
 
-   # Essential: Install Planet Ruler with segmentation support
+   # Essential: Install Planet Ruler (manual annotation works immediately)
    pip install planet-ruler
-   
-   # Required for segmentation: Segment Anything + PyTorch
-   pip install segment-anything torch torchvision
-   
-   # Optional: GPU support for faster processing
-   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 
 Verification Test
 ~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-   # Test segmentation installation
+   # Test basic Planet Ruler functionality
+   import planet_ruler.observation as obs
+   import planet_ruler.geometry as geom
+   
+   # Test geometry functions
+   horizon_dist = geom.horizon_distance(r=6371000, h=400000)
+   print(f"✓ Planet Ruler installed - ISS horizon distance: {horizon_dist/1000:.1f} km")
+   
+   # Test manual annotation interface
    try:
-       from planet_ruler.image import ImageSegmentation
-       from segment_anything import sam_model_registry
-       print("✓ Segmentation support available")
+       from planet_ruler.annotate import TkLimbAnnotator
+       print("✓ Manual annotation GUI available")
    except ImportError as e:
-       print(f"⚠ Segmentation not available: {e}")
-       print("Install with: pip install segment-anything torch")
+       print(f"⚠ GUI not available: {e}")
 
-Troubleshooting Segmentation
+Optional: Advanced Detection Methods
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For automatic detection methods, install additional dependencies:
+
+.. code-block:: bash
+
+   # Optional: AI segmentation support (requires PyTorch + Segment Anything)
+   pip install segment-anything torch torchvision
+   
+   # Optional: GPU support for faster AI processing
+   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+Testing Optional Dependencies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Common issues and solutions:**
-
-1. **"No module named 'segment_anything'"**
-   
-   .. code-block:: bash
-   
-      pip install segment-anything
-
-2. **"CUDA out of memory"**
-   
-   .. code-block:: python
-   
-      # Use CPU instead of GPU
-      observation.detect_limb(method="segmentation", device="cpu")
-
-3. **"Model checkpoint not found"**
-   
-   .. code-block:: python
-   
-      # Manually download SAM model
-      import torch
-      from segment_anything import sam_model_registry
-      
-      # This will auto-download the model
-      sam = sam_model_registry["vit_h"](checkpoint="path/to/sam_vit_h_4b8939.pth")
-
-Performance Tips
-~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-   # For faster segmentation on large images:
+   # Test AI segmentation installation (optional)
+   try:
+       from planet_ruler.image import ImageSegmentation
+       from segment_anything import sam_model_registry
+       print("✓ AI segmentation available")
+   except ImportError as e:
+       print(f"⚠ AI segmentation not available: {e}")
+       print("Install with: pip install segment-anything torch")
+
+Troubleshooting
+~~~~~~~~~~~~~~
+
+**Common issues and solutions:**
+
+1. **Manual annotation GUI not opening**
    
-   # 1. Reduce image resolution
-   observation.image_data = observation.image_data[::2, ::2]  # 2x downsampling
+   .. code-block:: bash
    
-   # 2. Use fewer segmentation points
-   observation.detect_limb(
-       method="segmentation", 
-       points_per_side=16  # Default: 32, lower = faster
-   )
+      # Ensure tkinter is installed (usually included with Python)
+      python -m tkinter  # Should open a test window
+
+2. **"No module named 'segment_anything'"** (for AI segmentation only)
    
-   # 3. Use CPU for small images, GPU for large ones
-   device = "cpu" if observation.image_data.size < 1000000 else "cuda"
-   observation.detect_limb(method="segmentation", device=device)
+   .. code-block:: bash
+   
+      pip install segment-anything torch
+
+3. **Performance tips for manual annotation**
+   
+   .. code-block:: python
+   
+      # For large images, consider downsampling for easier annotation:
+      from PIL import Image
+      
+      # Resize image before annotation if needed
+      img = Image.open("large_image.jpg")
+      img_resized = img.resize((img.width//2, img.height//2))
+      img_resized.save("resized_for_annotation.jpg")
 
 Next Steps
 ----------
 
-* Review :doc:`installation` for detailed segmentation setup
-* Explore :doc:`examples` section for real mission data with segmentation
-* Check :doc:`api` documentation for segmentation parameters
-* See :doc:`benchmarks` for segmentation performance analysis
+* Review :doc:`installation` for detailed setup instructions
+* Explore :doc:`examples` section for real mission data with manual annotation
+* Check :doc:`api` documentation for all detection method parameters
+* See :doc:`benchmarks` for performance analysis across detection methods

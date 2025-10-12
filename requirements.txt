@@ -15,6 +15,7 @@ ipywidgets>=7.6.0,<9.0.0
 ipython>=7.16.0,<9.0.0  # Supports Python 3.8+
 jupyter>=1.0.0,<2.0.0  # For interactive CLI demos
 jupyter-core>=4.0.0,<6.0.0  # Core jupyter functionality
+PyQt5>=5.15.0,<6.0.0  # GUI toolkit for desktop applications
 
 # Machine learning dependencies (heavy)
 torch>=1.11.0,<3.0.0; python_version>="3.8"  # Required by segment-anything
