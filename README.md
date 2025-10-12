@@ -135,9 +135,8 @@ planet-ruler demo --planet earth
 <tr>
 <td width="50%">
 
-**AI-Powered Detection**
-- Segment Anything model for horizon detection
-- Automatic limb/edge identification
+**Flexible Detection**
+- Manual, algorithmic, or AI feature extraction
 - Robust to image noise and artifacts
 
 **Advanced Camera Models**
@@ -153,14 +152,12 @@ planet-ruler demo --planet earth
 <td width="50%">
 
 **Scientific Rigor**
-- Parameter uncertainty estimation from optimization populations
-- Differential evolution optimization
+- Robust optimization and uncertainty estimation
 - Mathematical validation with property tests
 
 **Rich Visualizations**
-- Interactive plots with matplotlib
+- Interactive plots
 - 3D planetary geometry views
-- Step-by-step analysis breakdown
 
 **Multiple Interfaces**
 - Python API for scripting
