@@ -10,11 +10,15 @@
 
 **Got a horizon photo? Measure your planet in 3 lines of code!**
 
+</div>
+
 ```python
 import planet_ruler as pr
 obs = pr.LimbObservation("horizon_photo.jpg", "config/camera.yaml")
 obs.detect_limb().fit_limb()  # → Planet radius: 6,234 km
 ```
+
+<div align="center">
 
 [Try Interactive Demo](notebooks/limb_demo.ipynb) • [Documentation](https://planet-ruler.readthedocs.io) • [Discussions](https://github.com/bogsdarking/planet_ruler/discussions)
 

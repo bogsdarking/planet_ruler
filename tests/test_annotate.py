@@ -1163,16 +1163,14 @@ class TestMainScriptExecution:
 class TestToolTipAdvanced:
     """Test advanced ToolTip functionality."""
 
-    def test_tooltip_show_tip_when_tip_window_exists(self):
+    @patch('tkinter.Toplevel')
+    def test_tooltip_show_tip_when_tip_window_exists(self, mock_toplevel):
         """Test show_tip when tip_window already exists."""
-        root = tk.Tk()
-        widget = tk.Button(root, text="Test")
-        widget.pack()
-
-        tooltip = ToolTip(widget, "Test tooltip")
+        mock_widget = Mock()
+        tooltip = ToolTip(mock_widget, "Test tooltip")
 
         # Manually create a tip window first
-        tooltip.tip_window = tk.Toplevel(widget)
+        tooltip.tip_window = Mock()
 
         # Now call show_tip - should return early
         result = tooltip.show_tip()
@@ -1180,48 +1178,42 @@ class TestToolTipAdvanced:
         # Should return None (early return)
         assert result is None
 
-        root.destroy()
-
     def test_tooltip_show_tip_empty_text(self):
         """Test show_tip with empty text."""
-        root = tk.Tk()
-        widget = tk.Button(root, text="Test")
-        widget.pack()
-
-        tooltip = ToolTip(widget, "")
+        mock_widget = Mock()
+        tooltip = ToolTip(mock_widget, "")
 
         # Should return early for empty text
         result = tooltip.show_tip()
         assert result is None
         assert tooltip.tip_window is None
 
-        root.destroy()
-
     def test_tooltip_hide_tip_no_window(self):
         """Test hide_tip when no tip window exists."""
-        root = tk.Tk()
-        widget = tk.Button(root, text="Test")
-        widget.pack()
-
-        tooltip = ToolTip(widget, "Test tooltip")
+        mock_widget = Mock()
+        tooltip = ToolTip(mock_widget, "Test tooltip")
 
         # Call hide_tip when no window exists
         result = tooltip.hide_tip()
         assert result is None
 
-        root.destroy()
-
-    def test_tooltip_event_binding(self):
+    @patch('tkinter.Toplevel')
+    @patch('tkinter.Label')
+    def test_tooltip_event_binding(self, mock_label, mock_toplevel):
         """Test that tooltip events are properly bound."""
-        root = tk.Tk()
-        widget = tk.Button(root, text="Test")
-        widget.pack()
-        root.update()  # Ensure widget is rendered
+        mock_widget = Mock()
+        mock_widget.winfo_rootx.return_value = 100
+        mock_widget.winfo_rooty.return_value = 200
+        mock_widget.winfo_height.return_value = 30
 
-        tooltip = ToolTip(widget, "Test tooltip")
+        tooltip = ToolTip(mock_widget, "Test tooltip")
 
         # Check that events trigger methods
         event = MagicMock()
+
+        # Mock the toplevel window
+        mock_tip_window = Mock()
+        mock_toplevel.return_value = mock_tip_window
 
         # Test show and hide
         tooltip.show_tip(event)
@@ -1230,21 +1222,17 @@ class TestToolTipAdvanced:
         tooltip.hide_tip(event)
         assert tooltip.tip_window is None
 
-        root.destroy()
-
 
 class TestSimpleCoverage:
     """Simple tests to increase coverage without complex mocking."""
 
     def test_create_tooltip_function(self):
         """Test create_tooltip helper function."""
-        root = tk.Tk()
-        widget = tk.Button(root, text="Test")
-        widget.pack()
-        root.update()
+        mock_widget = Mock()
+        mock_widget.bind = Mock()
 
         # Test the helper function
-        result = create_tooltip(widget, "Test message")
+        result = create_tooltip(mock_widget, "Test message")
 
         # Verify a ToolTip was attached
         assert result is not None
@@ -1252,11 +1240,7 @@ class TestSimpleCoverage:
         assert result.text == "Test message"
 
         # Verify events were bound
-        bindings = widget.bind()
-        enter_bound = any("<Enter>" in str(binding) for binding in bindings)
-        assert enter_bound
-
-        root.destroy()
+        assert mock_widget.bind.call_count >= 2  # Enter and Leave events
 
     def test_module_level_imports(self):
         """Test that all module-level imports and constants work."""
