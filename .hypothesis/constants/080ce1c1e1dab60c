@@ -1,0 +1,4 @@
+# file: /Users/banderson/vs/planet_ruler/planet_ruler/demo.py
+# hypothesis_version: 6.138.14
+
+[1188, 6371, 58232, 'Demo:', 'Earth', 'Pluto', 'Saturn', 'Saturn-1', 'Saturn-2', 'earth_limb_1.npy', 'fit_config', 'image_filepath', 'limb_config', 'limb_save', 'pluto_limb.npy', 'preamble', 'r', 'saturn_limb_1.npy', 'saturn_limb_2.npy', 'target', 'true_radius']

@@ -1,3 +1,17 @@
+# Copyright 2025 Brandon Anderson
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from scipy.optimize import differential_evolution
 import yaml
 import numpy as np
@@ -7,7 +21,14 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import seaborn as sns
 from planet_ruler.plot import plot_image, plot_limb
-from planet_ruler.image import load_image, gradient_break, StringDrop, smooth_limb, fill_nans, ImageSegmentation
+from planet_ruler.image import (
+    load_image,
+    gradient_break,
+    smooth_limb,
+    fill_nans,
+    ImageSegmentation,
+)
+from planet_ruler.annotate import TkLimbAnnotator
 from planet_ruler.fit import CostFunction, unpack_parameters
 from planet_ruler.geometry import limb_arc
 
@@ -19,18 +40,15 @@ class PlanetObservation:
     Args:
         image_filepath (str): Path to image file.
     """
-    def __init__(
-            self,
-            image_filepath: str):
+
+    def __init__(self, image_filepath: str):
         self.image = load_image(image_filepath)
+        self.image_filepath = image_filepath
         self.features = {}
         self._plot_functions = {}
-        self._cwheel = ['y', 'b', 'r', 'orange', 'pink', 'black']
+        self._cwheel = ["y", "b", "r", "orange", "pink", "black"]
 
-    def plot(
-            self,
-            gradient: bool = False,
-            show: bool = True) -> None:
+    def plot(self, gradient: bool = False, show: bool = True) -> None:
         """
         Display the observation and all current features.
 
@@ -41,7 +59,9 @@ class PlanetObservation:
         plot_image(self.image, gradient=gradient, show=False)
         h_plus, l_plus = [], []
         for i, feature in enumerate(self.features):
-            self._plot_functions[feature](self.features[feature], show=False, c=self._cwheel[i])
+            self._plot_functions[feature](
+                self.features[feature], show=False, c=self._cwheel[i]
+            )
             h_plus.append(Line2D([0], [0], color=self._cwheel[i], lw=2))
             l_plus.append(feature)
         ax = plt.gca()
@@ -63,23 +83,24 @@ class LimbObservation(PlanetObservation):
         minimizer (str): Choice of minimizer. Currently only supports
             'differential-evolution'.
     """
+
     def __init__(
-            self,
-            image_filepath,
-            fit_config,
-            limb_detection='segmentation',
-            minimizer='differential-evolution'):
+        self,
+        image_filepath,
+        fit_config,
+        limb_detection="manual",
+        minimizer="differential-evolution",
+    ):
         super().__init__(image_filepath)
 
         self.free_parameters = None
         self.init_parameter_values = None
         self.parameter_limits = None
         self.load_fit_config(fit_config)
-        assert limb_detection in ['gradient-break', 'string-drop', 'segmentation']
+        assert limb_detection in ["gradient-break", "segmentation", "manual"]
         self.limb_detection = limb_detection
-        self._string_drop = None
         self._segmenter = None
-        assert minimizer in ['differential-evolution']
+        assert minimizer in ["differential-evolution"]
         self.minimizer = minimizer
 
         self._raw_limb = None
@@ -88,9 +109,108 @@ class LimbObservation(PlanetObservation):
         self.best_parameters = None
         self.fit_results = None
 
-    def load_fit_config(
-            self,
-            fit_config: str) -> None:
+    def analyze(
+        self,
+        detect_limb_kwargs: dict = None,
+        fit_limb_kwargs: dict = None,
+    ) -> "LimbObservation":
+        """
+        Perform complete limb analysis: detection + fitting in one call.
+
+        Args:
+            detect_limb_kwargs (dict): Optional arguments for detect_limb()
+            fit_limb_kwargs (dict): Optional arguments for fit_limb()
+
+        Returns:
+            self: For method chaining
+        """
+        if detect_limb_kwargs is None:
+            detect_limb_kwargs = {}
+        if fit_limb_kwargs is None:
+            fit_limb_kwargs = {}
+
+        self.detect_limb(**detect_limb_kwargs)
+        self.fit_limb(**fit_limb_kwargs)
+
+        return self
+
+    @property
+    def radius_km(self) -> float:
+        """
+        Get the fitted planetary radius in kilometers.
+
+        Returns:
+            float: Planetary radius in km, or 0 if not fitted
+        """
+        if self.best_parameters is None:
+            return 0.0
+        return self.best_parameters.get("r", 0.0) / 1000.0
+
+    @property
+    def altitude_km(self) -> float:
+        """
+        Get the observer altitude in kilometers.
+
+        Returns:
+            float: Observer altitude in km, or 0 if not fitted
+        """
+        if self.best_parameters is None:
+            return 0.0
+        return self.best_parameters.get("h", 0.0) / 1000.0
+
+    @property
+    def focal_length_mm(self) -> float:
+        """
+        Get the camera focal length in millimeters.
+
+        Returns:
+            float: Focal length in mm, or 0 if not fitted
+        """
+        if self.best_parameters is None:
+            return 0.0
+        return self.best_parameters.get("f", 0.0) * 1000.0
+
+    @property
+    def radius_uncertainty(self) -> float:
+        """
+        Get parameter uncertainty for radius using differential evolution posteriors.
+
+        Returns:
+            float: Radius uncertainty in km, or 0 if not available
+        """
+        if not hasattr(self, "fit_results") or not hasattr(
+            self.fit_results, "population"
+        ):
+            return 0.0
+
+        try:
+            from planet_ruler.fit import calculate_parameter_uncertainty
+
+            result = calculate_parameter_uncertainty(
+                self,
+                parameter="r",
+                scale_factor=1000.0,  # Convert to km
+                uncertainty_type="std",
+            )
+            return result["uncertainty"]
+        except Exception:
+            return 0.0
+
+    def plot_3d(self, **kwargs) -> None:
+        """
+        Create 3D visualization of the planetary geometry.
+
+        Args:
+            **kwargs: Arguments passed to plot_3d_solution
+        """
+        from planet_ruler.plot import plot_3d_solution
+
+        if self.best_parameters is None:
+            raise ValueError("Must fit limb before plotting 3D solution")
+
+        plot_3d_solution(**self.best_parameters, **kwargs)
+
+    def load_fit_config(self, fit_config: str) -> None:
         """
         Load the fit configuration from file, setting all parameters
         to their initial values.
@@ -98,60 +218,49 @@ class LimbObservation(PlanetObservation):
         Args:
             fit_config (str): Path to configuration file.
         """
-        with open(fit_config, 'r') as f:
+        with open(fit_config, "r") as f:
             base_config = yaml.safe_load(f)
 
-        for p, v in base_config['init_parameter_values'].items():
-            assert v >= base_config['parameter_limits'][p][0],\
-                f"Initial value for parameter {p} violates stated lower limit."
-            assert v <= base_config['parameter_limits'][p][1], \
-                f"Initial value for parameter {p} violates stated upper limit."
+        for p, v in base_config["init_parameter_values"].items():
+            assert (
+                v >= base_config["parameter_limits"][p][0]
+            ), f"Initial value for parameter {p} violates stated lower limit."
+            assert (
+                v <= base_config["parameter_limits"][p][1]
+            ), f"Initial value for parameter {p} violates stated upper limit."
 
-        self.free_parameters = base_config['free_parameters']
-        self.init_parameter_values = base_config['init_parameter_values']
-        self.parameter_limits = base_config['parameter_limits']
+        self.free_parameters = base_config["free_parameters"]
+        self.init_parameter_values = base_config["init_parameter_values"]
+        self.parameter_limits = base_config["parameter_limits"]
+
+    def register_limb(self, limb: np.ndarray) -> "LimbObservation":
+        """
+        Register a detected limb.
+
+        Args:
+            limb (np.ndarray): Limb vector (y pixel coordinates).
+        """
+        self.features["limb"] = limb
+        self._raw_limb = self.features["limb"].copy()
+        self._plot_functions["limb"] = plot_limb
+        return self
 
     def detect_limb(
-            self,
-            tilt: float = 0.05,
-            smoothing_window: int = 50,
-            start: int = 10,
-            steps: int = 1000000,
-            g: float = 150,
-            m: float = 5,
-            k: float = 3e-1,
-            friction: float = 0.0,
-            t_step: float = 0.01,
-            max_acc: float = 1,
-            max_vel: float = 2,
-            log: bool = False,
-            y_min: int = 0,
-            y_max: int = -1,
-            window_length: int = 501,
-            polyorder: int = 1,
-            deriv: int = 0,
-            delta: int = 1,
-            segmenter: str = 'segment-anything'
-    ) -> None:
+        self,
+        log: bool = False,
+        y_min: int = 0,
+        y_max: int = -1,
+        window_length: int = 501,
+        polyorder: int = 1,
+        deriv: int = 0,
+        delta: int = 1,
+        segmenter: str = "segment-anything",
+    ) -> "LimbObservation":
         """
         Use the instance-defined method to find the limb in our observation.
         Kwargs are passed to the method.
 
         Args:
-            tilt (float): Tilt of the topography. Lifts the
-                top end up by giving every column a
-                height = tilt * x component.
-            smoothing_window (int): Length of window for smoothing
-                each column.
-            start (int): Starting y-value (from the top) for simulation.
-            steps (int): Number of time steps.
-            g (float): Force of gravity (points down into the image).
-            m (float): Density of the string (per pixel).
-            k (float): Spring constant (for string tension).
-            friction (float): Friction coefficient.
-            t_step (float): Length of time step.
-            max_acc (float): Maximum acceleration.
-            max_vel (float): Maximum velocity.
             log (bool): Use the log(gradient). Sometimes good for
             smoothing.
             y_min (int): Minimum y-position to consider.
@@ -166,70 +275,61 @@ class LimbObservation(PlanetObservation):
                 of ['segment-anything'].
 
         """
-        if self.limb_detection == 'string-drop':
-            if self._string_drop is None:
-                self._string_drop = StringDrop(self.image)
-            print('computing gradient force map...')
-            self._string_drop.compute_force_map(
-                tilt=tilt,
-                smoothing_window=smoothing_window
+        if self.limb_detection == "gradient-break":
+            limb = gradient_break(
+                self.image,
+                log=log,
+                y_min=y_min,
+                y_max=y_max,
+                window_length=window_length,
+                polyorder=polyorder,
+                deriv=deriv,
+                delta=delta,
             )
-            print('dropping horizon string...')
-            self.features['limb'] =\
-                self._string_drop.drop_string(
-                    start=start,
-                    steps=steps,
-                    g=g,
-                    m=m,
-                    k=k,
-                    friction=friction,
-                    t_step=t_step,
-                    max_acc=max_acc,
-                    max_vel=max_vel
-                )
-        elif self.limb_detection == 'gradient-break':
-            self.features['limb'] =\
-                gradient_break(
-                    self.image,
-                    log=log,
-                    y_min=y_min,
-                    y_max=y_max,
-                    window_length=window_length,
-                    polyorder=polyorder,
-                    deriv=deriv,
-                    delta=delta
-            )
-        elif self.limb_detection == 'segmentation':
+        elif self.limb_detection == "segmentation":
             if self._segmenter is None:
-                self._segmenter = ImageSegmentation(self.image,
-                                                    segmenter=segmenter)
-            self.features['limb'] =\
-                self._segmenter.segment()
+                self._segmenter = ImageSegmentation(self.image, segmenter=segmenter)
+            limb = self._segmenter.segment()
 
+        elif self.limb_detection == "manual":
+            annotator = TkLimbAnnotator(
+                image_path=self.image_filepath, initial_stretch=1.0
+            )
+            annotator.run()  # Opens window
 
-        self._raw_limb = self.features['limb'].copy()
-        self._plot_functions['limb'] = plot_limb
+            # After closing window
+            limb = annotator.get_target()  # Get sparse array
 
-    def smooth_limb(
-            self,
-            fill_nan=True,
-            **kwargs) -> None:
+            if limb is not None:
+                self.register_limb(limb)
+            else:
+                # No limb was annotated/insufficient points
+                logging.warning("No limb detected from manual annotation")
+            return self
+
+        # For non-manual methods, register the limb
+        self.register_limb(limb)
+        return self
+
+    def smooth_limb(self, fill_nan=True, **kwargs) -> None:
         """
         Apply the smooth_limb function to current observation.
 
         Args:
             fill_nan (bool): Fill any NaNs in the limb.
         """
-        self.features['limb'] = smooth_limb(self._raw_limb, **kwargs)
+        self.features["limb"] = smooth_limb(self._raw_limb, **kwargs)
         if fill_nan:
             logging.info("Filling NaNs in fitted limb.")
-            self.features['limb'] = fill_nans(self.features['limb'])
+            self.features["limb"] = fill_nans(self.features["limb"])
 
-    def fit_limb(self,
-                 loss_function: str = 'l2',
-                 max_iter: int = 1000,
-                 n_jobs: int = 1,
-                 seed: int = 0) -> None:
+    def fit_limb(
+        self,
+        loss_function: str = "l2",
+        max_iter: int = 15000,
+        n_jobs: int = 1,
+        seed: int = 0,
+    ) -> "LimbObservation":
         """
         Fit the current limb using minimizer of choice.
 
@@ -241,70 +341,75 @@ class LimbObservation(PlanetObservation):
         """
 
         inferred_parameters = {
-            'n_pix_x': self.image.shape[1],
-            'n_pix_y': self.image.shape[0],
+            "n_pix_x": self.image.shape[1],
+            "n_pix_y": self.image.shape[0],
             # note these two shouldn't change when you subset an image
-            'x0': int(self.image.shape[1] * 0.5),
-            'y0': int(self.image.shape[0] * 0.5),
+            "x0": int(self.image.shape[1] * 0.5),
+            "y0": int(self.image.shape[0] * 0.5),
         }
 
         working_parameters = self.init_parameter_values.copy()
         working_parameters.update(inferred_parameters)
 
-        self.cost_function = CostFunction(target=self.features['limb'],
-                                          function=limb_arc,
-                                          free_parameters=self.free_parameters,
-                                          init_parameter_values=working_parameters,
-                                          loss_function=loss_function)
-        if self.minimizer == 'differential-evolution':
+        self.cost_function = CostFunction(
+            target=self.features["limb"],
+            function=limb_arc,
+            free_parameters=self.free_parameters,
+            init_parameter_values=working_parameters,
+            loss_function=loss_function,
+        )
+        if self.minimizer == "differential-evolution":
             # 'rand1exp' and  Best/2 supposed to be good?  best2bin best2exp?  rand1bin?
-            strategy = 'best2bin'
+            strategy = "best2bin"
             # strategy = 'rand1exp'
             if n_jobs > 1:
-                updating = 'deferred'
+                updating = "deferred"
             else:
-                updating = 'immediate'
+                updating = "immediate"
             self.fit_results = differential_evolution(
                 self.cost_function.cost,
                 [self.parameter_limits[key] for key in self.free_parameters],
                 x0=[working_parameters[key] for key in self.free_parameters],
-                workers=n_jobs, maxiter=max_iter, strategy=strategy,
+                workers=n_jobs,
+                maxiter=max_iter,
+                strategy=strategy,
                 polish=True,
-                init='sobol', # halton is another reasonable option
+                init="sobol",  # halton is another reasonable option
                 mutation=[0.1, 1.9],
-                updating=updating, disp=True, seed=seed)
+                updating=updating,
+                disp=True,
+                seed=seed,
+            )
         best_parameters = unpack_parameters(self.fit_results.x, self.free_parameters)
         working_parameters.update(best_parameters)
         self.best_parameters = working_parameters
-        self.features['fitted_limb'] = self.cost_function.evaluate(self.best_parameters)
-        self._plot_functions['fitted_limb'] = plot_limb
+        self.features["fitted_limb"] = self.cost_function.evaluate(self.best_parameters)
+        self._plot_functions["fitted_limb"] = plot_limb
+        return self
 
-    def save_limb(self,
-                  filepath: str) -> None:
+    def save_limb(self, filepath: str) -> None:
         """
         Save the detected limb position as a numpy array.
 
         Args:
             filepath (str): Path to save file.
         """
-        np.save(filepath, self.features['limb'])
+        np.save(filepath, self.features["limb"])
 
-    def load_limb(self,
-                  filepath: str) -> None:
+    def load_limb(self, filepath: str) -> None:
         """
         Load the detected limb position from a numpy array.
 
         Args:
             filepath (str): Path to save file.
         """
-        self.features['limb'] = np.load(filepath)
-        self.features['limb'] = fill_nans(self.features['limb'])
-        self._plot_functions['limb'] = plot_limb
-        self._raw_limb = self.features['limb'].copy()
+        self.features["limb"] = np.load(filepath)
+        self.features["limb"] = fill_nans(self.features["limb"])
+        self._plot_functions["limb"] = plot_limb
+        self._raw_limb = self.features["limb"].copy()
 
 
-def unpack_diff_evol_posteriors(
-        observation: LimbObservation) -> pd.DataFrame:
+def unpack_diff_evol_posteriors(observation: LimbObservation) -> pd.DataFrame:
     """
     Extract the final state population of a differential evolution
     minimization and organize as a DataFrame.
@@ -317,12 +422,12 @@ def unpack_diff_evol_posteriors(
         population (pd.DataFrame): Population (rows) and properties (columns).
     """
     pop = []
-    en = observation.fit_results['population_energies']
-    for i, sol in enumerate(observation.fit_results['population']):
+    en = observation.fit_results["population_energies"]
+    for i, sol in enumerate(observation.fit_results["population"]):
         mse = en[i]
         updated = observation.init_parameter_values.copy()
         updated.update(unpack_parameters(sol, observation.free_parameters))
-        updated['mse'] = mse
+        updated["mse"] = mse
         pop.append(updated)
     pop = pd.DataFrame.from_records(pop)
 
@@ -330,9 +435,8 @@ def unpack_diff_evol_posteriors(
 
 
 def plot_diff_evol_posteriors(
-        observation: LimbObservation,
-        show_points: bool = False,
-        log: bool = True):
+    observation: LimbObservation, show_points: bool = False, log: bool = True
+):
     """
     Extract and display the final state population of a differential evolution
     minimization.
@@ -353,32 +457,52 @@ def plot_diff_evol_posteriors(
         if col not in observation.free_parameters:
             continue
         if show_points:
-            plt.scatter(pop[col], pop['mse'])
-        sns.kdeplot(x=pop[col], y=pop['mse'], color='blue', warn_singular=False, label='posterior')
-        plt.axvline(observation.parameter_limits[col][0], ls='--', c='k', alpha=0.5, label='bounds')
-        plt.axvline(observation.parameter_limits[col][1], ls='--', c='k', alpha=0.5)
+            plt.scatter(pop[col], pop["mse"])
+        sns.kdeplot(
+            x=pop[col],
+            y=pop["mse"],
+            color="blue",
+            warn_singular=False,
+            label="posterior",
+        )
+        plt.axvline(
+            observation.parameter_limits[col][0],
+            ls="--",
+            c="k",
+            alpha=0.5,
+            label="bounds",
+        )
+        plt.axvline(observation.parameter_limits[col][1], ls="--", c="k", alpha=0.5)
         try:
-            plt.axvline(observation.init_parameter_values[col], ls='-', c='y', alpha=0.5, label='initial value')
+            plt.axvline(
+                observation.init_parameter_values[col],
+                ls="-",
+                c="y",
+                alpha=0.5,
+                label="initial value",
+            )
         except KeyError:
             pass
         plt.title(col)
-        plt.grid(which='both', ls='--', alpha=0.2)
+        plt.grid(which="both", ls="--", alpha=0.2)
         ax = plt.gca()
         if log:
-            ax.set_yscale('log')
+            ax.set_yscale("log")
 
         handles, labels = ax.get_legend_handles_labels()
-        h_plus, l_plus = [Line2D([0], [0], color='blue', lw=2)], ['posterior']
+        h_plus, l_plus = [Line2D([0], [0], color="blue", lw=2)], ["posterior"]
         plt.legend(handles + h_plus, labels + l_plus)
 
         plt.show()
 
 
-def plot_full_limb(observation: LimbObservation,
-                   x_min: int = None,
-                   x_max: int = None,
-                   y_min: int = None,
-                   y_max: int = None,) -> None:
+def plot_full_limb(
+    observation: LimbObservation,
+    x_min: int = None,
+    x_max: int = None,
+    y_min: int = None,
+    y_max: int = None,
+) -> None:
     """
     Display the full limb, including the section not seen in the image.
 
@@ -412,25 +536,6 @@ def plot_full_limb(observation: LimbObservation,
     plt.show()
 
 
-def plot_string_evolution(observation: LimbObservation) -> None:
-    """
-    Display snapshots of a dropped string.
-
-    Args:
-        observation (object): Instance of LimbObservation.
-    """
-    string_positions = observation._string_drop.string_positions
-    n_pos = len(string_positions)
-
-    plt.imshow(observation.image)
-    steps = np.logspace(1, np.log10(n_pos - 1), num=20).astype(int)
-    for step in steps:
-        pos = string_positions[step]
-        plt.plot(np.arange(len(pos)), pos, c='yellow',
-                 alpha=step/n_pos)
-    plt.show()
-
-
 def plot_segmentation_masks(observation: LimbObservation) -> None:
     """
     Display all the classes/masks generated by the segmentation.
@@ -439,14 +544,13 @@ def plot_segmentation_masks(observation: LimbObservation) -> None:
         observation (object): Instance of LimbObservation.
     """
     for i, mask in enumerate(observation._segmenter._masks):
-        mask = mask['segmentation']
+        mask = mask["segmentation"]
         plt.imshow(mask)
         plt.title(f"Mask {i}")
         plt.show()
 
 
-def package_results(
-        observation: LimbObservation) -> pd.DataFrame:
+def package_results(observation: LimbObservation) -> pd.DataFrame:
     """
     Consolidate the results of a fit to see final vs. initial values.
 
@@ -460,14 +564,18 @@ def package_results(
             - initial value
             - parameter
     """
-    full_fit_params = unpack_parameters(observation.fit_results.x, observation.free_parameters)
+    full_fit_params = unpack_parameters(
+        observation.fit_results.x, observation.free_parameters
+    )
 
     results = []
     for key in observation.free_parameters:
-        result = {'fit value': full_fit_params[key],
-                  'initial value': observation.init_parameter_values[key],
-                  'parameter': key}
+        result = {
+            "fit value": full_fit_params[key],
+            "initial value": observation.init_parameter_values[key],
+            "parameter": key,
+        }
         results.append(result)
     results = pd.DataFrame.from_records(results)
-    results = results.set_index(['parameter'])
+    results = results.set_index(["parameter"])
     return results

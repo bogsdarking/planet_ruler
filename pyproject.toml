@@ -7,33 +7,98 @@ name = "planet_ruler"
 authors = [
     {name = "Brandon Anderson", email = "bogsdarking@proton.me"}
 ]
-description = "A tool to infer the radius of the planet you are sitting on."
-version = "1.0"
+description = "Measure planetary radii from horizon photographs using computer vision and geometry"
+version = "1.2.0"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 dependencies = [
-    "pandas",
-    "matplotlib",
-    "numpy",
-    "tqdm",
-    "scipy",
-    "Pillow",
-    "PyYAML",
-    "seaborn",
-    "ipywidgets",
-    "ipython",
-    "kagglehub",
-    "segment-anything",
+    "pandas>=1.3.0,<3.0.0",
+    "matplotlib>=3.5.0,<4.0.0",
+    "numpy>=1.20.0,<2.0.0",
+    "tqdm>=4.60.0,<5.0.0",
+    "scipy>=1.7.0,<2.0.0",
+    "Pillow>=8.0.0,<12.0.0",
+    "PyYAML>=5.4.0,<7.0.0",
+    "seaborn>=0.11.0,<1.0.0",
+    "ipywidgets>=7.6.0,<9.0.0",
+    "ipython>=7.16.0,<9.0.0",
+    "kagglehub>=0.1.0,<1.0.0; python_version>='3.9'",
+    "segment-anything>=1.0,<2.0.0; python_version>='3.8' and platform_system!='Darwin' or python_version>='3.9'",
 ]
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Education",
 ]
 
+[project.optional-dependencies]
+# Minimal installation without heavy ML dependencies
+minimal = [
+    "pandas>=1.3.0,<3.0.0",
+    "matplotlib>=3.5.0,<4.0.0",
+    "numpy>=1.20.0,<2.0.0",
+    "tqdm>=4.60.0,<5.0.0",
+    "scipy>=1.7.0,<2.0.0",
+    "Pillow>=8.0.0,<12.0.0",
+    "PyYAML>=5.4.0,<7.0.0",
+    "seaborn>=0.11.0,<1.0.0",
+]
+
+# Full ML capabilities (may cause conda conflicts)
+ml = [
+    "torch>=1.11.0,<3.0.0",
+    "torchvision",
+    "segment-anything>=1.0,<2.0.0",
+]
+
+# Jupyter/interactive features
+jupyter = [
+    "ipywidgets>=7.6.0,<9.0.0",
+    "ipython>=7.16.0,<9.0.0",
+    "jupyter>=1.0.0,<2.0.0",
+    "jupyter-core>=4.0.0,<6.0.0",
+]
+
+# Development dependencies
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=22.0.0",
+    "flake8>=6.0.0",
+    "isort>=5.12.0",
+]
+
+# All optional dependencies
+all = [
+    "torch>=1.11.0,<3.0.0",
+    "torchvision",
+    "segment-anything>=1.0,<2.0.0",
+    "ipywidgets>=7.6.0,<9.0.0",
+    "ipython>=7.16.0,<9.0.0",
+    "jupyter>=1.0.0,<2.0.0",
+    "jupyter-core>=4.0.0,<6.0.0",
+]
+
+[project.scripts]
+planet-ruler = "planet_ruler.cli:main"
+
 [project.urls]
-Homepage = "https://github.com/bogsdarking/planet-ruler"
-Issues = "https://github.com/bogsdarking/planet-ruler/issues"
+Homepage = "https://github.com/bogsdarking/planet_ruler"
+Repository = "https://github.com/bogsdarking/planet_ruler"
+Issues = "https://github.com/bogsdarking/planet_ruler/issues"
+Documentation = "https://planet-ruler.readthedocs.io"
 
 [tool.hatch.build.targets.wheel]
 packages = ["planet_ruler"]

@@ -1,17 +1,28 @@
+# Copyright 2025 Brandon Anderson
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LightSource
 from planet_ruler.geometry import limb_camera_angle, horizon_distance
 
-matplotlib.rcParams['figure.figsize'] = (16, 10)
-matplotlib.rcParams.update({'font.size': 18})
+matplotlib.rcParams["figure.figsize"] = (16, 10)
+matplotlib.rcParams.update({"font.size": 18})
 
 
-def plot_image(
-        im_arr: np.ndarray,
-        gradient: bool = False,
-        show: bool = True) -> None:
+def plot_image(im_arr: np.ndarray, gradient: bool = False, show: bool = True) -> None:
     """
     Display an image using matplotlib.pyplot.imshow.
 
@@ -32,11 +43,8 @@ def plot_image(
 
 
 def plot_limb(
-        y: np.ndarray,
-        show: bool = True,
-        c: str = 'y',
-        s: int = 10,
-        alpha: float = 0.2) -> None:
+    y: np.ndarray, show: bool = True, c: str = "y", s: int = 10, alpha: float = 0.2
+) -> None:
     """
     Display the limb (usually on top of an image).
 
@@ -47,24 +55,29 @@ def plot_limb(
         s (int): Size of marker.
         alpha (float): Opacity of markers.
     """
+    # brighten if the annotations are sparse
+    if len(y[y == y]) < 20:
+        s = 40
+        alpha = 0.8
     plt.scatter(np.arange(len(y)), y, c=c, s=s, alpha=alpha)
     if show:
         plt.show()
 
 
 def plot_3d_solution(
-        r: float,
-        h: float = 1,
-        zoom: float = 1,
-        savefile: str = None,
-        legend: bool = True,
-        vertical_axis: str = 'z',
-        azim: float = None,
-        roll: float = None,
-        x_axis: bool = False,
-        y_axis: bool = True,
-        z_axis: bool = False,
-        **kwargs) -> None:
+    r: float,
+    h: float = 1,
+    zoom: float = 1,
+    savefile: str = None,
+    legend: bool = True,
+    vertical_axis: str = "z",
+    azim: float = None,
+    roll: float = None,
+    x_axis: bool = False,
+    y_axis: bool = True,
+    z_axis: bool = False,
+    **kwargs,
+) -> None:
     """
     Plot a limb solution in 3D.
 
@@ -83,14 +96,14 @@ def plot_3d_solution(
         kwargs (dict): Absorbs other solution kwargs that don't matter for physical space.
      Returns:
          None
-     """
-    h = h * (1. / zoom)
+    """
+    h = h * (1.0 / zoom)
     limb_theta = limb_camera_angle(r, h)
     d = horizon_distance(r, h)
     horizon_radius = d * np.cos(limb_theta)
 
     fig = plt.figure(figsize=(10, 10))
-    ax = fig.add_subplot(projection='3d')
+    ax = fig.add_subplot(projection="3d")
 
     theta = np.linspace(-limb_theta, limb_theta, 100)
     phi = np.linspace(0, np.pi, 50)
@@ -100,7 +113,7 @@ def plot_3d_solution(
     y_world = -(h + r) + r * np.cos(theta)
     z_world = r * np.sin(theta) * np.sin(phi)
 
-    ax.plot_wireframe(x_world, y_world, z_world, color='y', alpha=0.1, label='planet')
+    ax.plot_wireframe(x_world, y_world, z_world, color="y", alpha=0.1, label="planet")
 
     theta = np.ones(1) * limb_theta
     phi = np.linspace(-np.pi, np.pi, num=5000)
@@ -109,19 +122,39 @@ def plot_3d_solution(
     x_world = r * np.sin(theta) * np.cos(phi)
     y_world = -(h + r) + r * np.cos(theta)
     z_world = r * np.sin(theta) * np.sin(phi)
-    ax.plot(x_world, y_world, z_world, c='k', label='limb')
+    ax.plot(x_world, y_world, z_world, c="k", label="limb")
 
-    ax.scatter([0], [0], [0], marker='.', s=100,
-               label=f'camera/origin [elevation = {int(h / 1000)} km]')
+    ax.scatter(
+        [0],
+        [0],
+        [0],
+        marker=".",
+        s=100,
+        label=f"camera/origin [elevation = {int(h / 1000)} km]",
+    )
 
     if y_axis:
-        ax.plot([0, 0], [-h, 0], [0, 0], c='g', ls='--', alpha=0.7, label='y-axis')
+        ax.plot([0, 0], [-h, 0], [0, 0], c="g", ls="--", alpha=0.7, label="y-axis")
     if z_axis:
-        ax.plot([0, 0], [0, 0], [-horizon_radius, horizon_radius],
-                c='b', ls='--', alpha=0.7, label='z-axis')
+        ax.plot(
+            [0, 0],
+            [0, 0],
+            [-horizon_radius, horizon_radius],
+            c="b",
+            ls="--",
+            alpha=0.7,
+            label="z-axis",
+        )
     if x_axis:
-        ax.plot([-horizon_radius, horizon_radius], [0, 0], [0, 0],
-                c='k', ls='--', alpha=0.7, label='x-axis')
+        ax.plot(
+            [-horizon_radius, horizon_radius],
+            [0, 0],
+            [0, 0],
+            c="k",
+            ls="--",
+            alpha=0.7,
+            label="x-axis",
+        )
 
     theta = limb_theta
     phi = 0
@@ -130,8 +163,15 @@ def plot_3d_solution(
     y_world = -(h + r) + r * np.cos(theta)
     z_world = r * np.sin(theta) * np.sin(phi)
 
-    ax.plot([0, x_world], [0, y_world], [0, z_world], c='purple', ls='--', alpha=0.7,
-            label=f'line of sight [distance = {int(d / 1000)} km]')
+    ax.plot(
+        [0, x_world],
+        [0, y_world],
+        [0, z_world],
+        c="purple",
+        ls="--",
+        alpha=0.7,
+        label=f"line of sight [distance = {int(d / 1000)} km]",
+    )
 
     plt.autoscale(False)
     theta = np.linspace(0, 2 * np.pi, 1000)
@@ -142,15 +182,17 @@ def plot_3d_solution(
     y_world = -(h + r) + r * np.cos(theta)
     z_world = r * np.sin(theta) * np.sin(phi)
 
-    ax.plot_wireframe(x_world, y_world, z_world, color='b', alpha=0.01)
+    ax.plot_wireframe(x_world, y_world, z_world, color="b", alpha=0.01)
 
-    ax.view_init(elev=limb_theta * 180 / np.pi, azim=azim, roll=roll, vertical_axis=vertical_axis)
-    plt.axis('off')
+    ax.view_init(
+        elev=limb_theta * 180 / np.pi, azim=azim, roll=roll, vertical_axis=vertical_axis
+    )
+    plt.axis("off")
     if legend:
         plt.legend(fontsize=12)
-    plt.axis('equal')
+    plt.axis("equal")
     if savefile is not None:
-        plt.savefig(savefile, bbox_inches='tight')
+        plt.savefig(savefile, bbox_inches="tight")
     plt.show()
 
 
@@ -162,7 +204,7 @@ def plot_topography(image: np.ndarray) -> None:
         image (np.ndarray): Image array.
     """
     fig = plt.figure(figsize=(10, 10))
-    ax = fig.add_subplot(projection='3d')
+    ax = fig.add_subplot(projection="3d")
 
     image = np.clip(image.sum(axis=-1), None, 1000)
     n_rows, n_cols = image.shape
@@ -175,9 +217,7 @@ def plot_topography(image: np.ndarray) -> None:
     ax.plot_surface(x, y, image, lightsource=ls)
     ax.view_init(elev=90, azim=0, roll=-90)
 
-    plt.subplots_adjust(top=1, bottom=0, right=1, left=0,
-                        hspace=0, wspace=0)
+    plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
 
-    plt.axis('off')
+    plt.axis("off")
     plt.show()
-
