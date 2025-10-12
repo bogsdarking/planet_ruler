@@ -6,7 +6,7 @@ This section provides real-world examples using actual mission data and spacecra
 Example 1: Earth from International Space Station
 -------------------------------------------------
 
-Calculating Earth's radius using ISS photography with segmentation-based horizon detection.
+Calculating Earth's radius using ISS photography with interactive manual annotation.
 
 Dataset Details
 ~~~~~~~~~~~~~~
@@ -46,11 +46,15 @@ Complete Analysis
        elif key == "f":
            print(f"  Focal length: {value*1000:.1f} mm")
    
-   # Detect horizon using segmentation
+   # Detect horizon using interactive manual annotation (default)
    print("\nDetecting horizon...")
-   observation.detect_limb(method="segmentation")
+   observation.detect_limb(method="manual")  # Opens GUI for point selection
    observation.smooth_limb()
    print("✓ Horizon detected and smoothed")
+   
+   # Alternative detection methods available:
+   # observation.detect_limb(method="segmentation")  # AI-powered (requires PyTorch)
+   # observation.detect_limb(method="gradient-break")  # Legacy gradient-based detection
    
    # Fit planetary parameters
    print("\nFitting planetary parameters...")
@@ -168,13 +172,16 @@ Analysis Code
    print("PLUTO RADIUS FROM NEW HORIZONS")
    print("="*50)
    
-   # Pluto is small and distant - segmentation is crucial
-   pluto_obs.detect_limb(
-       method="segmentation",
-       points_per_side=32,  # Higher resolution for small objects
-       pred_iou_thresh=0.90,  # Higher quality threshold
-       stability_score_thresh=0.95
-   )
+   # Pluto is small and distant - careful manual annotation recommended
+   pluto_obs.detect_limb(method="manual")  # Interactive point selection GUI
+   
+   # Alternative: AI segmentation (requires PyTorch)
+   # pluto_obs.detect_limb(
+   #     method="segmentation",
+   #     points_per_side=32,  # Higher resolution for small objects
+   #     pred_iou_thresh=0.90,  # Higher quality threshold
+   #     stability_score_thresh=0.95
+   # )
    
    pluto_obs.smooth_limb()
    pluto_obs.fit_limb(maxiter=1500, popsize=20)  # More thorough fitting
@@ -243,9 +250,12 @@ Analysis Code
    print("SATURN RADIUS FROM CASSINI")
    print("="*50)
    
-   # Detect limb using segmentation
-   saturn_obs.detect_limb(method="segmentation")
+   # Detect limb using manual annotation (default)
+   saturn_obs.detect_limb(method="manual")  # Interactive GUI
    saturn_obs.smooth_limb()
+   
+   # Alternative: AI segmentation (requires PyTorch + Segment Anything)
+   # saturn_obs.detect_limb(method="segmentation")
    
    # Fit with additional iterations for distant object
    saturn_obs.fit_limb(maxiter=1500, seed=42)
@@ -354,10 +364,13 @@ Multi-Planet Comparison
            # Load observation
            obs_obj = obs.LimbObservation(scenario['image'], scenario['config'])
            
-           # Detect with segmentation
-           obs_obj.detect_limb(method="segmentation")
+           # Detect with manual annotation (default, no dependencies)
+           obs_obj.detect_limb(method="manual")  # Opens interactive GUI
            obs_obj.smooth_limb()
            obs_obj.fit_limb()
+           
+           # Alternative: AI segmentation (requires PyTorch + Segment Anything)
+           # obs_obj.detect_limb(method="segmentation")  # Automatic detection
            
            # Calculate uncertainties  
            radius_result = calculate_parameter_uncertainty(
@@ -426,10 +439,13 @@ Advanced Uncertainty Quantification
        "config/earth_iss_1.yaml"
    )
    
-   # Standard analysis
-   observation.detect_limb(method="segmentation")
+   # Standard analysis with manual annotation
+   observation.detect_limb(method="manual")  # Interactive point selection
    observation.smooth_limb()
    observation.fit_limb()
+   
+   # Alternative: AI segmentation (requires additional dependencies)
+   # observation.detect_limb(method="segmentation")
    
    print("="*50)
    print("DETAILED UNCERTAINTY ANALYSIS")
@@ -514,11 +530,17 @@ Running the Examples
 
 To run these examples, ensure you have:
 
-1. **Planet Ruler installed** with segmentation support:
+1. **Planet Ruler installed** (no additional dependencies needed for manual annotation):
    
    .. code-block:: bash
    
-      pip install planet-ruler segment-anything torch
+      pip install planet-ruler
+   
+   **Optional: For AI segmentation support:**
+   
+   .. code-block:: bash
+   
+      pip install segment-anything torch
 
 2. **Demo data available** in the expected locations:
    
@@ -547,7 +569,7 @@ For the complete example notebooks, see the `notebooks/` directory in the Planet
 Next Steps
 ---------
 
-* Try modifying the segmentation parameters for your own images
+* Try different detection methods (manual annotation vs. AI segmentation) for your own images
 * Experiment with different uncertainty types and loss functions
 * Create your own planetary scenarios using custom YAML configurations
 * Check the :doc:`benchmarks` section for performance optimization tips

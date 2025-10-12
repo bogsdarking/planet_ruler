@@ -14,6 +14,7 @@ from planet_ruler.image import (
     fill_nans,
     ImageSegmentation,
 )
+from planet_ruler.annotate import TkLimbAnnotator
 from planet_ruler.fit import CostFunction, unpack_parameters
 from planet_ruler.geometry import limb_arc
 
@@ -28,6 +29,7 @@ class PlanetObservation:
 
     def __init__(self, image_filepath: str):
         self.image = load_image(image_filepath)
+        self.image_filepath = image_filepath
         self.features = {}
         self._plot_functions = {}
         self._cwheel = ["y", "b", "r", "orange", "pink", "black"]
@@ -72,7 +74,7 @@ class LimbObservation(PlanetObservation):
         self,
         image_filepath,
         fit_config,
-        limb_detection="segmentation",
+        limb_detection="manual",
         minimizer="differential-evolution",
     ):
         super().__init__(image_filepath)
@@ -81,7 +83,7 @@ class LimbObservation(PlanetObservation):
         self.init_parameter_values = None
         self.parameter_limits = None
         self.load_fit_config(fit_config)
-        assert limb_detection in ["gradient-break", "segmentation"]
+        assert limb_detection in ["gradient-break", "segmentation", "manual"]
         self.limb_detection = limb_detection
         self._segmenter = None
         assert minimizer in ["differential-evolution"]
@@ -217,6 +219,18 @@ class LimbObservation(PlanetObservation):
         self.init_parameter_values = base_config["init_parameter_values"]
         self.parameter_limits = base_config["parameter_limits"]
 
+    def register_limb(self, limb: np.ndarray) -> "LimbObservation":
+        """
+        Register a detected limb.
+
+        Args:
+            limb (np.ndarray): Limb vector (y pixel coordinates).
+        """
+        self.features["limb"] = limb
+        self._raw_limb = self.features["limb"].copy()
+        self._plot_functions["limb"] = plot_limb
+        return self
+
     def detect_limb(
         self,
         log: bool = False,
@@ -248,7 +262,7 @@ class LimbObservation(PlanetObservation):
 
         """
         if self.limb_detection == "gradient-break":
-            self.features["limb"] = gradient_break(
+            limb = gradient_break(
                 self.image,
                 log=log,
                 y_min=y_min,
@@ -261,10 +275,26 @@ class LimbObservation(PlanetObservation):
         elif self.limb_detection == "segmentation":
             if self._segmenter is None:
                 self._segmenter = ImageSegmentation(self.image, segmenter=segmenter)
-            self.features["limb"] = self._segmenter.segment()
+            limb = self._segmenter.segment()
 
-        self._raw_limb = self.features["limb"].copy()
-        self._plot_functions["limb"] = plot_limb
+        elif self.limb_detection == "manual":
+            annotator = TkLimbAnnotator(
+                image_path=self.image_filepath, initial_stretch=1.0
+            )
+            annotator.run()  # Opens window
+
+            # After closing window
+            limb = annotator.get_target()  # Get sparse array
+
+            if limb is not None:
+                self.register_limb(limb)
+            else:
+                # No limb was annotated/insufficient points
+                logging.warning("No limb detected from manual annotation")
+            return self
+
+        # For non-manual methods, register the limb
+        self.register_limb(limb)
         return self
 
     def smooth_limb(self, fill_nan=True, **kwargs) -> None:
