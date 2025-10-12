@@ -1163,7 +1163,7 @@ class TestMainScriptExecution:
 class TestToolTipAdvanced:
     """Test advanced ToolTip functionality."""
 
-    @patch('tkinter.Toplevel')
+    @patch("tkinter.Toplevel")
     def test_tooltip_show_tip_when_tip_window_exists(self, mock_toplevel):
         """Test show_tip when tip_window already exists."""
         mock_widget = Mock()
@@ -1197,8 +1197,8 @@ class TestToolTipAdvanced:
         result = tooltip.hide_tip()
         assert result is None
 
-    @patch('tkinter.Toplevel')
-    @patch('tkinter.Label')
+    @patch("tkinter.Toplevel")
+    @patch("tkinter.Label")
     def test_tooltip_event_binding(self, mock_label, mock_toplevel):
         """Test that tooltip events are properly bound."""
         mock_widget = Mock()
