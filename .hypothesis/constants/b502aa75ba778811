@@ -1,0 +1,4 @@
+# file: /Users/banderson/vs/planet_ruler/planet_ruler/image.py
+# hypothesis_version: 6.138.14
+
+[0.5, 501, 'bin-interpolate', 'extrapolate', 'linear', 'nearest', 'quadratic', 'rolling-mean', 'rolling-median', 'savgol', 'segment-anything', 'segmentation', 'vit_b']

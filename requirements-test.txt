@@ -1,0 +1,32 @@
+# requirements-test.txt
+# Testing dependencies for planet_ruler
+
+# Core testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+pytest-benchmark[histogram]>=4.0.0
+hypothesis>=6.0.0
+
+# Code quality
+flake8>=6.0.0
+black>=22.0.0
+isort>=5.12.0
+mypy>=1.0.0
+
+# Performance testing
+pytest-profiling
+memory-profiler
+
+# Test data and utilities
+numpy>=1.20.0
+matplotlib>=3.5.0  # For visualizing test results if needed
+scipy>=1.8.0       # For advanced numerical tests
+
+# Coverage reporting
+coverage[toml]>=7.0.0
+codecov
+
+# Test report generation
+pytest-html
+pytest-json-report

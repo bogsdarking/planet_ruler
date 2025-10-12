@@ -1,0 +1,4 @@
+# file: /Users/banderson/vs/planet_ruler/planet_ruler/observation.py
+# hypothesis_version: 6.138.14
+
+[0.0, 0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 1.9, 150, 501, 1000, 1000000, '-', '--', 'b', 'best2bin', 'black', 'blue', 'both', 'bounds', 'deferred', 'fit value', 'fitted_limb', 'free_parameters', 'gradient-break', 'immediate', 'initial value', 'k', 'l2', 'limb', 'log', 'mse', 'n_pix_x', 'n_pix_y', 'orange', 'parameter', 'parameter_limits', 'pink', 'population', 'population_energies', 'posterior', 'r', 'segment-anything', 'segmentation', 'sobol', 'x0', 'y', 'y0']
