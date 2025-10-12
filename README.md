@@ -2,8 +2,7 @@
 
 **Measure planetary radii with nothing but a camera and science!**
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![CI/CD Pipeline](https://github.com/bogsdarking/planet_ruler/actions/workflows/ci.yml/badge.svg)](https://github.com/bogsdarking/planet_ruler/actions/workflows/ci.yml)
 
 <div align="center">
@@ -447,7 +446,7 @@ If you've ever wondered about the size of your planet, you are not alone -- huma
 
 ## License
 
-**GNU Affero General Public License v3.0** - see [LICENSE](LICENSE) file for details.
+Licensed under the Apache License, Version 2.0 - see [LICENSE](LICENSE) file for details.
 
 ---
 

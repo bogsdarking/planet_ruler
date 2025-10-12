@@ -277,6 +277,10 @@ For maintainers:
 
 Be respectful and constructive in all interactions. We're all here to learn and improve the project together.
 
+## License
+
+By contributing to planet_ruler, you agree that your contributions will be licensed under the Apache License 2.0.
+
 **In summary:**
 - Be welcoming to newcomers
 - Help others learn
