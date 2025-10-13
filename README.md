@@ -141,7 +141,7 @@ planet-ruler demo --planet earth
 - Robust to image noise and artifacts
 
 **Advanced Camera Models**
-- Camera parameter optimization (focal length, orientation)
+- Camera parameter optimization
 - Multiple camera configurations supported
 - Flexible parameter fitting framework
 
