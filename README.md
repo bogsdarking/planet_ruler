@@ -2,6 +2,7 @@
 
 **Measure planetary radii with nothing but a camera and science!**
 
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://bogsdarking.github.io/planet_ruler/)
 [![CI/CD Pipeline](https://github.com/bogsdarking/planet_ruler/actions/workflows/ci.yml/badge.svg)](https://github.com/bogsdarking/planet_ruler/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/bogsdarking/planet_ruler/branch/dev/graph/badge.svg)](https://codecov.io/gh/bogsdarking/planet_ruler)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -21,7 +22,7 @@ obs.detect_limb().fit_limb()  # → Planet radius: 6,234 km
 
 <div align="center">
 
-[Try Interactive Demo](notebooks/limb_demo.ipynb) • [Documentation](https://planet-ruler.readthedocs.io) • [Discussions](https://github.com/bogsdarking/planet_ruler/discussions)
+[Try Interactive Demo](notebooks/limb_demo.ipynb) • [Documentation](https://bogsdarking.github.io/planet_ruler/) • [Discussions](https://github.com/bogsdarking/planet_ruler/discussions)
 
 </div>
 
@@ -345,7 +346,7 @@ from planet_ruler.demo import make_dropdown, load_demo_parameters
 | Resource | Description | Best For |
 |----------|-------------|----------|
 | [**Interactive Tutorial**](notebooks/limb_demo.ipynb) | Complete walkthrough with examples | **First-time users** |
-| [**API Documentation**](https://planet-ruler.readthedocs.io) | Detailed function reference | **Developers** |
+| [**API Documentation**](https://bogsdarking.github.io/planet_ruler) | Detailed function reference | **Developers** |
 | [**Camera Setup Guide**](config/) | Configuration examples | **Custom setups** |
 | [**Example Gallery**](demo/) | Real space mission results | **Inspiration** |
 
@@ -418,15 +419,6 @@ pytest tests/ -v  # Verify everything works
 - **Ready to code?** → See our [CONTRIBUTING.md](CONTRIBUTING.md) guide
 
 > **First-time contributors welcome!** Look for issues labeled [`good first issue`](https://github.com/bogsdarking/planet_ruler/labels/good%20first%20issue)
-
-## Project Status
-
-[![CI/CD Pipeline](https://github.com/bogsdarking/planet_ruler/actions/workflows/ci.yml/badge.svg)](https://github.com/bogsdarking/planet_ruler/actions/workflows/ci.yml)
-[![Test Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)](https://github.com/bogsdarking/planet_ruler/actions)
-[![Documentation Status](https://readthedocs.org/projects/planet-ruler/badge/?version=latest)](https://planet-ruler.readthedocs.io/en/latest/?badge=latest)
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://python.org)
-
-**Development Status**: Active development • Stable API • Beta testing
 
 ## Acknowledgments & References
 
