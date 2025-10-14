@@ -198,6 +198,7 @@ jobs:
         output-file-path: benchmark-results.json
         github-token: ${{ secrets.GITHUB_TOKEN }}
         auto-push: true
+        gh-pages-branch: benchmarks
         # Show alert with commit comment on detecting possible performance regression
         alert-threshold: '200%'
         comment-on-alert: true
