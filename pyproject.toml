@@ -98,7 +98,7 @@ planet-ruler = "planet_ruler.cli:main"
 Homepage = "https://github.com/bogsdarking/planet_ruler"
 Repository = "https://github.com/bogsdarking/planet_ruler"
 Issues = "https://github.com/bogsdarking/planet_ruler/issues"
-Documentation = "https://planet-ruler.readthedocs.io"
+Documentation = "https://bogsdarking.github.io/planet_ruler/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["planet_ruler"]
