@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
 from scipy.optimize import differential_evolution
 import yaml
 import numpy as np
@@ -29,6 +30,7 @@ from planet_ruler.image import (
     ImageSegmentation,
 )
 from planet_ruler.annotate import TkLimbAnnotator
+from planet_ruler.validation import validate_limb_config
 from planet_ruler.fit import CostFunction, unpack_parameters
 from planet_ruler.geometry import limb_arc
 
@@ -210,24 +212,56 @@ class LimbObservation(PlanetObservation):
 
         plot_3d_solution(**self.best_parameters, **kwargs)
 
-    def load_fit_config(self, fit_config: str) -> None:
+    def load_fit_config(self, fit_config: str | dict) -> None:
         """
         Load the fit configuration from file, setting all parameters
-        to their initial values.
+        to their initial values. Missing values are filled with defaults.
 
         Args:
-            fit_config (str): Path to configuration file.
+            fit_config (str or dict): Path to configuration file.
         """
-        with open(fit_config, "r") as f:
-            base_config = yaml.safe_load(f)
+        # Define default configuration values
+        default_config = {
+            "parameter_limits": {
+                "theta_x": [-3.14, 3.14],
+                "theta_y": [-3.14, 3.14],
+                "theta_z": [-3.14, 3.14],
+                "num_sample": [4000, 6000],
+            },
+            "init_parameter_values": {"theta_y": 0, "theta_z": 0},
+        }
 
-        for p, v in base_config["init_parameter_values"].items():
-            assert (
-                v >= base_config["parameter_limits"][p][0]
-            ), f"Initial value for parameter {p} violates stated lower limit."
-            assert (
-                v <= base_config["parameter_limits"][p][1]
-            ), f"Initial value for parameter {p} violates stated upper limit."
+        # Load the provided configuration
+        if isinstance(fit_config, dict):
+            provided_config = fit_config
+        else:
+            with open(fit_config, "r") as f:
+                provided_config = yaml.safe_load(f)
+
+        # Merge configurations with provided values overriding defaults
+        base_config = {}
+
+        # Merge parameter_limits
+        base_config["parameter_limits"] = default_config["parameter_limits"].copy()
+        if "parameter_limits" in provided_config:
+            base_config["parameter_limits"].update(provided_config["parameter_limits"])
+
+        # Merge init_parameter_values
+        base_config["init_parameter_values"] = default_config[
+            "init_parameter_values"
+        ].copy()
+        if "init_parameter_values" in provided_config:
+            base_config["init_parameter_values"].update(
+                provided_config["init_parameter_values"]
+            )
+
+        # Copy other keys from provided config (like free_parameters)
+        for key in provided_config:
+            if key not in ["parameter_limits", "init_parameter_values"]:
+                base_config[key] = provided_config[key]
+
+        # Validate that initial values are within parameter limits and do not conflict
+        validate_limb_config(base_config)
 
         self.free_parameters = base_config["free_parameters"]
         self.init_parameter_values = base_config["init_parameter_values"]
