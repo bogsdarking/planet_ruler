@@ -8,7 +8,7 @@ authors = [
     {name = "Brandon Anderson", email = "bogsdarking@proton.me"}
 ]
 description = "Measure planetary radii from horizon photographs using computer vision and geometry"
-version = "1.2.0"
+version = "1.3.0"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
@@ -102,3 +102,16 @@ Documentation = "https://bogsdarking.github.io/planet_ruler/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["planet_ruler"]
+
+[tool.coverage.run]
+omit = [
+    "*/tests/*",
+    "*/__main__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
