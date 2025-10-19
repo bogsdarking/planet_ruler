@@ -73,7 +73,7 @@ Examples:
         "measure", help="Measure planetary radius from image"
     )
     measure_parser.add_argument("image", help="Path to horizon/limb photograph")
-    
+
     # Config options (mutually exclusive)
     config_group = measure_parser.add_mutually_exclusive_group(required=True)
     config_group.add_argument(
@@ -85,7 +85,7 @@ Examples:
     config_group.add_argument(
         "--auto-config",
         action="store_true",
-        help="Auto-generate camera config from image EXIF data (requires --altitude)"
+        help="Auto-generate camera config from image EXIF data (requires --altitude)",
     )
     measure_parser.add_argument(
         "--output", "-o", type=str, help="Output file for results (JSON format)"
@@ -108,17 +108,19 @@ Examples:
 
     # Auto-config parameters
     measure_parser.add_argument(
-        "--altitude", "-a",
+        "--altitude",
+        "-a",
         type=float,
-        help="Altitude above surface in meters (required with --auto-config, optional override for config files)"
+        help="Altitude above surface in meters (required with --auto-config, optional override for config files)",
     )
     measure_parser.add_argument(
-        "--planet", "-p",
+        "--planet",
+        "-p",
         type=str,
         default="earth",
-        help="Planet name for auto-config initial radius guess (default: earth)"
+        help="Planet name for auto-config initial radius guess (default: earth)",
     )
-    
+
     # Manual override parameters (for config files or auto-config)
     measure_parser.add_argument(
         "--focal-length", type=float, help="Camera focal length in mm (override)"
@@ -183,19 +185,24 @@ def measure_command(args):
     if args.auto_config:
         # Auto-generate config from image
         if args.altitude is None:
-            print("Error: --altitude is required when using --auto-config", file=sys.stderr)
+            print(
+                "Error: --altitude is required when using --auto-config",
+                file=sys.stderr,
+            )
             return 1
-            
+
         print("Auto-generating camera configuration from image EXIF data...")
         try:
             config = create_config_from_image(
-                args.image,
-                altitude_m=args.altitude,
-                planet=args.planet
+                args.image, altitude_m=args.altitude, planet=args.planet
             )
-            print(f"✓ Auto-generated config for {config.get('camera_info', {}).get('camera_model', 'Unknown')} camera")
-            print(f"  Confidence: {config.get('camera_info', {}).get('confidence', 'unknown')}")
-            
+            print(
+                f"✓ Auto-generated config for {config.get('camera_info', {}).get('camera_model', 'Unknown')} camera"
+            )
+            print(
+                f"  Confidence: {config.get('camera_info', {}).get('confidence', 'unknown')}"
+            )
+
         except ValueError as e:
             print(f"Error generating config: {e}", file=sys.stderr)
             return 1
@@ -219,21 +226,21 @@ def measure_command(args):
             config["init_parameter_values"]["h"] = altitude_m
         else:
             config["altitude_m"] = altitude_m
-            
+
     if args.focal_length is not None:
         focal_m = args.focal_length / 1000  # Convert mm to m
         if "init_parameter_values" in config:
             config["init_parameter_values"]["f"] = focal_m
         else:
             config["focal_length_mm"] = args.focal_length
-            
+
     if args.sensor_width is not None:
         sensor_m = args.sensor_width / 1000  # Convert mm to m
         if "init_parameter_values" in config:
             config["init_parameter_values"]["w"] = sensor_m
         else:
             config["sensor_width_mm"] = args.sensor_width
-            
+
     if args.field_of_view is not None:
         fov_rad = args.field_of_view * 3.14159 / 180  # Convert degrees to radians
         if "init_parameter_values" in config:
