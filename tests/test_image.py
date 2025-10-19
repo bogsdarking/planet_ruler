@@ -123,6 +123,17 @@ class TestGradientBreak:
         assert len(breaks) == 50  # One break per column
         assert all(50 <= b <= 70 for b in breaks)  # Should detect edge around row 60
 
+    def test_gradient_break_auto_window(self):
+        """Test basic gradient break detection."""
+        # Create synthetic image with clear horizontal edge
+        image = np.zeros((100, 50, 3), dtype=np.uint8)
+        image[60:, :, :] = 255  # White bottom, black top
+
+        breaks = gradient_break(image, window_length=None, polyorder=1)
+
+        assert len(breaks) == 50  # One break per column
+        assert np.median(breaks) == 54  # Should detect edge at row 54
+
     def test_gradient_break_with_log(self):
         """Test gradient break detection with log transformation."""
         image = np.zeros((100, 30, 3), dtype=np.uint8)

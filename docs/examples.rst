@@ -3,6 +3,94 @@ Examples
 
 This section provides real-world examples using actual mission data and spacecraft observations.
 
+Example 0: Zero-Configuration Workflow (Auto-Config from EXIF)
+-------------------------------------------------------------
+
+New in Planet Ruler: Automatic camera configuration generation from image EXIF data, eliminating the need for manual camera config files.
+
+Dataset Details
+~~~~~~~~~~~~~~
+
+* **Any image with EXIF data**: Works with photos from phones, DSLRs, mirrorless cameras
+* **Altitude**: User-specified or estimated from GPS/flight data
+* **Camera**: Automatically detected from EXIF (make/model, focal length, etc.)
+* **No config files needed**: Camera parameters extracted automatically
+* **Supported cameras**: iPhones, Android phones, Canon, Nikon, Sony, and hundreds more
+
+Complete Auto-Config Analysis
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   import planet_ruler.observation as obs
+   from planet_ruler.camera import create_config_from_image
+   from planet_ruler.fit import calculate_parameter_uncertainty, format_parameter_result
+   
+   # Auto-generate camera config from image EXIF data
+   image_path = "demo/images/your_horizon_photo.jpg"
+   altitude_km = 10  # Flight altitude in km (adjust as needed)
+   
+   print("="*50)
+   print("ZERO-CONFIG WORKFLOW")
+   print("="*50)
+   
+   # Create configuration automatically from image
+   auto_config = create_config_from_image(
+       image_path=image_path,
+       altitude_km=altitude_km,
+       planet="earth"
+   )
+   
+   print("Auto-detected camera parameters:")
+   camera_info = auto_config["camera"]
+   print(f"  Camera: {camera_info.get('make', 'Unknown')} {camera_info.get('model', 'Unknown')}")
+   print(f"  Focal length: {camera_info['focal_length_mm']:.1f} mm")
+   print(f"  Sensor width: {camera_info['sensor_width_mm']:.1f} mm")
+   print(f"  Field of view: {auto_config['observation']['field_of_view_deg']:.1f}°")
+   
+   # Create observation using auto-generated config
+   observation = obs.LimbObservation(
+       image_filepath=image_path,
+       fit_config=auto_config  # Use dict instead of file path
+   )
+   
+   # Standard analysis workflow
+   print("\nDetecting horizon...")
+   observation.detect_limb(method="manual")  # Opens GUI for point selection
+   observation.smooth_limb()
+   print("✓ Horizon detected and smoothed")
+   
+   print("\nFitting planetary parameters...")
+   observation.fit_limb(maxiter=1000, seed=42)
+   print("✓ Parameter fitting completed")
+   
+   # Calculate results
+   radius_result = calculate_parameter_uncertainty(
+       observation, "r", scale_factor=1000, uncertainty_type="std"
+   )
+   
+   print("\nRESULTS:")
+   print(format_parameter_result(radius_result, "km"))
+   print(f"\n✓ Zero-configuration workflow completed!")
+   print(f"✓ No camera config file creation required")
+
+**Key Advantages:**
+
+* **No manual camera configuration**: EXIF data provides focal length, camera make/model
+* **Automatic sensor size lookup**: Built-in database of camera sensor dimensions
+* **Parameter override support**: Manually specify field-of-view or focal length if needed
+* **Same analysis workflow**: Use with existing [`detect_limb()`](planet_ruler/observation.py) and [`fit_limb()`](planet_ruler/observation.py) methods
+
+**CLI Usage:**
+
+.. code-block:: bash
+
+   # Generate config and run measurement in one command
+   planet-ruler measure --auto-config --altitude 10 --planet earth your_photo.jpg
+   
+   # Override auto-detected parameters if needed
+   planet-ruler measure --auto-config --altitude 10 --planet earth --field-of-view 50 your_photo.jpg
+
 Example 1: Earth from International Space Station
 -------------------------------------------------
 
@@ -534,13 +622,13 @@ To run these examples, ensure you have:
    
    .. code-block:: bash
    
-      pip install planet-ruler
+      python -m pip install planet-ruler
    
    **Optional: For AI segmentation support:**
    
    .. code-block:: bash
    
-      pip install segment-anything torch
+      python -m pip install segment-anything torch
 
 2. **Demo data available** in the expected locations:
    
@@ -554,7 +642,7 @@ To run these examples, ensure you have:
    
    .. code-block:: bash
    
-      pip install matplotlib seaborn pandas
+      python -m pip install matplotlib seaborn pandas
 
 === SUMMARY TABLE ===
 
