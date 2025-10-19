@@ -206,6 +206,7 @@ class TestManualDetectionMethodIntegration:
         args = MagicMock()
         args.image = "test_image.jpg"
         args.camera_config = "config.yaml"
+        args.auto_config = False
         args.detection_method = "manual"
         args.altitude = None
         args.focal_length = None
@@ -265,6 +266,7 @@ class TestManualDetectionMethodIntegration:
         args = MagicMock()
         args.image = "test_image.jpg"
         args.camera_config = "config.json"
+        args.auto_config = False
         args.detection_method = "manual"
         args.altitude = None
         args.focal_length = None
@@ -309,6 +311,7 @@ class TestManualDetectionMethodIntegration:
         args = MagicMock()
         args.image = "test_image.jpg"
         args.camera_config = "config.yaml"
+        args.auto_config = False
         args.detection_method = "manual"
         args.altitude = 500.0  # Override config value
         args.focal_length = 85.0  # Override config value
@@ -345,6 +348,7 @@ class TestManualDetectionMethodIntegration:
         args = MagicMock()
         args.image = "test.jpg"
         args.camera_config = "broken_config.yaml"
+        args.auto_config = False
         args.detection_method = "manual"
         args.altitude = None
         args.focal_length = None
@@ -378,6 +382,7 @@ class TestManualDetectionMethodIntegration:
         args = MagicMock()
         args.image = "test_image.jpg"
         args.camera_config = "config.yaml"
+        args.auto_config = False
         args.detection_method = "manual"
         args.altitude = None
         args.focal_length = None
