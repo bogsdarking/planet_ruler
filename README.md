@@ -65,7 +65,10 @@ Dramatic spherical curvature
 ```bash
 # From source (development)
 git clone https://github.com/bogsdarking/planet_ruler.git
-cd planet_ruler && pip install -e .
+cd planet_ruler
+
+# Install using current Python environment (recommended)
+python -m pip install -e .
 
 # Command-line tool is now available
 planet-ruler --help
@@ -87,11 +90,17 @@ print(f"Fitted parameters: {obs.best_parameters}")
 
 ### Command Line
 ```bash
-# Measure planetary radius from image
+# Measure planetary radius using existing config file
 planet-ruler measure photo.jpg --camera-config camera_config.yaml
 
+# NEW: Auto-generate config from image EXIF data (requires altitude)
+planet-ruler measure photo.jpg --auto-config --altitude 10668
+
+# Auto-config with specific planet (affects initial radius guess)
+planet-ruler measure photo.jpg --auto-config --altitude 10668 --planet mars
+
 # Choose detection method (segmentation, gradient-break, or manual)
-planet-ruler measure photo.jpg --camera-config camera_config.yaml --detection-method manual
+planet-ruler measure photo.jpg --auto-config --altitude 10668 --detection-method manual
 
 # Try built-in examples
 planet-ruler demo --planet earth
@@ -137,6 +146,11 @@ planet-ruler demo --planet earth
 <tr>
 <td width="50%">
 
+**Automatic Camera Detection** ✨ *NEW*
+- Auto-extract camera parameters from EXIF data
+- Supports phones, DSLRs, mirrorless, point-and-shoot
+- No manual camera configuration needed
+
 **Flexible Detection**
 - Manual, algorithmic, or AI feature extraction
 - Robust to image noise and artifacts
@@ -166,6 +180,11 @@ planet-ruler demo --planet earth
 - Command-line tool for automation
 - Jupyter notebooks for exploration
 
+**Works with Any Camera**
+- iPhones, Android phones, DSLRs, mirrorless
+- Automatic sensor size detection
+- Intelligent parameter estimation
+
 </td>
 </tr>
 </table>
@@ -186,7 +205,7 @@ planet-ruler demo --planet earth
 # Clone and install in one go
 git clone https://github.com/bogsdarking/planet_ruler.git
 cd planet_ruler
-pip install -e .
+python -m pip install -e .
 
 # Verify installation
 planet-ruler --help
@@ -202,8 +221,8 @@ git clone https://github.com/bogsdarking/planet_ruler.git
 cd planet_ruler
 
 # Install without heavy AI dependencies
-pip install -e . --no-deps
-pip install numpy scipy matplotlib pillow pyyaml pandas tqdm seaborn
+python -m pip install -e . --no-deps
+python -m pip install numpy scipy matplotlib pillow pyyaml pandas tqdm seaborn
 
 # Note: Manual horizon detection required without segment-anything
 ```
@@ -217,9 +236,9 @@ git clone https://github.com/bogsdarking/planet_ruler.git
 cd planet_ruler
 
 # Full development environment
-pip install -e .
-pip install -r requirements.txt
-pip install -r requirements-test.txt
+python -m pip install -e .
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-test.txt
 
 # Run tests to verify
 pytest tests/ -v
@@ -233,6 +252,22 @@ pytest tests/ -v
 
 ## Try It Now
 
+### NEW: Zero-Configuration Workflow ✨
+```python
+# Just need your photo and altitude - planet_ruler handles the rest!
+from planet_ruler.camera import create_config_from_image
+import planet_ruler as pr
+
+# Step 1: Auto-detect camera parameters
+config = create_config_from_image("my_photo.jpg", altitude_m=10668)
+
+# Step 2: Measure the planet
+obs = pr.LimbObservation("my_photo.jpg", config)
+obs.detect_limb().fit_limb()
+
+print(f"Your planet's radius: {obs.best_parameters['r']/1000:.0f} km")
+```
+
 ### Interactive Demo
 ```python
 # Launch interactive widget with examples (in Jupyter notebook)
@@ -242,6 +277,25 @@ params = load_demo_parameters(demo)
 ```
 
 ### Use Your Own Photo
+
+#### Option 1: Auto-Config (New! ✨)
+```python
+import planet_ruler as pr
+from planet_ruler.camera import create_config_from_image
+
+# Auto-generate config from image EXIF data
+config = create_config_from_image("your_photo.jpg", altitude_m=10668, planet="earth")
+
+# Use the auto-generated config
+obs = pr.LimbObservation("your_photo.jpg", config)
+obs.detect_limb()
+obs.fit_limb()
+
+print(f"Detected camera: {config['camera_info']['camera_model']}")
+print(f"Fitted radius: {obs.best_parameters['r']/1000:.0f} km")
+```
+
+#### Option 2: Manual Config File
 ```python
 import planet_ruler as pr
 
@@ -287,11 +341,47 @@ parameter_limits:
 
 ## Usage Examples
 
-### Example 1: Earth from ISS
+### Example 1: Smartphone Photo with Auto-Config ✨ *NEW*
+```python
+import planet_ruler as pr
+from planet_ruler.camera import create_config_from_image
+
+# Your iPhone/Android photo with horizon - just need altitude!
+config = create_config_from_image(
+    "airplane_window_photo.jpg",
+    altitude_m=10668,  # 35,000 feet in meters
+    planet="earth"
+)
+
+print(f"Detected: {config['camera_info']['camera_model']}")
+# -> "iPhone 14 Pro" (or your camera model)
+
+# Measure the planet
+obs = pr.LimbObservation("airplane_window_photo.jpg", config)
+obs.detect_limb()
+obs.fit_limb()
+obs.plot()
+
+print(f"Earth radius: {obs.best_parameters['r']/1000:.0f} km")
+```
+
+### Example 2: Command Line with Auto-Config
+```bash
+# Simple one-liner with any camera!
+planet-ruler measure my_photo.jpg --auto-config --altitude 10668
+
+# With specific planet and detection method
+planet-ruler measure mars_photo.jpg --auto-config --altitude 4500 --planet mars --detection-method manual
+
+# Override auto-detected parameters if needed
+planet-ruler measure photo.jpg --auto-config --altitude 10668 --focal-length 50
+```
+
+### Example 3: Earth from ISS (Traditional Config)
 ```python
 import planet_ruler as pr
 
-# Load ISS Earth photo with configuration
+# Load ISS Earth photo with manual configuration
 obs = pr.LimbObservation(
     "demo/images/iss064e002941.jpg",
     "config/earth_iss_1.yaml"
@@ -303,17 +393,16 @@ obs.fit_limb()       # Optimize planetary parameters
 obs.plot()           # Visualize results
 
 # Results
-# Results require manual extraction from fitted parameters
 print(f"Best fit parameters: {obs.best_parameters}")
 print(f"Planetary radius (r): {obs.best_parameters['r']/1000:.0f} km")
 ```
 
-### Example 2: Saturn from Cassini
+### Example 4: Saturn from Cassini
 ```python
 # Analyze Saturn's limb from Cassini spacecraft
 obs = pr.LimbObservation(
     "demo/images/saturn_pia21341-1041.jpg",
-    "config/saturn-cassini-1.yaml" 
+    "config/saturn-cassini-1.yaml"
 )
 
 # Two-step analysis
@@ -323,21 +412,6 @@ obs.fit_limb()     # fit parameters
 # Rich visualization
 from planet_ruler.plot import plot_3d_solution
 plot_3d_solution(**obs.best_parameters)  # 3D planetary geometry view
-```
-
-### Example 3: Command Line Usage
-```bash
-# Basic measurement
-planet-ruler measure airplane_horizon.jpg --camera-config config/your_setup.yaml
-
-# With manual limb detection (interactive GUI)
-planet-ruler measure airplane_horizon.jpg --camera-config config/your_setup.yaml --detection-method manual
-
-# With plots and output saving
-planet-ruler measure photo.jpg --camera-config config.yaml --plot --output results.json
-
-# Run Saturn demo (in Jupyter notebook)
-from planet_ruler.demo import make_dropdown, load_demo_parameters
 ```
 
 ## Documentation & Resources
@@ -400,7 +474,7 @@ obs.plot()            # Show results
 # Fork the repo, then:
 git clone https://github.com/YOUR_USERNAME/planet_ruler.git
 cd planet_ruler
-pip install -e . && pip install -r requirements.txt && pip install -r requirements-test.txt
+python -m pip install -e . && python -m pip install -r requirements.txt && python -m pip install -r requirements-test.txt
 pytest tests/ -v  # Verify everything works
 ```
 

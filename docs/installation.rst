@@ -39,13 +39,13 @@ From PyPI (Recommended)
 
 .. code-block:: bash
 
-   pip install planet-ruler
+   python -m pip install planet-ruler
    
 **Optional: For AI segmentation support:**
 
 .. code-block:: bash
 
-   pip install planet-ruler segment-anything torch
+   python -m pip install planet-ruler segment-anything torch
 
 From Source
 ~~~~~~~~~~~
@@ -54,7 +54,7 @@ From Source
 
    git clone https://github.com/bogsdarking/planet-ruler.git
    cd planet-ruler
-   pip install -e .
+   python -m pip install -e .
 
 For development with testing dependencies:
 
@@ -62,7 +62,7 @@ For development with testing dependencies:
 
    git clone https://github.com/bogsdarking/planet-ruler.git
    cd planet-ruler
-   pip install -e ".[dev]"
+   python -m pip install -e ".[dev]"
 
 Using Conda
 ~~~~~~~~~~~
@@ -82,7 +82,7 @@ We recommend using a virtual environment:
 
    python -m venv planet-ruler-env
    source planet-ruler-env/bin/activate  # On Windows: planet-ruler-env\Scripts\activate
-   pip install planet-ruler
+   python -m pip install planet-ruler
 
 **Using conda:**
 
@@ -90,7 +90,7 @@ We recommend using a virtual environment:
 
    conda create -n planet-ruler python=3.9
    conda activate planet-ruler
-   pip install planet-ruler
+   python -m pip install planet-ruler
 
 Verification
 -----------
@@ -120,7 +120,7 @@ The Segment Anything model requires PyTorch. Install with:
 
 .. code-block:: bash
 
-   pip install torch torchvision
+   python -m pip install torch torchvision
 
 **PIL/Pillow conflicts**
 
@@ -128,8 +128,8 @@ If you encounter PIL import errors:
 
 .. code-block:: bash
 
-   pip uninstall PIL Pillow
-   pip install Pillow
+   python -m pip uninstall PIL Pillow
+   python -m pip install Pillow
 
 **NumPy/SciPy build errors**
 
@@ -183,7 +183,7 @@ To enable GPU support:
 .. code-block:: bash
 
    # Install PyTorch with CUDA support
-   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+   python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 
 Next Steps
 ----------

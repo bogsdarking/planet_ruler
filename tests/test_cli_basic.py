@@ -249,6 +249,7 @@ class TestMeasureCommand:
         args = MagicMock()
         args.image = "test.jpg"
         args.camera_config = "config.yaml"
+        args.auto_config = False
         args.altitude = None
         args.focal_length = None
         args.sensor_width = None
@@ -304,6 +305,7 @@ class TestMeasureCommandManualDetection:
         args = MagicMock()
         args.image = "test.jpg"
         args.camera_config = "config.yaml"
+        args.auto_config = False
         args.detection_method = "manual"
         args.altitude = None
         args.focal_length = None
@@ -362,6 +364,7 @@ class TestMeasureCommandManualDetection:
             args = MagicMock()
             args.image = "test.jpg"
             args.camera_config = "config.yaml"
+            args.auto_config = False
             args.detection_method = method
             args.altitude = None
             args.focal_length = None
@@ -396,6 +399,7 @@ class TestMeasureCommandManualDetection:
         args = MagicMock()
         args.image = "test.jpg"
         args.camera_config = None  # Missing required camera config
+        args.auto_config = False
         args.detection_method = "manual"
         args.altitude = None
         args.focal_length = None

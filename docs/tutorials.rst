@@ -3,6 +3,82 @@ Tutorials
 
 This section provides step-by-step tutorials for using Planet Ruler to determine planetary radius from horizon photographs using the default interactive manual annotation approach.
 
+Tutorial 0: Zero-Configuration Quick Start
+------------------------------------------
+
+The fastest way to get started with Planet Ruler using automatic camera parameter detection from image EXIF data.
+
+Prerequisites
+~~~~~~~~~~~~
+
+* Python 3.8+ with Planet Ruler installed
+* A horizon photograph with EXIF data (from phone, DSLR, mirrorless camera)
+* Known or estimated altitude when photo was taken
+
+Step 1: Automatic Camera Detection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Planet Ruler can automatically extract camera parameters from image EXIF data:
+
+.. code-block:: python
+
+   from planet_ruler.camera import create_config_from_image
+   
+   # Automatically generate config from image EXIF
+   auto_config = create_config_from_image(
+       image_path="your_horizon_photo.jpg",
+       altitude_km=10.0,  # Your altitude in kilometers
+       planet="earth"
+   )
+   
+   # View detected camera info
+   print("Auto-detected camera:")
+   camera = auto_config["camera"]
+   print(f"  Make/Model: {camera.get('make', 'Unknown')} {camera.get('model', 'Unknown')}")
+   print(f"  Focal length: {camera['focal_length_mm']:.1f} mm")
+   print(f"  Sensor width: {camera['sensor_width_mm']:.1f} mm")
+   print(f"  Field of view: {auto_config['observation']['field_of_view_deg']:.1f}°")
+
+Step 2: Direct Analysis (No Config Files)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use the auto-generated configuration directly:
+
+.. code-block:: python
+
+   import planet_ruler.observation as obs
+   
+   # Load observation using auto-generated config
+   observation = obs.LimbObservation(
+       image_filepath="your_horizon_photo.jpg",
+       fit_config=auto_config  # Use dict instead of file path
+   )
+   
+   # Standard workflow continues the same
+   observation.detect_limb(method="manual")
+   observation.smooth_limb()
+   observation.fit_limb()
+
+Step 3: CLI Usage (Even Simpler)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For the simplest workflow, use the command line:
+
+.. code-block:: bash
+
+   # One command to measure planetary radius
+   planet-ruler measure --auto-config --altitude 10 --planet earth your_photo.jpg
+   
+   # Override auto-detected field-of-view if needed
+   planet-ruler measure --auto-config --altitude 10 --planet earth --field-of-view 60 your_photo.jpg
+
+**Advantages of Zero-Config Approach:**
+
+* **No manual camera configuration needed**
+* **Works immediately with any EXIF-enabled image**
+* **Automatic sensor size database lookup**
+* **Parameter override capability when needed**
+
 Tutorial 1: Basic Earth Radius Calculation
 ------------------------------------------
 
@@ -392,7 +468,7 @@ Planet Ruler works immediately after installation with no additional dependencie
 .. code-block:: bash
 
    # Essential: Install Planet Ruler (manual annotation works immediately)
-   pip install planet-ruler
+   python -m pip install planet-ruler
 
 Verification Test
 ~~~~~~~~~~~~~~~~
@@ -422,10 +498,10 @@ For automatic detection methods, install additional dependencies:
 .. code-block:: bash
 
    # Optional: AI segmentation support (requires PyTorch + Segment Anything)
-   pip install segment-anything torch torchvision
+   python -m pip install segment-anything torch torchvision
    
    # Optional: GPU support for faster AI processing
-   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+   python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 
 Testing Optional Dependencies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -457,7 +533,7 @@ Troubleshooting
    
    .. code-block:: bash
    
-      pip install segment-anything torch
+      python -m pip install segment-anything torch
 
 3. **Performance tips for manual annotation**
    
