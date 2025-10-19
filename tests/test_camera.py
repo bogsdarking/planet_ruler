@@ -684,6 +684,205 @@ class TestConfigGeneration:
                     sys.modules.update(original_modules)
 
 
+# ============================================================================
+# NEW TESTS FOR IMPROVED COVERAGE
+# ============================================================================
+
+
+class TestExifExtractionCoverage:
+    """Tests to cover the EXIF extraction loop (lines 132-140)."""
+
+    @patch.object(camera_module, "Image")
+    def test_extract_exif_with_valid_data(self, mock_image):
+        """Test extract_exif when EXIF data is properly extracted."""
+        # Create a mock image with _getexif that returns data
+        mock_img = MagicMock()
+        mock_img._getexif = Mock(
+            return_value={
+                271: "Apple",  # Make tag
+                272: "iPhone 13",  # Model tag
+                37386: (4.2, 1),  # FocalLength tag
+            }
+        )
+
+        mock_image.open.return_value = mock_img
+
+        result = camera_module.extract_exif("test.jpg")
+
+        # Verify the EXIF data was extracted and tags were converted
+        assert "Make" in result
+        assert "Model" in result
+        assert "FocalLength" in result
+        assert result["Make"] == "Apple"
+        assert result["Model"] == "iPhone 13"
+
+    @patch.object(camera_module, "Image")
+    def test_extract_exif_with_no_getexif_attribute(self, mock_image):
+        """Test extract_exif when image has no _getexif attribute."""
+        mock_img = MagicMock()
+        # Delete the _getexif attribute to test the hasattr check
+        del mock_img._getexif
+
+        mock_image.open.return_value = mock_img
+
+        result = camera_module.extract_exif("test.jpg")
+
+        # Should return empty dict when no _getexif
+        assert result == {}
+
+    @patch.object(camera_module, "Image")
+    def test_extract_exif_with_getexif_none(self, mock_image):
+        """Test extract_exif when _getexif() returns None."""
+        mock_img = MagicMock()
+        mock_img._getexif = Mock(return_value=None)
+
+        mock_image.open.return_value = mock_img
+
+        result = camera_module.extract_exif("test.jpg")
+
+        # Should return empty dict when _getexif() is None
+        assert result == {}
+
+
+class TestFocalLength35mmCoverage:
+    """Test coverage for 35mm equivalent focal length (line 179)."""
+
+    def test_get_focal_length_35mm_equiv_present(self):
+        """Test when FocalLengthIn35mmFilm is in EXIF data."""
+        exif_data = {"FocalLengthIn35mmFilm": 28}
+
+        result = get_focal_length_35mm_equiv(exif_data)
+
+        assert result == 28.0
+        assert isinstance(result, float)
+
+    def test_get_focal_length_35mm_equiv_missing(self):
+        """Test when FocalLengthIn35mmFilm is not in EXIF data."""
+        exif_data = {"FocalLength": (6.1, 1)}  # Different field
+
+        result = get_focal_length_35mm_equiv(exif_data)
+
+        assert result is None
+
+
+class TestThetaInitializationCoverage:
+    """Test successful theta initialization with geometry import (lines 602-613)."""
+
+    @patch.object(camera_module, "extract_camera_parameters")
+    @patch.object(camera_module, "get_gps_altitude")
+    @patch.object(camera_module, "get_initial_radius")
+    def test_create_config_with_successful_geometry_import(
+        self, mock_radius, mock_gps, mock_params
+    ):
+        """Test theta initialization when geometry import succeeds."""
+        mock_params.return_value = {
+            "focal_length_mm": 6.1,
+            "sensor_width_mm": 7.6,
+            "sensor_height_mm": 5.7,
+            "sensor_width_min": None,
+            "sensor_width_max": None,
+            "camera_model": "Canon PowerShot G12",
+            "camera_type": "compact",
+            "confidence": "high",
+            "image_width_px": 4000,
+            "image_height_px": 3000,
+        }
+        mock_gps.return_value = 10000.0
+        mock_radius.return_value = 6371000  # Earth radius
+
+        # Mock the geometry module to exist and work
+        mock_geometry = MagicMock()
+        mock_geometry.limb_camera_angle = Mock(return_value=0.0157)  # ~0.9 degrees
+
+        with patch.dict("sys.modules", {"planet_ruler.geometry": mock_geometry}):
+            config = create_config_from_image("dummy.jpg", altitude_m=10000)
+
+            # Verify theta values were set from geometry calculation
+            assert "theta_x" in config["init_parameter_values"]
+            assert "theta_y" in config["init_parameter_values"]
+            assert "theta_z" in config["init_parameter_values"]
+            # theta_x should be from limb_camera_angle
+            assert config["init_parameter_values"]["theta_x"] == 0.0157
+            # theta_y and theta_z should default to 0
+            assert config["init_parameter_values"]["theta_y"] == 0.0
+            assert config["init_parameter_values"]["theta_z"] == 0.0
+
+    @patch.object(camera_module, "extract_camera_parameters")
+    @patch.object(camera_module, "get_gps_altitude")
+    @patch.object(camera_module, "get_initial_radius")
+    def test_create_config_with_geometry_calculation_error(
+        self, mock_radius, mock_gps, mock_params
+    ):
+        """Test theta initialization when geometry calculation raises error."""
+        mock_params.return_value = {
+            "focal_length_mm": 6.1,
+            "sensor_width_mm": 7.6,
+            "sensor_height_mm": 5.7,
+            "sensor_width_min": None,
+            "sensor_width_max": None,
+            "camera_model": "Canon PowerShot G12",
+            "camera_type": "compact",
+            "confidence": "high",
+            "image_width_px": 4000,
+            "image_height_px": 3000,
+        }
+        mock_gps.return_value = 10000.0
+        mock_radius.return_value = 6371000
+
+        # Mock geometry to raise an exception during calculation
+        mock_geometry = MagicMock()
+        mock_geometry.limb_camera_angle = Mock(side_effect=ValueError("Invalid radius"))
+
+        with patch.dict("sys.modules", {"planet_ruler.geometry": mock_geometry}):
+            config = create_config_from_image("dummy.jpg", altitude_m=10000)
+
+            # Should fall back to default theta values
+            assert config["init_parameter_values"]["theta_x"] == 0.0
+            assert config["init_parameter_values"]["theta_y"] == 0.0
+            assert config["init_parameter_values"]["theta_z"] == 0.0
+
+
+class TestAdditionalEdgeCases:
+    """Additional edge cases to ensure robust coverage."""
+
+    @patch.object(camera_module, "extract_exif")
+    @patch.object(camera_module, "get_image_dimensions")
+    def test_extract_params_with_35mm_equiv_calculation(self, mock_dims, mock_exif):
+        """Test sensor dimension calculation from 35mm equivalent."""
+        mock_dims.return_value = (4000, 3000)
+        mock_exif.return_value = {
+            "Make": "Test",
+            "Model": "Test Camera",
+            "FocalLength": (5.0, 1),
+            "FocalLengthIn35mmFilm": 26,  # This triggers calculation path
+        }
+
+        params = extract_camera_parameters("test.jpg")
+
+        # Should use calculated sensor dimensions
+        assert params["confidence"] == "medium"
+        assert params["camera_type"] == "calculated"
+        assert params["sensor_width_mm"] is not None
+        assert params["sensor_height_mm"] is not None
+
+    def test_get_focal_length_mm_with_tuple(self):
+        """Test focal length extraction when it's a tuple."""
+        exif_data = {"FocalLength": (61, 10)}  # Tuple format: numerator/denominator
+
+        result = get_focal_length_mm(exif_data)
+
+        assert result == 6.1
+        assert isinstance(result, float)
+
+    def test_get_focal_length_mm_with_float(self):
+        """Test focal length extraction when it's already a float."""
+        exif_data = {"FocalLength": 6.1}
+
+        result = get_focal_length_mm(exif_data)
+
+        assert result == 6.1
+
+
 if __name__ == "__main__":
     # Allow running tests directly
     pytest.main([__file__, "-v"])

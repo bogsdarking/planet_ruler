@@ -102,3 +102,16 @@ Documentation = "https://bogsdarking.github.io/planet_ruler/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["planet_ruler"]
+
+[tool.coverage.run]
+omit = [
+    "*/tests/*",
+    "*/__main__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
