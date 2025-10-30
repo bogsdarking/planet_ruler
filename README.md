@@ -80,12 +80,17 @@ import planet_ruler as pr
 
 # Basic analysis
 obs = pr.LimbObservation("photo.jpg", "camera_config.yaml")
-obs.detect_limb()  # AI-powered horizon detection
-obs.fit_limb()     # Optimize planetary parameters
+
+# Choose detection method:
+obs.detect_limb(method='manual')          # Interactive GUI (default)
+# obs.detect_limb(method='gradient-field')  # Automated gradient analysis
+# obs.detect_limb(method='segmentation')    # AI-powered (requires PyTorch)
+
+obs.fit_limb()     # Multi-resolution parameter optimization
 obs.plot()         # Visualize results
 
-# Access results (requires custom analysis of fit parameters)
-print(f"Fitted parameters: {obs.best_parameters}")
+# Access results with uncertainty
+print(f"Radius: {obs.best_parameters['r']/1000:.0f} ± {obs.radius_uncertainty:.0f} km")
 ```
 
 ### Command Line
@@ -93,14 +98,14 @@ print(f"Fitted parameters: {obs.best_parameters}")
 # Measure planetary radius using existing config file
 planet-ruler measure photo.jpg --camera-config camera_config.yaml
 
-# NEW: Auto-generate config from image EXIF data (requires altitude)
+# Auto-generate config from image EXIF data (requires altitude)
 planet-ruler measure photo.jpg --auto-config --altitude 10668
 
 # Auto-config with specific planet (affects initial radius guess)
 planet-ruler measure photo.jpg --auto-config --altitude 10668 --planet mars
 
-# Choose detection method (segmentation, gradient-break, or manual)
-planet-ruler measure photo.jpg --auto-config --altitude 10668 --detection-method manual
+# Choose detection method (manual, gradient-field, or segmentation)
+planet-ruler measure photo.jpg --auto-config --altitude 10668 --detection-method gradient-field
 
 # Try built-in examples
 planet-ruler demo --planet earth
@@ -116,15 +121,20 @@ planet-ruler demo --planet earth
 <summary><strong>How It Works (Click to expand)</strong></summary>
 
 1. **Capture**: Photograph showing horizon/limb from altitude
-2. **Detect**: AI-powered horizon line detection
+2. **Detect**: Choose your detection method:
+   - **Manual**: Interactive GUI for precise point selection (default, no dependencies)
+   - **Gradient-field**: Automated detection using gradient flow analysis
+   - **Segmentation**: AI-powered detection (requires PyTorch + Segment Anything)
 3. **Measure**: Extract curvature from the detected horizon
 4. **Model**: Account for camera optics, altitude, and viewing geometry  
-5. **Optimize**: Fit theoretical curves to observations using differential evolution
-6. **Result**: Planetary radius with uncertainty estimates
+5. **Optimize**: Fit theoretical curves to observations using multi-resolution optimization
+6. **Uncertainty**: Quantify measurement precision using population spread, Hessian approximation, or profile likelihood
 
 **Mathematical Foundation**:
 - Spherical geometry and horizon distance calculations
 - Camera intrinsic/extrinsic parameter modeling
+- Gradient-field analysis with directional blur and flux integration
+- Multi-resolution optimization with coarse-to-fine refinement
 - Non-linear optimization with robust error handling
 
 </details>
@@ -146,14 +156,15 @@ planet-ruler demo --planet earth
 <tr>
 <td width="50%">
 
-**Automatic Camera Detection** ✨ *NEW*
+**Automatic Camera Detection**
 - Auto-extract camera parameters from EXIF data
 - Supports phones, DSLRs, mirrorless, point-and-shoot
 - No manual camera configuration needed
 
-**Flexible Detection**
-- Manual, algorithmic, or AI feature extraction
-- Robust to image noise and artifacts
+**Flexible Detection Methods**
+- **Manual**: Interactive GUI with precision controls (default)
+- **Gradient-field**: Automated detection via directional blur and flux analysis
+- **AI Segmentation**: Deep learning-powered (optional)
 
 **Advanced Camera Models**
 - Camera parameter optimization
@@ -168,7 +179,8 @@ planet-ruler demo --planet earth
 <td width="50%">
 
 **Scientific Rigor**
-- Robust optimization and uncertainty estimation
+- Multi-resolution optimization with coarse-to-fine refinement
+- Advanced uncertainty estimation (population spread, Hessian, profile likelihood)
 - Mathematical validation with property tests
 
 **Rich Visualizations**
@@ -252,7 +264,7 @@ pytest tests/ -v
 
 ## Try It Now
 
-### NEW: Zero-Configuration Workflow ✨
+### Zero-Configuration Workflow
 ```python
 # Just need your photo and altitude - planet_ruler handles the rest!
 from planet_ruler.camera import create_config_from_image
@@ -278,7 +290,7 @@ params = load_demo_parameters(demo)
 
 ### Use Your Own Photo
 
-#### Option 1: Auto-Config (New! ✨)
+#### Option 1: Auto-Config
 ```python
 import planet_ruler as pr
 from planet_ruler.camera import create_config_from_image
@@ -305,10 +317,10 @@ obs = pr.LimbObservation(
     "config/your_camera.yaml"
 )
 
-# Choose detection method: 'segmentation', 'gradient-break', or 'manual'
-obs.limb_detection = 'manual'  # For interactive annotation
+# Choose detection method: 'manual', 'gradient-field', or 'segmentation'
+obs.limb_detection = 'gradient-field'  # For automated detection without ML
 # or set during initialization:
-# obs = pr.LimbObservation("photo.jpg", "config.yaml", limb_detection='manual')
+# obs = pr.LimbObservation("photo.jpg", "config.yaml", limb_detection='gradient-field')
 
 obs.detect_limb()
 obs.fit_limb()
@@ -341,7 +353,7 @@ parameter_limits:
 
 ## Usage Examples
 
-### Example 1: Smartphone Photo with Auto-Config ✨ *NEW*
+### Example 1: Smartphone Photo with Auto-Config
 ```python
 import planet_ruler as pr
 from planet_ruler.camera import create_config_from_image
@@ -371,7 +383,7 @@ print(f"Earth radius: {obs.best_parameters['r']/1000:.0f} km")
 planet-ruler measure my_photo.jpg --auto-config --altitude 10668
 
 # With specific planet and detection method
-planet-ruler measure mars_photo.jpg --auto-config --altitude 4500 --planet mars --detection-method manual
+planet-ruler measure mars_photo.jpg --auto-config --altitude 4500 --planet mars --detection-method gradient-field
 
 # Override auto-detected parameters if needed
 planet-ruler measure photo.jpg --auto-config --altitude 10668 --focal-length 50
@@ -388,9 +400,9 @@ obs = pr.LimbObservation(
 )
 
 # Full analysis pipeline
-obs.detect_limb()    # AI horizon detection
-obs.fit_limb()       # Optimize planetary parameters
-obs.plot()           # Visualize results
+obs.detect_limb(method='gradient-field')  # Automated gradient-based detection
+obs.fit_limb()                             # Multi-resolution parameter optimization
+obs.plot()                                 # Visualize results
 
 # Results
 print(f"Best fit parameters: {obs.best_parameters}")
@@ -406,8 +418,8 @@ obs = pr.LimbObservation(
 )
 
 # Two-step analysis
-obs.detect_limb()  # detect horizon
-obs.fit_limb()     # fit parameters
+obs.detect_limb(method='gradient-field')  # Automated detection
+obs.fit_limb()                            # Multi-resolution fitting
 
 # Rich visualization
 from planet_ruler.plot import plot_3d_solution
@@ -427,16 +439,16 @@ plot_3d_solution(**obs.best_parameters)  # 3D planetary geometry view
 ### Quick References
 ```python
 # Core classes and functions
-pr.LimbObservation(image_path, fit_config)  # Main analysis class
-pr.geometry.horizon_distance(altitude, radius)      # Theoretical calculations  
-pr.fit.optimize_parameters(obs, method='differential_evolution')  # Optimization
-pr.plot.show_analysis(obs, style='comprehensive')   # Visualization
+pr.LimbObservation(image_path, fit_config)                      # Main analysis class
+pr.geometry.horizon_distance(altitude, radius)                   # Theoretical calculations  
+pr.fit.optimize_parameters(obs, method='differential_evolution') # Optimization
+pr.uncertainty.calculate_parameter_uncertainty(obs, 'r')         # Uncertainty estimation
+pr.plot.show_analysis(obs, style='comprehensive')                # Visualization
 
 # Key methods
-obs.detect_limb()     # AI-powered horizon detection
-obs.fit_limb()        # Parameter optimization  
-obs.detect_limb(); obs.fit_limb()  # Complete pipeline
-obs.plot()            # Show results
+obs.detect_limb(method='gradient-field')  # Automated gradient-based detection
+obs.fit_limb(resolution_stages='auto')    # Multi-resolution optimization  
+obs.plot()                                 # Show results with uncertainty
 ```
 
 ## Use Cases & Applications
@@ -454,9 +466,9 @@ obs.plot()            # Show results
 - **Factors affecting precision**: Image quality, horizon clarity, altitude, camera specs
 
 ### **Technical Limitations**
-- **Optimization challenges**: Complex parameter space → potential local minima
-- **AI dependency**: Requires segment-anything model for auto-detection
-- **Computational cost**: Can be slow on older hardware
+- **Optimization challenges**: Complex parameter space → potential local minima (mitigated by multi-resolution optimization)
+- **Detection method trade-offs**: Manual (precise, time-intensive), gradient-field (automated, works for clear horizons), AI segmentation (most versatile, requires PyTorch)
+- **Computational cost**: Multi-resolution optimization can be slow on older hardware
 
 ### **Best Practices**
 1. **Image quality**: Sharp, high-resolution horizons work best

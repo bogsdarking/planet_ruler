@@ -26,11 +26,13 @@ import matplotlib.pyplot as plt
 from planet_ruler.observation import (
     PlanetObservation,
     LimbObservation,
-    unpack_diff_evol_posteriors,
+    package_results,
+)
+from planet_ruler.fit import unpack_diff_evol_posteriors
+from planet_ruler.plot import (
     plot_diff_evol_posteriors,
     plot_full_limb,
     plot_segmentation_masks,
-    package_results,
 )
 
 
@@ -591,7 +593,7 @@ class TestUtilityFunctions:
             "population_energies": [0.1, 0.2, 0.3],
         }
 
-        with patch("planet_ruler.observation.unpack_parameters") as mock_unpack:
+        with patch("planet_ruler.fit.unpack_parameters") as mock_unpack:
             # Mock unpack_parameters to return parameter dicts
             mock_unpack.side_effect = [
                 {"param1": 1.1, "param2": 2.1},
@@ -623,21 +625,18 @@ class TestUtilityFunctions:
         obs.free_parameters = ["param1"]
         obs.parameter_limits = {"param1": [0.5, 1.5]}
         obs.init_parameter_values = {"param1": 1.0}
+        
+        # Mock fit_results with proper structure for unpack_diff_evol_posteriors
+        obs.fit_results = {
+            "population_energies": [0.1, 0.2, 0.3],
+            "population": [[1.1], [1.2], [1.3]]  # Single parameter
+        }
 
-        # Mock the posterior data
-        mock_pop_data = pd.DataFrame(
-            {"param1": [1.1, 1.2, 1.3], "mse": [0.1, 0.2, 0.3]}
-        )
+        plot_diff_evol_posteriors(obs, show_points=False, log=True)
 
-        with patch(
-            "planet_ruler.observation.unpack_diff_evol_posteriors",
-            return_value=mock_pop_data,
-        ):
-            plot_diff_evol_posteriors(obs, show_points=False, log=True)
-
-            mock_kdeplot.assert_called_once()
-            assert mock_axvline.call_count >= 2  # At least bounds lines
-            mock_show.assert_called_once()
+        mock_kdeplot.assert_called_once()
+        assert mock_axvline.call_count >= 2  # At least bounds lines
+        mock_show.assert_called_once()
 
     @patch("matplotlib.pyplot.show")
     @patch("matplotlib.pyplot.imshow")
@@ -648,7 +647,14 @@ class TestUtilityFunctions:
         # Create mock observation
         obs = Mock()
         obs.image = np.random.random((100, 200))
-        obs.best_parameters = {"param1": 1.0, "param2": 2.0}
+        obs.best_parameters = {
+            "r": 6371000.0,
+            "h": 400000.0,
+            "f": 0.024,  # 24mm focal length
+            "w": 0.0236,  # APS-C sensor width (~24mm)
+            "param1": 1.0,
+            "param2": 2.0
+        }
 
         # Mock limb_arc returns
         full_limb_pixels = np.column_stack(
@@ -693,7 +699,7 @@ class TestUtilityFunctions:
         # Mock fit results
         obs.fit_results.x = np.array([1.5, 2.5])
 
-        with patch("planet_ruler.observation.unpack_parameters") as mock_unpack:
+        with patch("planet_ruler.fit.unpack_parameters") as mock_unpack:
             mock_unpack.return_value = {"param1": 1.5, "param2": 2.5}
 
             result = package_results(obs)
