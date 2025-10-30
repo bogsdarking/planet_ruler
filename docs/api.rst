@@ -32,7 +32,8 @@ Image Processing Module
 The image module handles computer vision tasks:
 
 * **Image loading**: `load_image` - loads and validates image files
-* **Horizon detection**: `gradient_break` - detects horizon using gradient analysis
+* **Gradient-field detection**: `gradient_field` - automated limb detection using directional blur and flux analysis
+* **Legacy detection**: `gradient_break` - simpler gradient-based detection
 * **Image segmentation**: `ImageSegmentation` class with Segment Anything integration (optional)
 * **Limb processing**: `smooth_limb`, `fill_nans` - post-processing operations
 
@@ -48,7 +49,6 @@ The observation module provides high-level interfaces:
 
 * **PlanetObservation**: Base class for planetary observations
 * **LimbObservation**: Complete workflow for limb-based radius fitting (default: manual annotation)
-* **Visualization**: `plot_full_limb`, `plot_segmentation_masks`
 * **Results processing**: `unpack_diff_evol_posteriors`, `package_results`
 
 Annotation Module
@@ -81,6 +81,29 @@ The fit module handles parameter optimization:
 * **Parameter handling**: `pack_parameters`, `unpack_parameters`
 * **Uncertainty analysis**: `calculate_parameter_uncertainty`, `format_parameter_result`
 
+Uncertainty Module
+~~~~~~~~~~~~~~~~~
+
+.. automodule:: planet_ruler.uncertainty
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+The uncertainty module provides comprehensive parameter uncertainty estimation:
+
+* **Multiple methods**: Population spread, Hessian approximation, profile likelihood, bootstrap
+* **Auto-selection**: Automatically chooses best method based on minimizer used
+* **Confidence intervals**: Configurable confidence levels (68%, 95%, 99%, etc.)
+* **Method-specific details**: Additional diagnostics for each uncertainty estimation method
+
+**Available Uncertainty Methods:**
+
+* **population**: Uses parameter spread from differential-evolution population (fast, exact for DE)
+* **hessian**: Inverse Hessian approximation at optimum (fast, approximate, works with all minimizers)
+* **profile**: Profile likelihood re-optimization (slow, most accurate, works with all minimizers)
+* **bootstrap**: Multiple fits with different seeds (slow, robust, partially implemented)
+* **auto**: Automatically selects population for DE, hessian for others
+
 Plotting and Visualization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -93,8 +116,11 @@ The plot module provides visualization functions:
 
 * **Image display**: `plot_image` - displays images with optional gradient overlay
 * **Limb visualization**: `plot_limb` - plots detected horizon curves
-* **3D solutions**: `plot_3d_solution` - 3D parameter space visualization  
+* **3D solutions**: `plot_3d_solution` - 3D parameter space visualization
 * **Topography**: `plot_topography` - terrain height visualization
+* **Analysis plots**: `plot_diff_evol_posteriors` - differential evolution posterior distributions
+* **Full limb plots**: `plot_full_limb` - complete limb visualization with uncertainty
+* **Segmentation plots**: `plot_segmentation_masks` - image segmentation mask visualization
 
 Demo and Configuration
 ~~~~~~~~~~~~~~~~~~~~~
@@ -138,6 +164,8 @@ Computer vision and image analysis:
    planet_ruler.image.gradient_break
    planet_ruler.image.smooth_limb
    planet_ruler.image.fill_nans
+   planet_ruler.image.bilinear_interpolate
+   planet_ruler.image.gradient_field
 
 Manual Annotation Functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -178,6 +206,11 @@ Parameter fitting and uncertainty:
    planet_ruler.fit.unpack_parameters
    planet_ruler.fit.calculate_parameter_uncertainty
    planet_ruler.fit.format_parameter_result
+   planet_ruler.uncertainty.calculate_parameter_uncertainty
+   planet_ruler.uncertainty._uncertainty_from_population
+   planet_ruler.uncertainty._uncertainty_from_hessian
+   planet_ruler.uncertainty._uncertainty_from_profile
+   planet_ruler.uncertainty._uncertainty_from_bootstrap
 
 Visualization Functions
 ~~~~~~~~~~~~~~~~~~~~~
@@ -191,6 +224,9 @@ Plotting and display:
    planet_ruler.plot.plot_limb
    planet_ruler.plot.plot_3d_solution
    planet_ruler.plot.plot_topography
+   planet_ruler.plot.plot_diff_evol_posteriors
+   planet_ruler.plot.plot_full_limb
+   planet_ruler.plot.plot_segmentation_masks
 
 Classes
 -------
@@ -223,13 +259,20 @@ LimbObservation
    :undoc-members:
    :show-inheritance:
 
-Complete workflow class for limb-based planetary radius determination. Default detection method is interactive manual annotation. Includes horizon detection, limb fitting, and uncertainty analysis.
+Complete workflow class for limb-based planetary radius determination. Default detection method is interactive manual annotation. Includes horizon detection, limb fitting with multi-resolution optimization, and comprehensive uncertainty analysis.
 
 **Detection Methods Available:**
 
 * **manual** (default): Interactive GUI for precise point selection
+* **gradient-field**: Automated detection using gradient flow analysis with directional blur
 * **segmentation**: AI-powered automatic detection (requires PyTorch + Segment Anything)
-* **gradient-break**: Legacy gradient-based detection
+
+**Key Features:**
+
+* Multi-resolution optimization with coarse-to-fine refinement
+* Multiple uncertainty estimation methods (population spread, Hessian, profile likelihood)
+* Flexible cost functions (gradient-field flux, L1, L2, log-L1)
+* Support for multiple minimizers (differential-evolution, dual-annealing, basinhopping)
 
 ImageSegmentation
 ~~~~~~~~~~~~~~~~

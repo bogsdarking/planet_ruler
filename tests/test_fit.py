@@ -232,17 +232,15 @@ class TestCostFunction:
         assert np.isclose(cost, 0.0, atol=1e-10)
 
     def test_cost_invalid_loss_function(self, simple_target, simple_function):
-        """Test that invalid loss function raises ValueError"""
-        cost_func = CostFunction(
-            target=simple_target,
-            function=simple_function,
-            free_parameters=["m", "b"],
-            init_parameter_values={"m": 1.0, "b": 1.0},
-            loss_function="invalid_loss",
-        )
-
+        """Test that invalid loss function raises ValueError during initialization"""
         with pytest.raises(ValueError, match="Unrecognized loss function"):
-            cost_func.cost({"m": 1.0, "b": 1.0})
+            CostFunction(
+                target=simple_target,
+                function=simple_function,
+                free_parameters=["m", "b"],
+                init_parameter_values={"m": 1.0, "b": 1.0},
+                loss_function="invalid_loss",
+            )
 
     def test_cost_with_nans(self, simple_function):
         """Test cost function handling of NaN values"""
@@ -417,7 +415,7 @@ class TestCalculateParameterUncertainty:
             )
         )
         monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+            "planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack
         )
 
         result = calculate_parameter_uncertainty(mock_observation_basic, method="auto")
@@ -459,7 +457,7 @@ class TestCalculateParameterUncertainty:
         mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
         monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+            "planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack
         )
 
         result = calculate_parameter_uncertainty(
@@ -481,7 +479,7 @@ class TestCalculateParameterUncertainty:
         mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
         monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+            "planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack
         )
 
         result = calculate_parameter_uncertainty(
@@ -501,7 +499,7 @@ class TestCalculateParameterUncertainty:
         mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
         monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+            "planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack
         )
 
         result = calculate_parameter_uncertainty(
@@ -521,7 +519,7 @@ class TestCalculateParameterUncertainty:
         mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
         monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+            "planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack
         )
 
         result = calculate_parameter_uncertainty(
@@ -546,7 +544,7 @@ class TestCalculateParameterUncertainty:
         mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
         monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+            "planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack
         )
 
         scale_factor = 1000.0  # Convert to km
@@ -575,7 +573,7 @@ class TestCalculateParameterUncertainty:
         )
         mock_unpack = Mock(return_value=mock_df)
         monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+            "planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack
         )
 
         result = calculate_parameter_uncertainty(mock_observation_basic, parameter="h")
@@ -589,7 +587,7 @@ class TestCalculateParameterUncertainty:
         mock_df = pd.DataFrame({"r": [6371000, 6371200]})  # Missing 'h' parameter
         mock_unpack = Mock(return_value=mock_df)
         monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+            "planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack
         )
 
         with pytest.raises(
@@ -602,7 +600,7 @@ class TestCalculateParameterUncertainty:
         mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800]})
         mock_unpack = Mock(return_value=mock_df)
         monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+            "planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack
         )
 
         with pytest.raises(
@@ -640,17 +638,16 @@ class TestCalculateParameterUncertainty:
     def test_import_error_handling(self, mock_observation_basic, monkeypatch):
         """Test handling of import error for unpack function"""
 
-        # Mock import to raise ImportError
+        # Mock unpack function to raise ImportError (simulating pandas import failure)
         def mock_import_error(*args, **kwargs):
             raise ImportError("Mocked import error")
 
         monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_import_error
+            "planet_ruler.fit.unpack_diff_evol_posteriors", mock_import_error
         )
 
-        with pytest.raises(
-            ImportError, match="Could not import unpack_diff_evol_posteriors function"
-        ):
+        # Since the function is now in the same module, ImportError will be passed through directly
+        with pytest.raises(ImportError, match="Mocked import error"):
             calculate_parameter_uncertainty(
                 mock_observation_basic, method="differential_evolution"
             )
@@ -660,7 +657,7 @@ class TestCalculateParameterUncertainty:
         mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
         monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
+            "planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack
         )
 
         result = calculate_parameter_uncertainty(mock_observation_basic)

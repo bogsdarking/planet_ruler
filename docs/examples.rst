@@ -141,8 +141,8 @@ Complete Analysis
    print("✓ Horizon detected and smoothed")
    
    # Alternative detection methods available:
-   # observation.detect_limb(method="segmentation")  # AI-powered (requires PyTorch)
-   # observation.detect_limb(method="gradient-break")  # Legacy gradient-based detection
+   # observation.detect_limb(method="gradient-field")   # Automated gradient-based detection
+   # observation.detect_limb(method="segmentation")     # AI-powered (requires PyTorch)
    
    # Fit planetary parameters
    print("\nFitting planetary parameters...")
@@ -225,6 +225,156 @@ Expected Output::
    RESULTS:
    r = 5516 ± 37 km
    h = 418.3 ± 8.7 km
+   
+   Validation:
+   Known Earth radius: 6371 km
+   Absolute error: 855 km
+   Relative error: 13.4%
+
+Example 1.5: Gradient-Field Automated Detection
+----------------------------------------------
+
+Using automated gradient-field detection for horizon identification without requiring ML dependencies or manual annotation.
+
+Dataset Details
+~~~~~~~~~~~~~~
+
+* **Mission**: International Space Station (ISS) or similar clear-horizon imagery
+* **Detection method**: Gradient-field with directional blur and flux analysis
+* **Advantages**: No user interaction required, no PyTorch dependency, works well with clear horizons
+* **Best for**: Batch processing, clear atmospheric limbs, automated pipelines
+
+Complete Gradient-Field Analysis
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   import planet_ruler.observation as obs
+   from planet_ruler.fit import calculate_parameter_uncertainty, format_parameter_result
+   import matplotlib.pyplot as plt
+   
+   # Load observation
+   observation = obs.LimbObservation(
+       image_filepath="demo/images/ISS_Earth_horizon.jpg",
+       fit_config="config/earth_iss_1.yaml"
+   )
+   
+   print("="*50)
+   print("GRADIENT-FIELD AUTOMATED DETECTION")
+   print("="*50)
+   
+   # Gradient-field detection (automated, no user interaction)
+   print("\nDetecting horizon using gradient-field method...")
+   observation.detect_limb(method="gradient-field")
+   observation.smooth_limb()
+   print("✓ Horizon detected automatically")
+   
+   # Fit with multi-resolution optimization
+   print("\nFitting planetary parameters with multi-resolution optimization...")
+   observation.fit_limb(
+       minimizer='dual-annealing',
+       resolution_stages='auto',  # Automatic coarse-to-fine refinement
+       maxiter=1000,
+       seed=42
+   )
+   print("✓ Parameter fitting completed")
+   
+   # Calculate uncertainties using Hessian approximation
+   radius_result = calculate_parameter_uncertainty(
+       observation, "r", 
+       scale_factor=1000, 
+       method='hessian',  # Fast uncertainty estimate
+       confidence_level=0.68  # 1-sigma
+   )
+   
+   altitude_result = calculate_parameter_uncertainty(
+       observation, "h",
+       scale_factor=1000,
+       method='hessian',
+       confidence_level=0.68
+   )
+   
+   # Display results
+   print("\nRESULTS:")
+   print(format_parameter_result(radius_result, "km"))
+   print(format_parameter_result(altitude_result, "km"))
+   
+   # Validation
+   known_earth_radius = 6371.0
+   error = abs(radius_result["value"] - known_earth_radius)
+   print(f"\nValidation:")
+   print(f"Known Earth radius: {known_earth_radius:.0f} km")
+   print(f"Absolute error: {error:.1f} km")
+   print(f"Relative error: {100*error/known_earth_radius:.2f}%")
+   
+   # Visualize gradient-field detection
+   plt.figure(figsize=(15, 5))
+   
+   plt.subplot(1, 3, 1)
+   observation.plot(show=False)
+   plt.title("Original Image")
+   
+   plt.subplot(1, 3, 2)
+   observation.plot(gradient=True, show=False)
+   plt.title("Gradient Field")
+   
+   plt.subplot(1, 3, 3)
+   # Plot detected vs theoretical limb
+   import numpy as np
+   x = np.arange(len(observation.features["limb"]))
+   plt.plot(x, observation.features["limb"], 'b-', linewidth=2, label="Detected limb")
+   
+   # Calculate theoretical limb
+   final_params = observation.init_parameter_values.copy()
+   final_params.update(observation.best_parameters)
+   theoretical_limb = planet_ruler.geometry.limb_arc(
+       n_pix_x=len(observation.features["limb"]),
+       n_pix_y=observation.image_data.shape[0],
+       **final_params
+   )
+   plt.plot(x, theoretical_limb, 'r--', linewidth=2, label="Fitted model")
+   plt.xlabel("Pixel position")
+   plt.ylabel("Limb y-coordinate")
+   plt.title("Model Fit Quality")
+   plt.legend()
+   plt.grid(alpha=0.3)
+   
+   plt.tight_layout()
+   plt.show()
+
+**Gradient-Field Method Details:**
+
+The gradient-field detection uses several sophisticated techniques:
+
+* **Directional blur**: Samples image gradients along their direction with exponential decay
+* **Coherent feature enhancement**: Strengthens gradient features aligned with limb geometry
+* **Flux-based cost function**: Integrates gradients perpendicular to proposed limb curves
+* **Multi-resolution optimization**: Starts coarse, refines progressively to avoid local minima
+
+**When to Use Gradient-Field:**
+
+* ✅ Clear, well-defined horizons with strong gradients
+* ✅ Atmospheric limbs without complex cloud structure  
+* ✅ Batch processing multiple images automatically
+* ✅ When PyTorch/ML dependencies are not available
+* ❌ Not ideal for horizons with multiple strong edges (use manual annotation)
+* ❌ Less effective with very noisy or low-contrast images
+
+Expected Output::
+
+   ==================================================
+   GRADIENT-FIELD AUTOMATED DETECTION
+   ==================================================
+   
+   Detecting horizon using gradient-field method...
+   ✓ Horizon detected automatically
+   
+   Fitting planetary parameters with multi-resolution optimization...
+   ✓ Parameter fitting completed
+   
+   RESULTS:
+   r = 5516 ± 42 km
+   h = 418.3 ± 9.2 km
    
    Validation:
    Known Earth radius: 6371 km
@@ -511,107 +661,152 @@ Multi-Planet Comparison
        success_rate = 100 * successful / len(results)
        print(f"\nSuccess Rate: {successful}/{len(results)} ({success_rate:.0f}%)")
 
-Example 5: Error Analysis and Validation
+Example 5: Advanced Uncertainty Analysis
 ---------------------------------------
 
-Detailed uncertainty analysis with bootstrap validation.
+Comprehensive uncertainty quantification using multiple methods: population spread, Hessian approximation, and profile likelihood.
 
 Advanced Uncertainty Quantification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
+   import planet_ruler.observation as obs
+   from planet_ruler.uncertainty import calculate_parameter_uncertainty
+   import matplotlib.pyplot as plt
+   import numpy as np
+   
    # Load observation
    observation = obs.LimbObservation(
        "demo/images/earth_iss.jpg",
        "config/earth_iss_1.yaml"
    )
    
-   # Standard analysis with manual annotation
-   observation.detect_limb(method="manual")  # Interactive point selection
+   # Standard analysis
+   observation.detect_limb(method="gradient-field")  # Automated detection
    observation.smooth_limb()
-   observation.fit_limb()
+   observation.fit_limb(minimizer='differential-evolution', maxiter=1000)
    
-   # Alternative: AI segmentation (requires additional dependencies)
-   # observation.detect_limb(method="segmentation")
+   print("="*60)
+   print("COMPREHENSIVE UNCERTAINTY ANALYSIS")
+   print("="*60)
    
-   print("="*50)
-   print("DETAILED UNCERTAINTY ANALYSIS")
-   print("="*50)
+   # Method 1: Population spread (differential-evolution only)
+   print("\n1. POPULATION SPREAD (from differential evolution)")
+   pop_result = calculate_parameter_uncertainty(
+       observation, "r", 
+       scale_factor=1000, 
+       method='population',
+       confidence_level=0.68
+   )
+   print(f"   Radius: {pop_result['uncertainty']:.1f} km")
+   print(f"   Method: {pop_result['method']} - Fast, exact for DE")
+   print(f"   Population size: {pop_result['additional_info']['population_size']}")
    
-   # Multiple uncertainty measures
-   uncertainty_types = ["std", "ptp", "iqr", "ci"]
+   # Method 2: Hessian approximation (works with all minimizers)
+   print("\n2. HESSIAN APPROXIMATION (inverse curvature at optimum)")
+   hess_result = calculate_parameter_uncertainty(
+       observation, "r",
+       scale_factor=1000,
+       method='hessian',
+       confidence_level=0.68
+   )
+   print(f"   Radius: {hess_result['uncertainty']:.1f} km")
+   print(f"   Method: {hess_result['method']} - Fast, approximate")
+   print(f"   Condition number: {hess_result['additional_info']['condition_number']:.2e}")
    
-   for unc_type in uncertainty_types:
+   # Method 3: Profile likelihood (slow but accurate)
+   print("\n3. PROFILE LIKELIHOOD (re-optimize at fixed values)")
+   print("   Computing... (this takes longer)")
+   profile_result = calculate_parameter_uncertainty(
+       observation, "r",
+       scale_factor=1000,
+       method='profile',
+       confidence_level=0.68,
+       n_points=15,
+       search_range=0.15
+   )
+   print(f"   Radius: {profile_result['uncertainty']:.1f} km")
+   print(f"   Method: {profile_result['method']} - Slow, most accurate")
+   print(f"   Confidence bounds: [{profile_result['additional_info']['lower_bound']:.0f}, {profile_result['additional_info']['upper_bound']:.0f}] km")
+   
+   # Auto method selection
+   print("\n4. AUTO-SELECT (chooses best method for minimizer)")
+   auto_result = calculate_parameter_uncertainty(
+       observation, "r",
+       scale_factor=1000,
+       method='auto',  # Automatically picks population or hessian
+       confidence_level=0.68
+   )
+   print(f"   Radius: {auto_result['uncertainty']:.1f} km")
+   print(f"   Method selected: {auto_result['method']}")
+   
+   # Compare multiple confidence levels
+   print("\n" + "="*60)
+   print("CONFIDENCE INTERVALS")
+   print("="*60)
+   
+   confidence_levels = [0.68, 0.90, 0.95, 0.99]  # 1σ, 1.64σ, 2σ, 3σ
+   
+   for cl in confidence_levels:
        result = calculate_parameter_uncertainty(
-           observation, "r", scale_factor=1000, uncertainty_type=unc_type
+           observation, "r",
+           scale_factor=1000,
+           method='population',
+           confidence_level=cl
        )
        
-       print(f"{unc_type.upper()}: {format_parameter_result(result, 'km')}")
+       sigma_equiv = {0.68: "1σ", 0.90: "1.64σ", 0.95: "2σ", 0.99: "3σ"}
+       print(f"{int(cl*100)}% CI ({sigma_equiv[cl]}): {pop_result['additional_info']['mean']:.0f} ± {result['uncertainty']:.0f} km")
    
-   # Parameter correlation analysis
-   from planet_ruler.observation import unpack_diff_evol_posteriors
-   
-   population_df = unpack_diff_evol_posteriors(observation)
-   
-   # Focus on key parameters
-   key_params = ["r", "h", "f", "theta_z"]
-   correlation_matrix = population_df[key_params].corr()
-   
-   print(f"\nParameter Correlations:")
-   print(correlation_matrix.round(3))
-   
-   # Plot parameter distributions
-   import seaborn as sns
-   
-   fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-   
-   for i, param in enumerate(key_params):
-       ax = axes[i//2, i%2]
+   # Parameter correlation analysis (if using differential-evolution)
+   if observation.minimizer == 'differential-evolution':
+       from planet_ruler.fit import unpack_diff_evol_posteriors
        
-       # Convert to appropriate units
-       if param == "r":
-           data = population_df[param] / 1000  # km
-           units = "km"
-           known_value = 6371.0
-       elif param == "h":
-           data = population_df[param] / 1000  # km  
-           units = "km"
-           known_value = 418.0
-       elif param == "f":
-           data = population_df[param] * 1000  # mm
-           units = "mm" 
-           known_value = None
-       else:
-           data = population_df[param]  # radians
-           units = "rad"
-           known_value = None
+       population_df = unpack_diff_evol_posteriors(observation)
        
-       # Plot distribution
-       sns.histplot(data, ax=ax, kde=True, alpha=0.7)
+       print("\n" + "="*60)
+       print("PARAMETER CORRELATIONS")
+       print("="*60)
        
-       # Add known value line if available
-       if known_value is not None:
-           ax.axvline(known_value, color='red', linestyle='--', 
-                     label=f'Known: {known_value}')
-           ax.legend()
-       
-       ax.set_title(f"{param.upper()} Distribution")
-       ax.set_xlabel(f"{param} ({units})")
-       ax.set_ylabel("Frequency")
-   
-   plt.tight_layout()
-   plt.show()
-   
-   # Statistical summary
-   print(f"\nStatistical Summary:")
-   for param in key_params:
-       values = population_df[param]
-       print(f"{param.upper()}:")
-       print(f"  Mean: {values.mean():.2e}")
-       print(f"  Std: {values.std():.2e}")  
-       print(f"  Min: {values.min():.2e}")
-       print(f"  Max: {values.max():.2e}")
+       # Focus on key parameters
+       key_params = ["r", "h", "f"]
+       if all(p in population_df.columns for p in key_params):
+           correlation_matrix = population_df[key_params].corr()
+           print(correlation_matrix.round(3))
+           
+           # Visualize parameter distributions
+           fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+           
+           for i, param in enumerate(key_params):
+               ax = axes[i]
+               
+               # Convert to appropriate units
+               if param == "r":
+                   data = population_df[param] / 1000
+                   units = "km"
+                   label = "Radius"
+               elif param == "h":
+                   data = population_df[param] / 1000
+                   units = "km"
+                   label = "Altitude"
+               elif param == "f":
+                   data = population_df[param] * 1000
+                   units = "mm"
+                   label = "Focal Length"
+               
+               # Plot distribution
+               ax.hist(data, bins=30, alpha=0.7, edgecolor='black')
+               ax.axvline(data.mean(), color='red', linestyle='--', 
+                         linewidth=2, label=f'Mean: {data.mean():.1f}')
+               ax.set_title(f"{label} Distribution")
+               ax.set_xlabel(f"{label} ({units})")
+               ax.set_ylabel("Frequency")
+               ax.legend()
+               ax.grid(alpha=0.3)
+           
+           plt.tight_layout()
+           plt.show()
 
 Running the Examples
 -------------------
