@@ -17,9 +17,10 @@ Geometry Module
 The geometry module contains fundamental mathematical functions for planetary calculations:
 
 * **Horizon calculations**: `horizon_distance`, `limb_camera_angle`
-* **Camera optics**: `focal_length`, `detector_size`, `field_of_view`  
+* **Camera optics**: `focal_length`, `detector_size`, `field_of_view`
 * **Coordinate transforms**: `intrinsic_transform`, `extrinsic_transform`
-* **Limb arc modeling**: `limb_arc` - generates theoretical limb curves
+* **Limb arc modeling**: `limb_arc`, `limb_arc_sample` - generates theoretical limb curves
+* **Rotation matrices**: `get_rotation_matrix` - Euler angle to rotation matrix conversion
 
 Image Processing Module
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -36,6 +37,7 @@ The image module handles computer vision tasks:
 * **Legacy detection**: `gradient_break` - simpler gradient-based detection
 * **Image segmentation**: `ImageSegmentation` class with Segment Anything integration (optional)
 * **Limb processing**: `smooth_limb`, `fill_nans` - post-processing operations
+* **Interpolation**: `bilinear_interpolate` - sub-pixel image sampling
 
 Observation Module
 ~~~~~~~~~~~~~~~~~
@@ -66,6 +68,23 @@ The annotation module provides interactive manual limb detection:
 * **Image controls**: Zoom, pan, and contrast adjustment for precise annotation
 * **File I/O**: Save and load annotation sessions to/from JSON files
 * **Target generation**: Convert point annotations to dense limb arrays
+
+Camera Module
+~~~~~~~~~~~~~
+
+.. automodule:: planet_ruler.camera
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+The camera module provides automatic camera parameter extraction from image EXIF data:
+
+* **EXIF processing**: `extract_exif`, `get_camera_model`, `get_focal_length_mm`
+* **Camera database**: Comprehensive database of sensor dimensions for phones, DSLRs, mirrorless cameras
+* **Parameter extraction**: `extract_camera_parameters` - automatic detection of focal length and sensor size
+* **GPS integration**: `get_gps_altitude` - extract altitude from GPS EXIF data
+* **Configuration generation**: `create_config_from_image` - complete auto-config from any camera image
+* **Planet radii**: `get_initial_radius` - perturbed initial radius guesses for robust optimization
 
 Fitting and Optimization
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -122,6 +141,35 @@ The plot module provides visualization functions:
 * **Full limb plots**: `plot_full_limb` - complete limb visualization with uncertainty
 * **Segmentation plots**: `plot_segmentation_masks` - image segmentation mask visualization
 
+Validation Module
+~~~~~~~~~~~~~~~~~
+
+.. automodule:: planet_ruler.validation
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+The validation module provides configuration validation:
+
+* **Config validation**: `validate_limb_config` - checks parameter limits, theta ranges, and consistency
+* **Parameter bounds**: Validates initial values are within specified limits
+* **Optimization warnings**: Identifies potential issues with tight constraints that could affect convergence
+
+Command-Line Interface
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: planet_ruler.cli
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+The CLI module provides command-line access to planet_ruler:
+
+* **Main interface**: `main` - primary CLI entry point
+* **Measurement**: `measure_command` - automated radius measurement from images
+* **Demo functionality**: `demo_command` - run example scenarios
+* **Configuration**: `load_config`, `list_command` - manage configuration files
+
 Demo and Configuration
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -151,6 +199,7 @@ Core geometric calculations:
    planet_ruler.geometry.focal_length
    planet_ruler.geometry.detector_size
    planet_ruler.geometry.field_of_view
+   planet_ruler.geometry.get_rotation_matrix
 
 Image Processing Functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -182,6 +231,23 @@ Interactive limb detection and annotation:
    planet_ruler.annotate.TkLimbAnnotator.save_points
    planet_ruler.annotate.TkLimbAnnotator.load_points
 
+Camera Parameter Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Automatic camera parameter extraction:
+
+.. autosummary::
+   :toctree: generated/
+
+   planet_ruler.camera.extract_exif
+   planet_ruler.camera.get_camera_model
+   planet_ruler.camera.get_focal_length_mm
+   planet_ruler.camera.get_focal_length_35mm_equiv
+   planet_ruler.camera.extract_camera_parameters
+   planet_ruler.camera.get_gps_altitude
+   planet_ruler.camera.create_config_from_image
+   planet_ruler.camera.get_initial_radius
+
 Coordinate Transform Functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -193,6 +259,7 @@ Camera geometry and projections:
    planet_ruler.geometry.intrinsic_transform
    planet_ruler.geometry.extrinsic_transform
    planet_ruler.geometry.limb_arc
+   planet_ruler.geometry.limb_arc_sample
 
 Optimization Functions
 ~~~~~~~~~~~~~~~~~~~~
@@ -211,6 +278,30 @@ Parameter fitting and uncertainty:
    planet_ruler.uncertainty._uncertainty_from_hessian
    planet_ruler.uncertainty._uncertainty_from_profile
    planet_ruler.uncertainty._uncertainty_from_bootstrap
+
+Validation Functions
+~~~~~~~~~~~~~~~~~~~
+
+Configuration and parameter validation:
+
+.. autosummary::
+   :toctree: generated/
+
+   planet_ruler.validation.validate_limb_config
+
+Command-Line Functions
+~~~~~~~~~~~~~~~~~~~~~
+
+CLI interface and commands:
+
+.. autosummary::
+   :toctree: generated/
+
+   planet_ruler.cli.main
+   planet_ruler.cli.measure_command
+   planet_ruler.cli.demo_command
+   planet_ruler.cli.list_command
+   planet_ruler.cli.load_config
 
 Visualization Functions
 ~~~~~~~~~~~~~~~~~~~~~
@@ -305,25 +396,50 @@ Interactive GUI for manual limb annotation. Provides precise user control over h
 Constants and Configuration
 --------------------------
 
+Camera Database
+~~~~~~~~~~~~~~
+
+The camera module includes a comprehensive database of sensor dimensions for automatic parameter extraction:
+
+* **Smartphones**: iPhone models (iPhone 11-14 series), Samsung Galaxy, Google Pixel, etc.
+* **Point-and-shoot**: Canon PowerShot series, Nikon Coolpix, Sony Cyber-shot
+* **DSLRs**: Canon EOS series, Nikon D series, Sony Alpha
+* **Mirrorless**: Sony ILCE series, Canon EOS R, Nikon Z series
+* **Generic sensors**: Common sensor sizes (1/2.3", 1/1.7", APS-C, Full Frame)
+
+Planet Radius Database
+~~~~~~~~~~~~~~~~~~~~~
+
+Built-in planetary radii for initial optimization guesses (automatically perturbed):
+
+* **Earth**: 6,371,000 m
+* **Mars**: 3,389,500 m
+* **Jupiter**: 69,911,000 m
+* **Saturn**: 58,232,000 m
+* **Moon**: 1,737,400 m
+* **Pluto**: 1,188,300 m
+* And others...
+
 Default Parameters
 ~~~~~~~~~~~~~~~~~
 
 The following default values are used throughout Planet Ruler:
 
-* **Earth radius**: 6,371,000 m
-* **ISS altitude**: 418,000 m  
+* **ISS altitude**: 418,000 m
 * **Image processing window**: 21 pixels
 * **Optimization tolerance**: 1e-6
 * **Maximum iterations**: 1000
+* **Perturbation factor**: 50% (for initial radius guessing)
 
 File Formats
 ~~~~~~~~~~~
 
 Supported file formats:
 
-* **Images**: JPEG, PNG, TIFF, BMP
-* **Configuration**: YAML (.yaml, .yml)
+* **Images**: JPEG, PNG, TIFF, BMP (with EXIF support)
+* **Configuration**: YAML (.yaml, .yml), JSON (.json)
 * **Data output**: CSV, JSON, pickle
+* **Annotation sessions**: JSON
 
 Error Handling
 -------------
@@ -334,5 +450,6 @@ Planet Ruler raises specific exceptions for different error conditions:
 * **FileNotFoundError**: Missing image or configuration files
 * **ImportError**: Missing optional dependencies (e.g., PyTorch for Segment Anything)
 * **RuntimeError**: Optimization convergence failures
+* **AssertionError**: Configuration validation failures (when strict=True)
 
 See individual function documentation for specific error conditions and handling recommendations.

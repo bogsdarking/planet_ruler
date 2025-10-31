@@ -276,7 +276,13 @@ def _uncertainty_from_profile(
 
     # Search range around optimum
     param_value_opt = x_opt[param_idx]
-    param_range = search_range * param_value_opt
+    param_range = abs(search_range * param_value_opt)
+    
+    # Ensure we have a reasonable search range even for small parameter values
+    if param_range < 1e-6:
+        param_range = search_range * (observation.parameter_limits[parameter][1] - 
+                                       observation.parameter_limits[parameter][0])
+    
     param_values = np.linspace(
         param_value_opt - param_range, param_value_opt + param_range, n_points
     )
@@ -308,19 +314,78 @@ def _uncertainty_from_profile(
     costs = np.array(costs)
     delta_costs = costs - cost_min
 
-    # Find parameter values where delta_cost = threshold
+    # Find parameter values where delta_cost crosses threshold
+    # We need to find crossings on both sides of the optimum
     try:
-        # Interpolate to find confidence bounds
-        from scipy.interpolate import interp1d
-
-        f = interp1d(delta_costs, param_values, kind="cubic", fill_value="extrapolate")
-
-        # Find where profile crosses threshold
-        lower_bound = f(delta_cost_threshold)
-        upper_bound = f(delta_cost_threshold)
-
-        # Symmetric uncertainty (average of upper and lower)
-        uncertainty = (upper_bound - lower_bound) / 2 * scale_factor
+        # Split into left and right sides of optimum
+        opt_idx = np.argmin(delta_costs)
+        
+        # Left side (lower parameter values)
+        left_params = param_values[:opt_idx+1]
+        left_costs = delta_costs[:opt_idx+1]
+        
+        # Right side (higher parameter values)
+        right_params = param_values[opt_idx:]
+        right_costs = delta_costs[opt_idx:]
+        
+        # Find where profile crosses threshold on each side
+        lower_bound = None
+        upper_bound = None
+        
+        # Left side: find where delta_cost crosses threshold
+        if len(left_params) > 1:
+            # Find the crossing point by linear interpolation
+            for i in range(len(left_costs) - 1):
+                if left_costs[i] <= delta_cost_threshold < left_costs[i+1]:
+                    # Linear interpolation
+                    frac = (delta_cost_threshold - left_costs[i]) / (left_costs[i+1] - left_costs[i])
+                    lower_bound = left_params[i] + frac * (left_params[i+1] - left_params[i])
+                    break
+            
+            # If no crossing found, use furthest point that's below threshold
+            if lower_bound is None:
+                below_threshold = left_costs <= delta_cost_threshold
+                if np.any(below_threshold):
+                    lower_bound = left_params[np.where(below_threshold)[0][0]]
+        
+        # Right side: find where delta_cost crosses threshold
+        if len(right_params) > 1:
+            # Find the crossing point by linear interpolation
+            for i in range(len(right_costs) - 1):
+                if right_costs[i] <= delta_cost_threshold < right_costs[i+1]:
+                    # Linear interpolation
+                    frac = (delta_cost_threshold - right_costs[i]) / (right_costs[i+1] - right_costs[i])
+                    upper_bound = right_params[i] + frac * (right_params[i+1] - right_params[i])
+                    break
+            
+            # If no crossing found, use furthest point that's below threshold
+            if upper_bound is None:
+                below_threshold = right_costs <= delta_cost_threshold
+                if np.any(below_threshold):
+                    upper_bound = right_params[np.where(below_threshold)[0][-1]]
+        
+        if lower_bound is None or upper_bound is None:
+            logging.warning(
+                f"Could not find confidence bounds - profile may not cross threshold. "
+                f"Try increasing search_range (currently {search_range})"
+            )
+            return {
+                "uncertainty": 0.0,
+                "method": "profile",
+                "confidence_level": confidence_level,
+                "additional_info": {
+                    "error": "Could not find confidence bounds",
+                    "min_delta_cost": np.min(delta_costs),
+                    "max_delta_cost": np.max(delta_costs),
+                    "threshold": delta_cost_threshold,
+                    "suggestion": "Increase search_range parameter",
+                },
+            }
+        
+        # Symmetric uncertainty (average of distances from optimum)
+        lower_uncertainty = abs(param_value_opt - lower_bound) * scale_factor
+        upper_uncertainty = abs(upper_bound - param_value_opt) * scale_factor
+        uncertainty = (lower_uncertainty + upper_uncertainty) / 2
 
         return {
             "uncertainty": uncertainty,
@@ -329,7 +394,12 @@ def _uncertainty_from_profile(
             "additional_info": {
                 "lower_bound": lower_bound * scale_factor,
                 "upper_bound": upper_bound * scale_factor,
+                "optimal_value": param_value_opt * scale_factor,
+                "lower_uncertainty": lower_uncertainty,
+                "upper_uncertainty": upper_uncertainty,
                 "n_evaluations": n_points,
+                "cost_min": cost_min,
+                "threshold": delta_cost_threshold,
             },
         }
 
