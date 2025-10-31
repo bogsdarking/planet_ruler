@@ -625,11 +625,11 @@ class TestUtilityFunctions:
         obs.free_parameters = ["param1"]
         obs.parameter_limits = {"param1": [0.5, 1.5]}
         obs.init_parameter_values = {"param1": 1.0}
-        
+
         # Mock fit_results with proper structure for unpack_diff_evol_posteriors
         obs.fit_results = {
             "population_energies": [0.1, 0.2, 0.3],
-            "population": [[1.1], [1.2], [1.3]]  # Single parameter
+            "population": [[1.1], [1.2], [1.3]],  # Single parameter
         }
 
         plot_diff_evol_posteriors(obs, show_points=False, log=True)
@@ -653,7 +653,7 @@ class TestUtilityFunctions:
             "f": 0.024,  # 24mm focal length
             "w": 0.0236,  # APS-C sensor width (~24mm)
             "param1": 1.0,
-            "param2": 2.0
+            "param2": 2.0,
         }
 
         # Mock limb_arc returns
