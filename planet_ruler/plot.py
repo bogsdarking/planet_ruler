@@ -193,7 +193,10 @@ def plot_3d_solution(
     # Handle matplotlib version compatibility
     try:
         ax.view_init(
-            elev=limb_theta * 180 / np.pi, azim=azim, roll=roll, vertical_axis=vertical_axis
+            elev=limb_theta * 180 / np.pi,
+            azim=azim,
+            roll=roll,
+            vertical_axis=vertical_axis,
         )
     except TypeError:
         # Fallback for older matplotlib versions
@@ -239,12 +242,18 @@ def plot_topography(image: np.ndarray) -> None:
     plt.show()
 
 
-def plot_gradient_field_at_limb(y_pixels, image, gradient_smoothing=5.0,
-                                     streak_length=30, decay_rate=0.15,
-                                     sample_spacing=50, arrow_scale=20):
+def plot_gradient_field_at_limb(
+    y_pixels,
+    image,
+    gradient_smoothing=5.0,
+    streak_length=30,
+    decay_rate=0.15,
+    sample_spacing=50,
+    arrow_scale=20,
+):
     """
     Visualize gradient field along a proposed limb curve.
-    
+
     Args:
         y_pixels (np.ndarray): Y-coordinates of limb at each x-position
         image (np.ndarray): Input image (H x W x 3 or H x W)
@@ -253,138 +262,211 @@ def plot_gradient_field_at_limb(y_pixels, image, gradient_smoothing=5.0,
         decay_rate (float): Exponential decay rate for sampling
         sample_spacing (int): Sample every N pixels along x-axis
         arrow_scale (float): Scale factor for arrow lengths
-        
+
     Returns:
         fig, ax: Matplotlib figure and axis objects
     """
     # Import here to avoid circular import issues
     from planet_ruler.image import gradient_field
-    
+
     # Compute gradients using directional blur (now the default method)
     grad_data = gradient_field(
         image,
         gradient_smoothing=gradient_smoothing,
         streak_length=streak_length,
-        decay_rate=decay_rate
+        decay_rate=decay_rate,
     )
-    
-    grad_mag = grad_data['grad_mag']
-    grad_angle = grad_data['grad_angle']
-    title = f'Gradient Field with Directional Blur (streak={streak_length}, decay={decay_rate})'
-    
+
+    grad_mag = grad_data["grad_mag"]
+    grad_angle = grad_data["grad_angle"]
+    title = f"Gradient Field with Directional Blur (streak={streak_length}, decay={decay_rate})"
+
     # Compute curve tangent and normal at each point
     # Tangent direction: (1, dy/dx) in direction of increasing x
     dy_dx = np.gradient(y_pixels)
-    
+
     # Normal perpendicular to tangent: rotate tangent 90° counter-clockwise
     # Tangent (1, dy/dx) → Normal (-dy/dx, 1)
     # This gives a vector perpendicular to curve, pointing "upward" (positive y-component)
     tangent_x = np.ones_like(dy_dx)
     tangent_y = dy_dx
     tangent_mag = np.sqrt(tangent_x**2 + tangent_y**2)
-    
+
     # Normalize tangent
     tangent_x_unit = tangent_x / tangent_mag
     tangent_y_unit = tangent_y / tangent_mag
-    
+
     # Normal: rotate tangent 90° CCW: (x,y) → (-y, x)
     normal_x_unit = -tangent_y_unit  # = -dy/dx / sqrt(1 + (dy/dx)²)
-    normal_y_unit = tangent_x_unit   # = 1 / sqrt(1 + (dy/dx)²)
-    
+    normal_y_unit = tangent_x_unit  # = 1 / sqrt(1 + (dy/dx)²)
+
     normal_angle = np.arctan2(normal_y_unit, normal_x_unit)
-    
+
     # Verify perpendicularity (dot product should be ~0)
     # dot = tangent_x_unit * normal_x_unit + tangent_y_unit * normal_y_unit
     # Should equal 0 for perpendicular vectors
-    
+
     # Sample points along the curve
     x_samples = np.arange(0, len(y_pixels), sample_spacing)
-    
+
     # Create figure
     fig, ax = plt.subplots(figsize=(16, 10))
-    ax.imshow(image, cmap='gray', aspect='auto')
-    ax.plot(np.arange(len(y_pixels)), y_pixels, 'r-', linewidth=2, 
-            label='Proposed Limb', alpha=0.8)
-    
+    ax.imshow(image, cmap="gray", aspect="auto")
+    ax.plot(
+        np.arange(len(y_pixels)),
+        y_pixels,
+        "r-",
+        linewidth=2,
+        label="Proposed Limb",
+        alpha=0.8,
+    )
+
     # For each sample point, draw gradient arrow
     for x_idx in x_samples:
         if x_idx >= len(y_pixels):
             continue
-            
-        y_idx = int(np.clip(y_pixels[x_idx], 0, grad_data['image_height'] - 1))
+
+        y_idx = int(np.clip(y_pixels[x_idx], 0, grad_data["image_height"] - 1))
         x_pos = x_idx
         y_pos = y_pixels[x_idx]
-        
+
         # Get gradient at this location
         mag = grad_mag[y_idx, x_idx]
         angle = grad_angle[y_idx, x_idx]
         norm_angle = normal_angle[x_idx]  # Fixed: index directly, not as array
-        
+
         # Compute alignment with normal
-        angle_diff = np.arctan2(np.sin(angle - norm_angle), 
-                               np.cos(angle - norm_angle))
+        angle_diff = np.arctan2(np.sin(angle - norm_angle), np.cos(angle - norm_angle))
         alignment = np.cos(angle_diff)
-        
+
         # Arrow components (gradient direction)
         dx = mag * np.cos(angle) * arrow_scale
         dy = mag * np.sin(angle) * arrow_scale
-        
+
         # Color based on alignment
         if abs(alignment) > 0.7:
-            color = 'lime'  # Good alignment
+            color = "lime"  # Good alignment
         elif abs(alignment) < 0.3:
-            color = 'yellow'  # Perpendicular
+            color = "yellow"  # Perpendicular
         else:
-            color = 'orange'  # Medium alignment
-        
+            color = "orange"  # Medium alignment
+
         # Draw gradient arrow
-        ax.arrow(x_pos, y_pos, dx, dy, 
-                head_width=10, head_length=10, 
-                fc=color, ec=color, alpha=0.7, linewidth=2)
-        
+        ax.arrow(
+            x_pos,
+            y_pos,
+            dx,
+            dy,
+            head_width=10,
+            head_length=10,
+            fc=color,
+            ec=color,
+            alpha=0.7,
+            linewidth=2,
+        )
+
         # Draw tangent direction (magenta, dashed)
         tangent_x_at_point = tangent_x_unit[x_idx]
         tangent_y_at_point = tangent_y_unit[x_idx]
         tan_dx = 30 * tangent_x_at_point
         tan_dy = 30 * tangent_y_at_point
-        ax.arrow(x_pos, y_pos, tan_dx, tan_dy,
-                head_width=8, head_length=8,
-                fc='magenta', ec='magenta', alpha=0.6, 
-                linestyle='--', linewidth=1.5)
-        
+        ax.arrow(
+            x_pos,
+            y_pos,
+            tan_dx,
+            tan_dy,
+            head_width=8,
+            head_length=8,
+            fc="magenta",
+            ec="magenta",
+            alpha=0.6,
+            linestyle="--",
+            linewidth=1.5,
+        )
+
         # Draw normal direction (cyan, dashed)
         norm_dx = 30 * normal_x_unit[x_idx]
         norm_dy = 30 * normal_y_unit[x_idx]
-        ax.arrow(x_pos, y_pos, norm_dx, norm_dy,
-                head_width=8, head_length=8,
-                fc='cyan', ec='cyan', alpha=0.5, linewidth=1.5)
-        
+        ax.arrow(
+            x_pos,
+            y_pos,
+            norm_dx,
+            norm_dy,
+            head_width=8,
+            head_length=8,
+            fc="cyan",
+            ec="cyan",
+            alpha=0.5,
+            linewidth=1.5,
+        )
+
         # Verify perpendicularity (for debugging)
-        dot_product = tangent_x_at_point * normal_x_unit[x_idx] + tangent_y_at_point * normal_y_unit[x_idx]
+        dot_product = (
+            tangent_x_at_point * normal_x_unit[x_idx]
+            + tangent_y_at_point * normal_y_unit[x_idx]
+        )
         if abs(dot_product) > 0.01:
-            print(f"WARNING at x={x_idx}: dot product = {dot_product:.4f} (should be ~0)")
-    
+            print(
+                f"WARNING at x={x_idx}: dot product = {dot_product:.4f} (should be ~0)"
+            )
+
     # Add legend
     from matplotlib.lines import Line2D
+
     legend_elements = [
-        Line2D([0], [0], color='r', linewidth=2, label='Proposed Limb'),
-        Line2D([0], [0], color='lime', marker='>', markersize=10, 
-               linestyle='', label='Gradient (well aligned)'),
-        Line2D([0], [0], color='orange', marker='>', markersize=10, 
-               linestyle='', label='Gradient (medium aligned)'),
-        Line2D([0], [0], color='yellow', marker='>', markersize=10, 
-               linestyle='', label='Gradient (perpendicular)'),
-        Line2D([0], [0], color='magenta', marker='>', markersize=10, 
-               linestyle='--', label='Curve Tangent'),
-        Line2D([0], [0], color='cyan', marker='>', markersize=10, 
-               linestyle='', label='Curve Normal (⊥ to tangent)')
+        Line2D([0], [0], color="r", linewidth=2, label="Proposed Limb"),
+        Line2D(
+            [0],
+            [0],
+            color="lime",
+            marker=">",
+            markersize=10,
+            linestyle="",
+            label="Gradient (well aligned)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color="orange",
+            marker=">",
+            markersize=10,
+            linestyle="",
+            label="Gradient (medium aligned)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color="yellow",
+            marker=">",
+            markersize=10,
+            linestyle="",
+            label="Gradient (perpendicular)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color="magenta",
+            marker=">",
+            markersize=10,
+            linestyle="--",
+            label="Curve Tangent",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color="cyan",
+            marker=">",
+            markersize=10,
+            linestyle="",
+            label="Curve Normal (⊥ to tangent)",
+        ),
     ]
-    ax.legend(handles=legend_elements, loc='upper right', fontsize=12)
-    
+    ax.legend(handles=legend_elements, loc="upper right", fontsize=12)
+
     ax.set_title(title, fontsize=14)
-    ax.set_xlabel('X (pixels)', fontsize=12)
-    ax.set_ylabel('Y (pixels)', fontsize=12)
-    
+    ax.set_xlabel("X (pixels)", fontsize=12)
+    ax.set_ylabel("Y (pixels)", fontsize=12)
+
     plt.tight_layout()
     return fig, ax
 
@@ -392,7 +474,7 @@ def plot_gradient_field_at_limb(y_pixels, image, gradient_smoothing=5.0,
 def compare_blur_methods(image, y_pixels=None):
     """
     Compare gradient magnitude with different blur methods.
-    
+
     Args:
         image: Input image
         y_pixels: Optional limb curve to overlay
@@ -402,17 +484,20 @@ def compare_blur_methods(image, y_pixels=None):
         gray = image.sum(axis=2).astype(np.float32)
     else:
         gray = image.copy().astype(np.float32)
-    
+
     gray_gauss = cv2.GaussianBlur(gray, (0, 0), 15)
     grad_y_g, grad_x_g = np.gradient(gray_gauss)
     mag_gauss = np.sqrt(grad_x_g**2 + grad_y_g**2)
-    
+
     # Directional blur
     from planet_ruler.image import gradient_field
-    grad_data = gradient_field(image, streak_length=30, decay_rate=0.15, gradient_smoothing=2.0)
-    mag_directional = grad_data['grad_mag']
-    angle_dir = grad_data['grad_angle']
-    
+
+    grad_data = gradient_field(
+        image, streak_length=30, decay_rate=0.15, gradient_smoothing=2.0
+    )
+    mag_directional = grad_data["grad_mag"]
+    angle_dir = grad_data["grad_angle"]
+
     # For comparison, also compute without blur
     if len(image.shape) == 3:
         gray_orig = image.sum(axis=2).astype(np.float32)
@@ -420,41 +505,55 @@ def compare_blur_methods(image, y_pixels=None):
         gray_orig = image.copy().astype(np.float32)
     grad_y_orig, grad_x_orig = np.gradient(gray_orig)
     mag_original = np.sqrt(grad_x_orig**2 + grad_y_orig**2)
-    
+
     fig, axes = plt.subplots(2, 2, figsize=(14, 12))
-    
-    axes[0, 0].imshow(image, cmap='gray')
-    axes[0, 0].set_title('Original Image')
+
+    axes[0, 0].imshow(image, cmap="gray")
+    axes[0, 0].set_title("Original Image")
     if y_pixels is not None:
-        axes[0, 0].plot(np.arange(len(y_pixels)), y_pixels, 'r-', linewidth=2, alpha=0.7)
-    
-    axes[0, 1].imshow(mag_original, cmap='hot')
-    axes[0, 1].set_title('No Blur\nGradient Magnitude')
+        axes[0, 0].plot(
+            np.arange(len(y_pixels)), y_pixels, "r-", linewidth=2, alpha=0.7
+        )
+
+    axes[0, 1].imshow(mag_original, cmap="hot")
+    axes[0, 1].set_title("No Blur\nGradient Magnitude")
     if y_pixels is not None:
-        axes[0, 1].plot(np.arange(len(y_pixels)), y_pixels, 'cyan', linewidth=2, alpha=0.7)
-    
-    axes[1, 0].imshow(mag_gauss, cmap='hot')
-    axes[1, 0].set_title('Gaussian Blur (σ=15)\nGradient Magnitude')
+        axes[0, 1].plot(
+            np.arange(len(y_pixels)), y_pixels, "cyan", linewidth=2, alpha=0.7
+        )
+
+    axes[1, 0].imshow(mag_gauss, cmap="hot")
+    axes[1, 0].set_title("Gaussian Blur (σ=15)\nGradient Magnitude")
     if y_pixels is not None:
-        axes[1, 0].plot(np.arange(len(y_pixels)), y_pixels, 'cyan', linewidth=2, alpha=0.7)
-    
-    axes[1, 1].imshow(mag_directional, cmap='hot')
-    axes[1, 1].set_title('Directional Blur (streak=30)\nGradient Magnitude')
+        axes[1, 0].plot(
+            np.arange(len(y_pixels)), y_pixels, "cyan", linewidth=2, alpha=0.7
+        )
+
+    axes[1, 1].imshow(mag_directional, cmap="hot")
+    axes[1, 1].set_title("Directional Blur (streak=30)\nGradient Magnitude")
     if y_pixels is not None:
-        axes[1, 1].plot(np.arange(len(y_pixels)), y_pixels, 'cyan', linewidth=2, alpha=0.7)
-    
+        axes[1, 1].plot(
+            np.arange(len(y_pixels)), y_pixels, "cyan", linewidth=2, alpha=0.7
+        )
+
     for ax in axes.flat:
-        ax.axis('off')
-    
+        ax.axis("off")
+
     plt.tight_layout()
     return fig, axes
 
 
-def compare_gradient_fields(y_pixels_list, labels, image, gradient_smoothing=5.0,
-                           streak_length=30, decay_rate=0.15):
+def compare_gradient_fields(
+    y_pixels_list,
+    labels,
+    image,
+    gradient_smoothing=5.0,
+    streak_length=30,
+    decay_rate=0.15,
+):
     """
     Compare gradient alignment for multiple proposed limbs.
-    
+
     Args:
         y_pixels_list (list): List of y-coordinate arrays (different limb proposals)
         labels (list): Labels for each limb
@@ -465,73 +564,77 @@ def compare_gradient_fields(y_pixels_list, labels, image, gradient_smoothing=5.0
     """
     # Import here to avoid circular import issues
     from planet_ruler.image import gradient_field
-    
+
     # Compute gradients using directional blur (now the default method)
     grad_data = gradient_field(
         image,
         gradient_smoothing=gradient_smoothing,
         streak_length=streak_length,
-        decay_rate=decay_rate
+        decay_rate=decay_rate,
     )
-    
-    grad_mag = grad_data['grad_mag']
-    grad_angle = grad_data['grad_angle']
-    
+
+    grad_mag = grad_data["grad_mag"]
+    grad_angle = grad_data["grad_angle"]
+
     # Compute alignment scores for each limb
-    fig, axes = plt.subplots(len(y_pixels_list), 1, 
-                            figsize=(16, 5*len(y_pixels_list)))
+    fig, axes = plt.subplots(
+        len(y_pixels_list), 1, figsize=(16, 5 * len(y_pixels_list))
+    )
     if len(y_pixels_list) == 1:
         axes = [axes]
-    
+
     for idx, (y_pixels, label) in enumerate(zip(y_pixels_list, labels)):
         ax = axes[idx]
-        ax.imshow(image, cmap='gray', aspect='auto')
-        
+        ax.imshow(image, cmap="gray", aspect="auto")
+
         # Compute alignment
         dy_dx = np.gradient(y_pixels)
         normal_angle = np.arctan2(1, -dy_dx)
-        
+
         x_idx = np.arange(len(y_pixels)).astype(int)
         y_idx = np.clip(y_pixels.astype(int), 0, grad_mag.shape[0] - 1)
-        
+
         mag = grad_mag[y_idx, x_idx]
         angle = grad_angle[y_idx, x_idx]
-        
-        angle_diff = np.arctan2(np.sin(angle - normal_angle), 
-                               np.cos(angle - normal_angle))
+
+        angle_diff = np.arctan2(
+            np.sin(angle - normal_angle), np.cos(angle - normal_angle)
+        )
         alignment = np.abs(np.cos(angle_diff))  # Use absolute for flux
-        
+
         # Color the limb by alignment
         from matplotlib.collections import LineCollection
+
         points = np.array([x_idx, y_pixels]).T.reshape(-1, 1, 2)
         segments = np.concatenate([points[:-1], points[1:]], axis=1)
-        
-        lc = LineCollection(segments, cmap='RdYlGn', linewidth=3)
+
+        lc = LineCollection(segments, cmap="RdYlGn", linewidth=3)
         lc.set_array(alignment)
         lc.set_clim(0, 1)
         ax.add_collection(lc)
-        
+
         # Compute flux (like the cost function)
         flux = np.sum(mag * alignment)
         mean_mag = np.mean(mag)
         mean_global = np.mean(grad_mag)
-        
-        ax.set_title(f'{label} | Flux: {flux:.0f} | Avg Mag: {mean_mag:.1f} '
-                    f'(global: {mean_global:.1f})', fontsize=12)
-        ax.set_xlabel('X (pixels)')
-        ax.set_ylabel('Y (pixels)')
-        
+
+        ax.set_title(
+            f"{label} | Flux: {flux:.0f} | Avg Mag: {mean_mag:.1f} "
+            f"(global: {mean_global:.1f})",
+            fontsize=12,
+        )
+        ax.set_xlabel("X (pixels)")
+        ax.set_ylabel("Y (pixels)")
+
         # Add colorbar
-        cbar = plt.colorbar(lc, ax=ax, orientation='vertical', pad=0.01)
-        cbar.set_label('Gradient Alignment', fontsize=10)
-    
+        cbar = plt.colorbar(lc, ax=ax, orientation="vertical", pad=0.01)
+        cbar.set_label("Gradient Alignment", fontsize=10)
+
     plt.tight_layout()
     return fig, axes
 
 
-def plot_diff_evol_posteriors(
-    observation, show_points: bool = False, log: bool = True
-):
+def plot_diff_evol_posteriors(observation, show_points: bool = False, log: bool = True):
     """
     Extract and display the final state population of a differential evolution
     minimization.
@@ -617,8 +720,8 @@ def plot_full_limb(
 
     # Get image dimensions and radius
     n_pix_y, n_pix_x = observation.image.shape[:2]
-    r = params.pop('r')  # Extract r and remove from params
-    
+    r = params.pop("r")  # Extract r and remove from params
+
     # Add required positional arguments
     pix = limb_arc(r, n_pix_x, n_pix_y, return_full=True, **params)
     x = pix[:, 0]

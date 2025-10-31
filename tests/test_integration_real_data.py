@@ -300,7 +300,7 @@ class TestRealDemoDataIntegration:
         """Test image processing integration with synthetic planet image."""
         # Set random seed for reproducible noise generation
         np.random.seed(42)
-        
+
         # Create synthetic planet image
         height, width = 400, 600
         image = np.zeros((height, width, 3), dtype="uint8")

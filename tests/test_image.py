@@ -595,11 +595,15 @@ class TestDirectionalGradientBlur:
         # Create simple gradient image
         image = np.zeros((50, 50, 3), dtype=np.float32)
         image[:, 25:, :] = 255  # Vertical edge
-        
+
         blurred_mag, grad_angle = directional_gradient_blur(
-            image, sigma_base=1.0, streak_length=5, decay_rate=0.1, normalize_gradients=True
+            image,
+            sigma_base=1.0,
+            streak_length=5,
+            decay_rate=0.1,
+            normalize_gradients=True,
         )
-        
+
         assert blurred_mag.shape == (50, 50)
         assert grad_angle.shape == (50, 50)
         assert np.all(np.isfinite(blurred_mag))
@@ -610,22 +614,22 @@ class TestDirectionalGradientBlur:
         # Grayscale image
         image = np.zeros((30, 30), dtype=np.float32)
         image[15:, :] = 100  # Horizontal edge
-        
+
         blurred_mag, grad_angle = directional_gradient_blur(
             image, sigma_base=0.5, streak_length=10, normalize_gradients=True
         )
-        
+
         assert blurred_mag.shape == (30, 30)
         assert grad_angle.shape == (30, 30)
 
     def test_directional_gradient_blur_no_normalize(self):
         """Test directional gradient blur without gradient normalization."""
         image = np.random.rand(20, 20, 3) * 255
-        
+
         blurred_mag, grad_angle = directional_gradient_blur(
             image, sigma_base=2.0, streak_length=8, normalize_gradients=False
         )
-        
+
         assert blurred_mag.shape == (20, 20)
         assert grad_angle.shape == (20, 20)
 
@@ -633,30 +637,28 @@ class TestDirectionalGradientBlur:
         """Test directional gradient blur with no initial smoothing."""
         image = np.ones((25, 25, 3)) * 128
         image[10:15, 10:15, :] = 200  # Square feature
-        
+
         blurred_mag, grad_angle = directional_gradient_blur(
             image, sigma_base=0.0, streak_length=3, decay_rate=0.3
         )
-        
+
         assert blurred_mag.shape == (25, 25)
         assert grad_angle.shape == (25, 25)
 
     def test_directional_gradient_blur_parameters(self):
         """Test directional gradient blur with various parameters."""
         image = np.random.rand(40, 40, 3) * 255
-        
+
         # Different streak lengths
         for streak_length in [1, 5, 15]:
             blurred_mag, _ = directional_gradient_blur(
                 image, streak_length=streak_length
             )
             assert blurred_mag.shape == (40, 40)
-        
+
         # Different decay rates
         for decay_rate in [0.05, 0.2, 0.5]:
-            blurred_mag, _ = directional_gradient_blur(
-                image, decay_rate=decay_rate
-            )
+            blurred_mag, _ = directional_gradient_blur(image, decay_rate=decay_rate)
             assert blurred_mag.shape == (40, 40)
 
 
@@ -668,11 +670,15 @@ class TestBidirectionalGradientBlur:
         # Create simple gradient image
         image = np.zeros((40, 40, 3), dtype=np.float32)
         image[:, 20:, :] = 150  # Vertical edge
-        
+
         blurred_mag, grad_angle = bidirectional_gradient_blur(
-            image, sigma_base=1.5, streak_length=8, decay_rate=0.15, normalize_gradients=True
+            image,
+            sigma_base=1.5,
+            streak_length=8,
+            decay_rate=0.15,
+            normalize_gradients=True,
         )
-        
+
         assert blurred_mag.shape == (40, 40)
         assert grad_angle.shape == (40, 40)
         assert np.all(np.isfinite(blurred_mag))
@@ -682,22 +688,22 @@ class TestBidirectionalGradientBlur:
         """Test bidirectional gradient blur on grayscale image."""
         image = np.zeros((35, 35), dtype=np.float32)
         image[15:20, :] = 180  # Horizontal stripe
-        
+
         blurred_mag, grad_angle = bidirectional_gradient_blur(
             image, sigma_base=2.0, streak_length=6, normalize_gradients=True
         )
-        
+
         assert blurred_mag.shape == (35, 35)
         assert grad_angle.shape == (35, 35)
 
     def test_bidirectional_gradient_blur_no_normalize(self):
         """Test bidirectional gradient blur without normalization."""
         image = np.random.rand(25, 25, 3) * 200
-        
+
         blurred_mag, grad_angle = bidirectional_gradient_blur(
             image, sigma_base=1.0, streak_length=12, normalize_gradients=False
         )
-        
+
         assert blurred_mag.shape == (25, 25)
         assert grad_angle.shape == (25, 25)
 
@@ -705,11 +711,11 @@ class TestBidirectionalGradientBlur:
         """Test bidirectional gradient blur with no initial smoothing."""
         image = np.ones((30, 30, 3)) * 100
         image[12:18, 12:18, :] = 255  # Bright square
-        
+
         blurred_mag, grad_angle = bidirectional_gradient_blur(
             image, sigma_base=0.0, streak_length=5, decay_rate=0.25
         )
-        
+
         assert blurred_mag.shape == (30, 30)
         assert grad_angle.shape == (30, 30)
 
@@ -717,13 +723,13 @@ class TestBidirectionalGradientBlur:
         """Test that bidirectional blur preserves edge locations better than unidirectional."""
         # Create image with clear edge
         image = np.zeros((50, 50, 3))
-        image[:25, :, :] = 0   # Top half dark
+        image[:25, :, :] = 0  # Top half dark
         image[25:, :, :] = 255  # Bottom half bright
-        
+
         blurred_mag, _ = bidirectional_gradient_blur(
             image, streak_length=10, decay_rate=0.2
         )
-        
+
         # Peak should still be around row 25
         peak_row = np.argmax(blurred_mag[:, 25])
         assert abs(peak_row - 25) <= 2  # Should be close to original edge
@@ -734,23 +740,20 @@ class TestBilinearInterpolate:
 
     def test_bilinear_interpolate_exact_coordinates(self):
         """Test bilinear interpolation at exact integer coordinates."""
-        array = np.array([[1, 2, 3],
-                         [4, 5, 6],
-                         [7, 8, 9]], dtype=np.float32)
-        
+        array = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=np.float32)
+
         # Test at exact coordinates (non-boundary)
         result = bilinear_interpolate(array, np.array([1.0]), np.array([1.0]))
         np.testing.assert_array_almost_equal(result, [5.0], decimal=2)
-        
+
         # Test coordinates that don't hit exact boundary (avoid clipping effects)
         result = bilinear_interpolate(array, np.array([0.0, 1.0]), np.array([0.0, 1.0]))
         np.testing.assert_array_almost_equal(result, [1.0, 5.0], decimal=2)
 
     def test_bilinear_interpolate_fractional_coordinates(self):
         """Test bilinear interpolation at fractional coordinates."""
-        array = np.array([[1, 2],
-                         [3, 4]], dtype=np.float32)
-        
+        array = np.array([[1, 2], [3, 4]], dtype=np.float32)
+
         # Test at center (0.5, 0.5) - should be average
         result = bilinear_interpolate(array, np.array([0.5]), np.array([0.5]))
         expected = (1 + 2 + 3 + 4) / 4  # 2.5
@@ -758,9 +761,8 @@ class TestBilinearInterpolate:
 
     def test_bilinear_interpolate_edge_coordinates(self):
         """Test bilinear interpolation at array edges."""
-        array = np.array([[10, 20, 30],
-                         [40, 50, 60]], dtype=np.float32)
-        
+        array = np.array([[10, 20, 30], [40, 50, 60]], dtype=np.float32)
+
         # Test at edges (accounting for clipping behavior)
         result = bilinear_interpolate(array, np.array([0.0, 1.0]), np.array([0.0, 2.0]))
         # Due to clipping to avoid exact boundaries, expect close but not exact values
@@ -770,12 +772,13 @@ class TestBilinearInterpolate:
 
     def test_bilinear_interpolate_out_of_bounds(self):
         """Test bilinear interpolation clips out-of-bounds coordinates."""
-        array = np.array([[1, 2],
-                         [3, 4]], dtype=np.float32)
-        
+        array = np.array([[1, 2], [3, 4]], dtype=np.float32)
+
         # Test coordinates outside array bounds
-        result = bilinear_interpolate(array, np.array([-1.0, 10.0]), np.array([-1.0, 10.0]))
-        
+        result = bilinear_interpolate(
+            array, np.array([-1.0, 10.0]), np.array([-1.0, 10.0])
+        )
+
         # Should clip to bounds and return corner values
         assert len(result) == 2
         assert np.all(np.isfinite(result))
@@ -783,13 +786,13 @@ class TestBilinearInterpolate:
     def test_bilinear_interpolate_large_array(self):
         """Test bilinear interpolation on larger arrays."""
         array = np.random.rand(100, 80).astype(np.float32)
-        
+
         # Random coordinates within bounds
         y_coords = np.random.uniform(0, 99, 20)
         x_coords = np.random.uniform(0, 79, 20)
-        
+
         result = bilinear_interpolate(array, y_coords, x_coords)
-        
+
         assert len(result) == 20
         assert np.all(np.isfinite(result))
         assert np.all(result >= 0)  # Should be within original array range
@@ -798,7 +801,7 @@ class TestBilinearInterpolate:
     def test_bilinear_interpolate_single_pixel(self):
         """Test bilinear interpolation on single pixel array."""
         array = np.array([[42.0]], dtype=np.float32)
-        
+
         result = bilinear_interpolate(array, np.array([0.0, 0.5]), np.array([0.0, 0.5]))
         np.testing.assert_array_almost_equal(result, [42.0, 42.0])
 
@@ -811,38 +814,51 @@ class TestGradientField:
         # Create simple test image with clear edge
         image = np.zeros((50, 50, 3), dtype=np.float32)
         image[:, 25:, :] = 255  # Vertical edge at x=25
-        
-        field = gradient_field(image, gradient_smoothing=1.0, streak_length=10, decay_rate=0.1)
-        
+
+        field = gradient_field(
+            image, gradient_smoothing=1.0, streak_length=10, decay_rate=0.1
+        )
+
         # Check all required keys are present
         required_keys = [
-            'grad_mag', 'grad_angle', 'grad_sin', 'grad_cos', 'grad_x', 'grad_y',
-            'grad_mag_dy', 'grad_mag_dx', 'grad_sin_dy', 'grad_sin_dx',
-            'grad_cos_dy', 'grad_cos_dx', 'image_height', 'image_width'
+            "grad_mag",
+            "grad_angle",
+            "grad_sin",
+            "grad_cos",
+            "grad_x",
+            "grad_y",
+            "grad_mag_dy",
+            "grad_mag_dx",
+            "grad_sin_dy",
+            "grad_sin_dx",
+            "grad_cos_dy",
+            "grad_cos_dx",
+            "image_height",
+            "image_width",
         ]
         for key in required_keys:
             assert key in field
-        
+
         # Check array shapes
-        assert field['grad_mag'].shape == (50, 50)
-        assert field['grad_angle'].shape == (50, 50)
-        assert field['grad_sin'].shape == (50, 50)
-        assert field['grad_cos'].shape == (50, 50)
-        assert field['grad_x'].shape == (50, 50)
-        assert field['grad_y'].shape == (50, 50)
-        
+        assert field["grad_mag"].shape == (50, 50)
+        assert field["grad_angle"].shape == (50, 50)
+        assert field["grad_sin"].shape == (50, 50)
+        assert field["grad_cos"].shape == (50, 50)
+        assert field["grad_x"].shape == (50, 50)
+        assert field["grad_y"].shape == (50, 50)
+
         # Check derivatives shapes
-        assert field['grad_mag_dy'].shape == (50, 50)
-        assert field['grad_mag_dx'].shape == (50, 50)
-        assert field['grad_sin_dy'].shape == (50, 50)
-        assert field['grad_sin_dx'].shape == (50, 50)
-        assert field['grad_cos_dy'].shape == (50, 50)
-        assert field['grad_cos_dx'].shape == (50, 50)
-        
+        assert field["grad_mag_dy"].shape == (50, 50)
+        assert field["grad_mag_dx"].shape == (50, 50)
+        assert field["grad_sin_dy"].shape == (50, 50)
+        assert field["grad_sin_dx"].shape == (50, 50)
+        assert field["grad_cos_dy"].shape == (50, 50)
+        assert field["grad_cos_dx"].shape == (50, 50)
+
         # Check dimensions
-        assert field['image_height'] == 50
-        assert field['image_width'] == 50
-        
+        assert field["image_height"] == 50
+        assert field["image_width"] == 50
+
         # Check all arrays are finite
         for key in field:
             if isinstance(field[key], np.ndarray):
@@ -853,42 +869,46 @@ class TestGradientField:
         # Grayscale image
         image = np.zeros((30, 30), dtype=np.float32)
         image[15:, :] = 200  # Horizontal edge at y=15
-        
-        field = gradient_field(image, gradient_smoothing=2.0, streak_length=15, decay_rate=0.2)
-        
+
+        field = gradient_field(
+            image, gradient_smoothing=2.0, streak_length=15, decay_rate=0.2
+        )
+
         # Should work with grayscale input
-        assert field['grad_mag'].shape == (30, 30)
-        assert field['image_height'] == 30
-        assert field['image_width'] == 30
-        
+        assert field["grad_mag"].shape == (30, 30)
+        assert field["image_height"] == 30
+        assert field["image_width"] == 30
+
         # Gradient magnitude should be non-zero near edge
-        assert np.max(field['grad_mag']) > 0
+        assert np.max(field["grad_mag"]) > 0
 
     def test_gradient_field_no_smoothing(self):
         """Test gradient field with no initial smoothing."""
         image = np.random.rand(40, 40, 3) * 255
-        
-        field = gradient_field(image, gradient_smoothing=0.0, streak_length=5, decay_rate=0.3)
-        
-        assert field['grad_mag'].shape == (40, 40)
-        assert np.all(np.isfinite(field['grad_mag']))
+
+        field = gradient_field(
+            image, gradient_smoothing=0.0, streak_length=5, decay_rate=0.3
+        )
+
+        assert field["grad_mag"].shape == (40, 40)
+        assert np.all(np.isfinite(field["grad_mag"]))
 
     def test_gradient_field_parameters(self):
         """Test gradient field with different parameters."""
         image = np.ones((35, 35, 3)) * 128
         image[15:20, 15:20, :] = 255  # Bright square in center
-        
+
         # Test different streak lengths
         for streak_length in [1, 10, 25]:
             field = gradient_field(image, streak_length=streak_length)
-            assert field['grad_mag'].shape == (35, 35)
-            assert np.all(np.isfinite(field['grad_mag']))
-        
+            assert field["grad_mag"].shape == (35, 35)
+            assert np.all(np.isfinite(field["grad_mag"]))
+
         # Test different decay rates
         for decay_rate in [0.05, 0.2, 0.5]:
             field = gradient_field(image, decay_rate=decay_rate)
-            assert field['grad_mag'].shape == (35, 35)
-            assert np.all(np.isfinite(field['grad_mag']))
+            assert field["grad_mag"].shape == (35, 35)
+            assert np.all(np.isfinite(field["grad_mag"]))
 
     def test_gradient_field_mathematical_properties(self):
         """Test mathematical properties of gradient field."""
@@ -896,19 +916,25 @@ class TestGradientField:
         image = np.zeros((20, 20, 3))
         for i in range(20):
             image[i, :, :] = i * 10  # Linear vertical gradient
-        
+
         field = gradient_field(image, gradient_smoothing=0.5, streak_length=5)
-        
+
         # Sin^2 + Cos^2 should be close to 1 (within numerical precision)
-        sin_cos_sum = field['grad_sin']**2 + field['grad_cos']**2
-        np.testing.assert_array_almost_equal(sin_cos_sum, np.ones_like(sin_cos_sum), decimal=5)
-        
+        sin_cos_sum = field["grad_sin"] ** 2 + field["grad_cos"] ** 2
+        np.testing.assert_array_almost_equal(
+            sin_cos_sum, np.ones_like(sin_cos_sum), decimal=5
+        )
+
         # Gradient x and y components should be consistent with magnitude and angle
-        expected_grad_x = field['grad_mag'] * field['grad_cos']
-        expected_grad_y = field['grad_mag'] * field['grad_sin']
-        
-        np.testing.assert_array_almost_equal(field['grad_x'], expected_grad_x, decimal=5)
-        np.testing.assert_array_almost_equal(field['grad_y'], expected_grad_y, decimal=5)
+        expected_grad_x = field["grad_mag"] * field["grad_cos"]
+        expected_grad_y = field["grad_mag"] * field["grad_sin"]
+
+        np.testing.assert_array_almost_equal(
+            field["grad_x"], expected_grad_x, decimal=5
+        )
+        np.testing.assert_array_almost_equal(
+            field["grad_y"], expected_grad_y, decimal=5
+        )
 
     def test_gradient_field_edge_detection(self):
         """Test gradient field enhances edge detection."""
@@ -916,52 +942,60 @@ class TestGradientField:
         image = np.ones((60, 60, 3)) * 50
         image[20:40, :, :] = 200  # Horizontal stripe
         image[:, 30:50, :] = 150  # Vertical stripe (overlapping)
-        
-        field = gradient_field(image, gradient_smoothing=1.0, streak_length=12, decay_rate=0.15)
-        
+
+        field = gradient_field(
+            image, gradient_smoothing=1.0, streak_length=12, decay_rate=0.15
+        )
+
         # Should have strong gradients at edges
-        assert np.max(field['grad_mag']) > np.mean(field['grad_mag']) * 3
-        
+        assert np.max(field["grad_mag"]) > np.mean(field["grad_mag"]) * 3
+
         # Check that edges are properly detected
-        assert field['grad_mag'].shape == (60, 60)
-        assert np.all(np.isfinite(field['grad_mag']))
+        assert field["grad_mag"].shape == (60, 60)
+        assert np.all(np.isfinite(field["grad_mag"]))
 
 
 class TestImageImportHandling:
     """Test import error handling for optional dependencies."""
 
-    @patch('planet_ruler.image.HAS_SEGMENT_ANYTHING', False)
+    @patch("planet_ruler.image.HAS_SEGMENT_ANYTHING", False)
     def test_segmentation_import_error(self):
         """Test ImageSegmentation raises ImportError when dependencies missing."""
         image = np.zeros((50, 50, 3))
-        
-        with pytest.raises(ImportError, match="segment-anything dependencies not available"):
+
+        with pytest.raises(
+            ImportError, match="segment-anything dependencies not available"
+        ):
             ImageSegmentation(image, segmenter="segment-anything")
 
-    @patch('planet_ruler.image.HAS_SEGMENT_ANYTHING', False)
+    @patch("planet_ruler.image.HAS_SEGMENT_ANYTHING", False)
     def test_segmentation_segment_import_error(self):
         """Test segment() method raises ImportError when dependencies missing."""
         image = np.zeros((50, 50, 3))
         seg = ImageSegmentation.__new__(ImageSegmentation)  # Skip __init__
         seg.image = image
         seg.segmenter = "segment-anything"
-        
-        with pytest.raises(ImportError, match="segment-anything dependencies not available"):
+
+        with pytest.raises(
+            ImportError, match="segment-anything dependencies not available"
+        ):
             seg.segment()
 
     def test_smooth_limb_bin_interpolate_unsupported_polyorder(self):
         """Test bin-interpolate method with unsupported polynomial order."""
         limb = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-        
+
         with pytest.raises(AttributeError, match="polyorder .* not supported"):
             smooth_limb(limb, method="bin-interpolate", window_length=2, polyorder=5)
 
     def test_smooth_limb_bin_interpolate_nearest(self):
         """Test bin-interpolate method with nearest neighbor interpolation."""
         limb = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
-        
-        smoothed = smooth_limb(limb, method="bin-interpolate", window_length=2, polyorder=0)
-        
+
+        smoothed = smooth_limb(
+            limb, method="bin-interpolate", window_length=2, polyorder=0
+        )
+
         assert len(smoothed) == len(limb)
         assert np.all(np.isfinite(smoothed))
 
@@ -975,10 +1009,12 @@ class TestImageEdgeCases:
         # Small image that would cause window issues
         small_image = np.ones((10, 5, 3)) * 128
         small_image[5:, :, :] = 200
-        
+
         # Should handle small images gracefully
-        breaks = gradient_break(small_image, window_length=15)  # Window larger than image
-        
+        breaks = gradient_break(
+            small_image, window_length=15
+        )  # Window larger than image
+
         assert len(breaks) == 5
         assert all(0 <= b < 10 for b in breaks)
 
@@ -986,24 +1022,24 @@ class TestImageEdgeCases:
         """Test gradient break adjusts even window lengths."""
         image = np.ones((50, 20, 3)) * 100
         image[25:, :, :] = 200
-        
+
         # Even window length should be adjusted to odd
         breaks = gradient_break(image, window_length=20)  # Even window
-        
+
         assert len(breaks) == 20
         assert all(0 <= b < 50 for b in breaks)
 
     def test_limb_from_mask_empty_columns(self):
         """Test limb extraction handles completely empty columns."""
         seg = ImageSegmentation.__new__(ImageSegmentation)
-        
+
         # Mask with some completely empty columns
         mask = np.zeros((30, 20), dtype=bool)
         mask[15:, :10] = True  # Only left half has mask
         # Right half (columns 10-19) are completely empty
-        
+
         limb = seg.limb_from_mask(mask)
-        
+
         assert len(limb) == 20
         # Should interpolate missing values
         assert not np.any(np.isnan(limb))
