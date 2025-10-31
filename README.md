@@ -206,7 +206,7 @@ planet-ruler demo --planet earth
 ### Requirements
 - **Python 3.8+**
 - **RAM**: 4GB+ recommended (for AI models)
-- **Storage**: ~2GB for full installation with models1
+- **Storage**: ~2GB for full installation with models
 
 ### Install Options
 
