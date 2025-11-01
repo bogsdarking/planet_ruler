@@ -622,6 +622,17 @@ class LimbObservation(PlanetObservation):
             )
         """
         
+        # Normalize float images to [0, 1] if they're in [0, 255] range
+        # This handles images loaded as float32 instead of uint8
+        # if self.image.dtype in [np.float32, np.float64]:
+        #     img_min = self.image.min()
+        #     img_max = self.image.max()
+        #     if img_min >= 0 and img_max > 1:  # Looks like [0, 255] range
+        #         if verbose:
+        #             print(f"Normalizing float image from [{img_min:.2f}, {img_max:.2f}] to [0, 1]")
+        #         self.image = self.image / 255.0
+        #         self.image = np.clip(self.image, 0, 1)  # Ensure valid range
+        
         # Determine if using multi-resolution
         use_multires = (resolution_stages is not None)
         
@@ -639,6 +650,8 @@ class LimbObservation(PlanetObservation):
         working_image = self.image
         original_image_backup = self.image.copy()  # Explicit copy to preserve original
         original_dtype = self.image.dtype  # Save original dtype
+        if verbose:
+            print(f"DEBUG: Before smoothing - dtype: {original_dtype}, range: [{self.image.min():.4f}, {self.image.max():.4f}]")
         if image_smoothing is not None and image_smoothing > 0 and 'gradient_field' in loss_function:
             if verbose:
                 print(f"Applying Gaussian blur to image (sigma={image_smoothing:.1f})")
@@ -650,6 +663,8 @@ class LimbObservation(PlanetObservation):
             )
             # Temporarily replace self.image for gradient computation
             self.image = working_image
+            if verbose:
+                print(f"DEBUG: After smoothing - dtype: {self.image.dtype}, range: [{self.image.min():.4f}, {self.image.max():.4f}]")
         
         if use_multires:
             if resolution_stages == 'auto':
@@ -863,10 +878,12 @@ class LimbObservation(PlanetObservation):
         # Restore and finalize
         # Restore original unsmoothed image if image_smoothing was applied
         if image_smoothing is not None and image_smoothing > 0 and 'gradient_field' in loss_function:
-            # Restore original image with original dtype
+            # Restore TRUE original image (uint8), not the smoothed working image (float32)
             self.image = original_image_backup.astype(original_dtype)
-            # Update original_image for final limb computation
+            # Also update original_image reference for final limb computation
             original_image = original_image_backup.astype(original_dtype)
+            if verbose:
+                print(f"DEBUG: Restored image - dtype: {self.image.dtype}, range: [{self.image.min()}, {self.image.max()}]")
         else:
             self.image = original_image
         if resolution_stages[-1] != 1:
@@ -902,11 +919,13 @@ class LimbObservation(PlanetObservation):
             # Temporarily restore original unsmoothed image for limb computation if needed
             temp_image = self.image
             if image_smoothing is not None and image_smoothing > 0 and 'gradient_field' in loss_function:
-                self.image = original_image_backup
-                final_limb_image = original_image_backup
+                # Use true original backup (uint8)
+                self.image = original_image_backup.astype(original_dtype)
+                final_limb_image = original_image_backup.astype(original_dtype)
             else:
-                self.image = original_image
-                final_limb_image = original_image
+                # Even without smoothing, use the true original, not 'original_image' which might be float32
+                self.image = original_image_backup.astype(original_dtype)
+                final_limb_image = original_image_backup.astype(original_dtype)
             
             # Update cost function to full resolution if not already
             if final_downsample != 1:
