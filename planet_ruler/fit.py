@@ -155,7 +155,7 @@ class CostFunction:
 
         return cost
 
-    def _gradient_field_cost_simple(self, params: np.ndarray | dict) -> float:
+    def _gradient_field_cost_simple(self, params: np.ndarray | dict, y_coords: np.ndarray = None) -> float:
         """
         Simplified gradient field cost using signed flux method.
 
@@ -168,8 +168,9 @@ class CostFunction:
         - Coherent edges (limb): gradients aligned → large |flux|
         - Incoherent features (striations): mixed gradients → cancellation → small |flux|
         """
-        # Get predicted horizon curve
-        y_coords = self.evaluate(params)
+        if y_coords is None:
+            # Get predicted horizon curve
+            y_coords = self.evaluate(params)
 
         # Handle invalid coordinates
         if np.any(np.isnan(y_coords)) or np.any(np.isinf(y_coords)):
@@ -270,7 +271,9 @@ class CostFunction:
 
         return cost
 
-    def _gradient_field_cost(self, params: np.ndarray | dict) -> float:
+    def _gradient_field_cost(self,
+                             params: np.ndarray | dict,
+                             y_coords: np.ndarray = None) -> float:
         """
         Gradient field cost based on flux through the limb curve.
 
@@ -281,8 +284,9 @@ class CostFunction:
 
         This naturally prefers strong, well-aligned gradients without arbitrary thresholds.
         """
-        # Get predicted horizon curve (sub-pixel precision!)
-        y_coords = self.evaluate(params)
+        if y_coords is None:
+            # Get predicted horizon curve (sub-pixel precision!)
+            y_coords = self.evaluate(params)
 
         # Handle invalid coordinates
         if np.any(np.isnan(y_coords)) or np.any(np.isinf(y_coords)):

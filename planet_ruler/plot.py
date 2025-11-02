@@ -245,6 +245,7 @@ def plot_topography(image: np.ndarray) -> None:
 def plot_gradient_field_at_limb(
     y_pixels,
     image,
+    image_smoothing=None,
     gradient_smoothing=5.0,
     streak_length=30,
     decay_rate=0.15,
@@ -257,6 +258,9 @@ def plot_gradient_field_at_limb(
     Args:
         y_pixels (np.ndarray): Y-coordinates of limb at each x-position
         image (np.ndarray): Input image (H x W x 3 or H x W)
+        image_smoothing (int): For gradient_field - Gaussian blur sigma applied to image
+            before gradient computation. Removes high-frequency artifacts (crater rims,
+            striations) that could mislead optimization. Different from gradient_smoothing.
         gradient_smoothing (float): Initial smoothing for gradient direction estimation
         streak_length (int): How far to sample along gradients
         decay_rate (float): Exponential decay rate for sampling
@@ -269,9 +273,19 @@ def plot_gradient_field_at_limb(
     # Import here to avoid circular import issues
     from planet_ruler.image import gradient_field
 
+    if image_smoothing is not None:
+        working_image = cv2.GaussianBlur(
+                    image.astype(np.float32),
+                    (0, 0),  # Kernel size auto-determined from sigma
+                    sigmaX=image_smoothing,
+                    sigmaY=image_smoothing
+                )
+    else:
+        working_image = image.copy()
+
     # Compute gradients using directional blur (now the default method)
     grad_data = gradient_field(
-        image,
+        working_image,
         gradient_smoothing=gradient_smoothing,
         streak_length=streak_length,
         decay_rate=decay_rate,
@@ -365,24 +379,24 @@ def plot_gradient_field_at_limb(
             linewidth=2,
         )
 
-        # Draw tangent direction (magenta, dashed)
-        tangent_x_at_point = tangent_x_unit[x_idx]
-        tangent_y_at_point = tangent_y_unit[x_idx]
-        tan_dx = 30 * tangent_x_at_point
-        tan_dy = 30 * tangent_y_at_point
-        ax.arrow(
-            x_pos,
-            y_pos,
-            tan_dx,
-            tan_dy,
-            head_width=8,
-            head_length=8,
-            fc="magenta",
-            ec="magenta",
-            alpha=0.6,
-            linestyle="--",
-            linewidth=1.5,
-        )
+        # # Draw tangent direction (magenta, dashed)
+        # tangent_x_at_point = tangent_x_unit[x_idx]
+        # tangent_y_at_point = tangent_y_unit[x_idx]
+        # tan_dx = 30 * tangent_x_at_point
+        # tan_dy = 30 * tangent_y_at_point
+        # ax.arrow(
+        #     x_pos,
+        #     y_pos,
+        #     tan_dx,
+        #     tan_dy,
+        #     head_width=8,
+        #     head_length=8,
+        #     fc="magenta",
+        #     ec="magenta",
+        #     alpha=0.6,
+        #     linestyle="--",
+        #     linewidth=1.5,
+        # )
 
         # Draw normal direction (cyan, dashed)
         norm_dx = 30 * normal_x_unit[x_idx]
@@ -400,15 +414,15 @@ def plot_gradient_field_at_limb(
             linewidth=1.5,
         )
 
-        # Verify perpendicularity (for debugging)
-        dot_product = (
-            tangent_x_at_point * normal_x_unit[x_idx]
-            + tangent_y_at_point * normal_y_unit[x_idx]
-        )
-        if abs(dot_product) > 0.01:
-            print(
-                f"WARNING at x={x_idx}: dot product = {dot_product:.4f} (should be ~0)"
-            )
+        # # Verify perpendicularity (for debugging)
+        # dot_product = (
+        #     tangent_x_at_point * normal_x_unit[x_idx]
+        #     + tangent_y_at_point * normal_y_unit[x_idx]
+        # )
+        # if abs(dot_product) > 0.01:
+        #     print(
+        #         f"WARNING at x={x_idx}: dot product = {dot_product:.4f} (should be ~0)"
+        #     )
 
     # Add legend
     from matplotlib.lines import Line2D
@@ -442,15 +456,15 @@ def plot_gradient_field_at_limb(
             linestyle="",
             label="Gradient (perpendicular)",
         ),
-        Line2D(
-            [0],
-            [0],
-            color="magenta",
-            marker=">",
-            markersize=10,
-            linestyle="--",
-            label="Curve Tangent",
-        ),
+        # Line2D(
+        #     [0],
+        #     [0],
+        #     color="magenta",
+        #     marker=">",
+        #     markersize=10,
+        #     linestyle="--",
+        #     label="Curve Tangent",
+        # ),
         Line2D(
             [0],
             [0],
@@ -466,7 +480,7 @@ def plot_gradient_field_at_limb(
     ax.set_title(title, fontsize=14)
     ax.set_xlabel("X (pixels)", fontsize=12)
     ax.set_ylabel("Y (pixels)", fontsize=12)
-
+    ax.set_aspect("equal")  # Force equal scaling (or normal appears angled)
     plt.tight_layout()
     return fig, ax
 
@@ -547,6 +561,7 @@ def compare_gradient_fields(
     y_pixels_list,
     labels,
     image,
+    image_smoothing=None,
     gradient_smoothing=5.0,
     streak_length=30,
     decay_rate=0.15,
@@ -565,9 +580,19 @@ def compare_gradient_fields(
     # Import here to avoid circular import issues
     from planet_ruler.image import gradient_field
 
+    if image_smoothing is not None:
+        working_image = cv2.GaussianBlur(
+                    image.astype(np.float32),
+                    (0, 0),  # Kernel size auto-determined from sigma
+                    sigmaX=image_smoothing,
+                    sigmaY=image_smoothing
+                )
+    else:
+        working_image = image.copy()
+
     # Compute gradients using directional blur (now the default method)
     grad_data = gradient_field(
-        image,
+        working_image,
         gradient_smoothing=gradient_smoothing,
         streak_length=streak_length,
         decay_rate=decay_rate,

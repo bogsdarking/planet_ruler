@@ -380,17 +380,25 @@ class TestUncertaintyFromProfile:
         mock_results = []
         optimal_param = 6371000.0
         search_range = 0.2 * optimal_param  # 20% of parameter value
-        param_values = np.linspace(optimal_param - search_range, optimal_param + search_range, 20)
-        
+        param_values = np.linspace(
+            optimal_param - search_range, optimal_param + search_range, 20
+        )
+
         for i, param_val in enumerate(param_values):
             result = Mock()
             # Create a parabolic cost profile that crosses threshold
-            deviation = abs(param_val - optimal_param) / optimal_param  # relative deviation
-            result.fun = deviation ** 2 * 10  # Should cross threshold of 0.5 (chi2.ppf return)
+            deviation = (
+                abs(param_val - optimal_param) / optimal_param
+            )  # relative deviation
+            result.fun = (
+                deviation**2 * 10
+            )  # Should cross threshold of 0.5 (chi2.ppf return)
             mock_results.append(result)
 
         with patch("scipy.optimize.minimize", side_effect=mock_results):
-            with patch("scipy.stats.chi2.ppf", return_value=1.0):  # delta_cost_threshold = 0.5
+            with patch(
+                "scipy.stats.chi2.ppf", return_value=1.0
+            ):  # delta_cost_threshold = 0.5
                 result = _uncertainty_from_profile(obs, "r", 1.0, 0.68)
 
         assert result["uncertainty"] >= 0
