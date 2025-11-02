@@ -69,13 +69,23 @@ MINIMIZER_PRESETS = {
             'atol': 1.0,
             'tol': 0.01
         },
+        'planet-ruler': {
+            'strategy': 'best2bin',
+            'popsize': 15,
+            'mutation': [0.1, 1.9],
+            'recombination': 0.7,
+            'polish': True,
+            'init': 'sobol',
+            'atol': 0,
+            'tol': 0.01
+        },
         'robust': {
             'strategy': 'best2bin',
             'popsize': 20,
             'mutation': [0.5, 1.9],
             'recombination': 0.7,
             'polish': True,
-            'init': 'sobol',  # Changed back from 'latinhypercube' - too exploratory
+            'init': 'sobol',
             'atol': 0.1,
             'tol': 0.001
         },
@@ -213,6 +223,7 @@ class LimbObservation(PlanetObservation):
 
         self.free_parameters = None
         self.init_parameter_values = None
+        self._original_init_parameter_values = None  # Store original values for warm start protection
         self.parameter_limits = None
         self.load_fit_config(fit_config)
         assert limb_detection in ["gradient-break", "segmentation", "manual"]
@@ -448,6 +459,8 @@ class LimbObservation(PlanetObservation):
 
         self.free_parameters = base_config["free_parameters"]
         self.init_parameter_values = base_config["init_parameter_values"]
+        # Store a deep copy of original initial values for warm start protection
+        self._original_init_parameter_values = base_config["init_parameter_values"].copy()
         self.parameter_limits = base_config["parameter_limits"]
 
     def register_limb(self, limb: np.ndarray) -> "LimbObservation":
@@ -554,6 +567,7 @@ class LimbObservation(PlanetObservation):
         decay_rate: float = 0.10,
         minimizer_preset: str = 'balanced',
         minimizer_kwargs: Optional[Dict] = None,
+        warm_start: bool = False,
         verbose: bool = False
     ) -> "LimbObservation":
         """
@@ -588,6 +602,12 @@ class LimbObservation(PlanetObservation):
                 - 'balanced': Good trade-off (default)
                 - 'robust': Thorough exploration, slower
             minimizer_kwargs: Override specific minimizer parameters (advanced)
+            warm_start: If True, use previous fit's results as starting point
+                (useful for iterative refinement). If False (default), use 
+                original init_parameter_values.
+                Note: Multi-resolution stages always warm-start from previous 
+                stages automatically. This parameter is for warm-starting across 
+                separate fit_limb() calls.
             verbose: Print detailed progress
             
         Returns:
@@ -620,20 +640,50 @@ class LimbObservation(PlanetObservation):
                 loss_function='gradient_field',
                 minimizer_kwargs={'popsize': 25, 'atol': 0.5}
             )
+            
+            # Iterative refinement with warm start
+            obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
+            obs.fit_limb(loss_function='gradient_field', warm_start=True, 
+                         minimizer_preset='robust')  # Refine with more thorough search
         """
         
-        # Normalize float images to [0, 1] if they're in [0, 255] range
-        # This handles images loaded as float32 instead of uint8
-        # if self.image.dtype in [np.float32, np.float64]:
-        #     img_min = self.image.min()
-        #     img_max = self.image.max()
-        #     if img_min >= 0 and img_max > 1:  # Looks like [0, 255] range
-        #         if verbose:
-        #             print(f"Normalizing float image from [{img_min:.2f}, {img_max:.2f}] to [0, 1]")
-        #         self.image = self.image / 255.0
-        #         self.image = np.clip(self.image, 0, 1)  # Ensure valid range
+        # ====================================================================
+        # STEP 0: Warm start handling - protect original values
+        # ====================================================================
+        if warm_start and hasattr(self, 'best_parameters') and self.best_parameters is not None:
+            # Update init_parameter_values with previous fit's results
+            # Only update free parameters (don't touch inferred ones like n_pix_x, n_pix_y, x0, y0)
+            for param in self.free_parameters:
+                if param in self.best_parameters:
+                    self.init_parameter_values[param] = self.best_parameters[param]
+            if verbose:
+                print("Warm start: Using previous fit's results as starting point")
+        elif not warm_start and hasattr(self, '_original_init_parameter_values') and self._original_init_parameter_values is not None:
+            # Restore original initial parameter values when not using warm start
+            self.init_parameter_values = self._original_init_parameter_values.copy()
+            if verbose:
+                print("Cold start: Restored original initial parameter values")
         
-        # Determine if using multi-resolution
+        # ====================================================================
+        # STEP 1: Save original image ONCE (if smoothing will be applied)
+        # ====================================================================
+        original_image = None
+        if image_smoothing is not None and image_smoothing > 0 and 'gradient_field' in loss_function:
+            original_image = self.image.copy()  # Save ONCE
+            
+            # Apply smoothing to self.image
+            if verbose:
+                print(f"Applying Gaussian blur to image (sigma={image_smoothing:.1f})")
+            self.image = cv2.GaussianBlur(
+                self.image.astype(np.float32),
+                (0, 0),  # Kernel size auto-determined from sigma
+                sigmaX=image_smoothing,
+                sigmaY=image_smoothing
+            )
+        
+        # ====================================================================
+        # STEP 2: Determine resolution strategy
+        # ====================================================================
         use_multires = (resolution_stages is not None)
         
         # Multi-resolution only works with gradient_field loss functions
@@ -645,135 +695,99 @@ class LimbObservation(PlanetObservation):
             use_multires = False
             resolution_stages = None
         
-        # Apply image smoothing if requested (for gradient_field)
-        # This removes high-frequency artifacts like crater rims before gradient computation
-        working_image = self.image
-        original_image_backup = self.image.copy()  # Explicit copy to preserve original
-        original_dtype = self.image.dtype  # Save original dtype
-        if verbose:
-            print(f"DEBUG: Before smoothing - dtype: {original_dtype}, range: [{self.image.min():.4f}, {self.image.max():.4f}]")
-        if image_smoothing is not None and image_smoothing > 0 and 'gradient_field' in loss_function:
-            if verbose:
-                print(f"Applying Gaussian blur to image (sigma={image_smoothing:.1f})")
-            working_image = cv2.GaussianBlur(
-                self.image.astype(np.float32),
-                (0, 0),  # Kernel size auto-determined from sigma
-                sigmaX=image_smoothing,
-                sigmaY=image_smoothing
-            )
-            # Temporarily replace self.image for gradient computation
-            self.image = working_image
-            if verbose:
-                print(f"DEBUG: After smoothing - dtype: {self.image.dtype}, range: [{self.image.min():.4f}, {self.image.max():.4f}]")
-        
-        if use_multires:
-            if resolution_stages == 'auto':
-                # Auto-generate stages based on image size
-                min_dim = min(self.image.shape[:2])
-                if min_dim >= 2000:
-                    resolution_stages = [4, 2, 1]
-                elif min_dim >= 1000:
-                    resolution_stages = [2, 1]
-                else:
-                    resolution_stages = [1]
-                    use_multires = False  # Single stage = no multires needed
-            
-            elif not isinstance(resolution_stages, list):
-                raise ValueError(
-                    "resolution_stages must be None, 'auto', or a list of ints"
+        # ====================================================================
+        # STEP 3: Run optimization (single or multi-resolution)
+        # ====================================================================
+        try:
+            if not use_multires:
+                result = self._fit_single_resolution(
+                    loss_function=loss_function,
+                    max_iter=max_iter,
+                    n_jobs=n_jobs,
+                    seed=seed,
+                    gradient_smoothing=gradient_smoothing,
+                    streak_length=streak_length,
+                    decay_rate=decay_rate,
+                    minimizer_preset=minimizer_preset,
+                    minimizer_kwargs=minimizer_kwargs,
+                    verbose=verbose
                 )
+            else:
+                result = self._fit_multi_resolution(
+                    loss_function=loss_function,
+                    resolution_stages=resolution_stages,
+                    max_iter=max_iter,
+                    max_iter_per_stage=max_iter_per_stage,
+                    n_jobs=n_jobs,
+                    seed=seed,
+                    gradient_smoothing=gradient_smoothing,
+                    streak_length=streak_length,
+                    decay_rate=decay_rate,
+                    minimizer_preset=minimizer_preset,
+                    minimizer_kwargs=minimizer_kwargs,
+                    verbose=verbose
+                )
+        finally:
+            # ================================================================
+            # STEP 4: Restore original image ONCE (if it was smoothed)
+            # ================================================================
+            if original_image is not None:
+                self.image = original_image
+                if verbose:
+                    print(f"Restored original unsmoothed image")
         
-        # If single-resolution, just wrap in a single stage
-        if not use_multires:
-            result = self._fit_single_resolution(
-                loss_function=loss_function,
-                max_iter=max_iter,
-                n_jobs=n_jobs,
-                seed=seed,
-                gradient_smoothing=gradient_smoothing,
-                streak_length=streak_length,
-                decay_rate=decay_rate,
-                minimizer_preset=minimizer_preset,
-                minimizer_kwargs=minimizer_kwargs,
-                verbose=verbose
-            )
-            # Restore original image if we applied smoothing
-            if image_smoothing is not None and image_smoothing > 0 and 'gradient_field' in loss_function:
-                self.image = original_image_backup.astype(original_dtype)
-            return result
+        return self
+
+    def _fit_multi_resolution(
+        self,
+        loss_function: str,
+        resolution_stages: List[int] | str,
+        max_iter: int,
+        max_iter_per_stage: Optional[List[int]],
+        n_jobs: int,
+        seed: int,
+        gradient_smoothing: float,
+        streak_length: int,
+        decay_rate: float,
+        minimizer_preset: str,
+        minimizer_kwargs: Optional[Dict],
+        verbose: bool
+    ) -> "LimbObservation":
+        """
+        Multi-resolution optimization (internal method).
         
-        # Multi-resolution optimization
-        if verbose:
-            print(f"\n{'='*60}")
-            print(f"Multi-Resolution Optimization")
-            print(f"{'='*60}")
-            print(f"Stages: {resolution_stages}")
-            print(f"Loss: {loss_function}, Preset: {minimizer_preset}")
-            print(f"{'='*60}\n")
+        Note: self.image may be the smoothed version if image_smoothing was applied.
+        """
+        # Auto-generate stages
+        if resolution_stages == 'auto':
+            min_dim = min(self.image.shape[:2])
+            if min_dim >= 2000:
+                resolution_stages = [4, 2, 1]
+            elif min_dim >= 1000:
+                resolution_stages = [2, 1]
+            else:
+                resolution_stages = [1]
         
         # Auto-determine iterations per stage
         if max_iter_per_stage is None:
-            # Distribute total iterations across stages
-            # Early stages get fewer (coarser landscape)
             total_weight = sum(range(1, len(resolution_stages) + 1))
             max_iter_per_stage = [
                 int(max_iter * (i + 1) / total_weight) 
                 for i in range(len(resolution_stages))
             ]
         
-        # Store original state
-        # Note: if image_smoothing was applied, self.image is now the smoothed version
-        original_image = self.image.copy()
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"Multi-Resolution Optimization")
+            print(f"Stages: {resolution_stages}, Iterations: {max_iter_per_stage}")
+            print(f"Loss: {loss_function}, Preset: {minimizer_preset}")
+            print(f"{'='*60}\n")
+        
+        # Store current state (might be smoothed version)
+        full_res_image = self.image.copy()
         original_params = self.init_parameter_values.copy()
         
-        # Determine final stage resolution
-        final_downsample = resolution_stages[-1]
-        if final_downsample == 1:
-            final_image = original_image
-        else:
-            # Downsample to final stage resolution
-            new_height = int(original_image.shape[0] / final_downsample)
-            new_width = int(original_image.shape[1] / final_downsample)
-            final_image = cv2.resize(
-                original_image, (new_width, new_height), 
-                interpolation=cv2.INTER_AREA
-            )
-        
-        # Create final-resolution cost function once (for apples-to-apples comparison)
-        # This avoids recomputing the gradient field at every stage
-        final_res_inferred = {
-            "n_pix_x": final_image.shape[1],
-            "n_pix_y": final_image.shape[0],
-            "x0": int(final_image.shape[1] * 0.5),
-            "y0": int(final_image.shape[0] * 0.5),
-        }
-        final_res_params = original_params.copy()
-        final_res_params.update(final_res_inferred)
-        
-        # Scale gradient parameters for final resolution
-        final_gradient_smoothing = max(0.5, gradient_smoothing / final_downsample)
-        final_streak_length = max(5, int(streak_length / final_downsample))
-        
-        if 'gradient_field' in loss_function:
-            final_res_cost_fn = CostFunction(
-                target=final_image,
-                function=limb_arc,
-                free_parameters=self.free_parameters,
-                init_parameter_values=final_res_params,
-                loss_function=loss_function,
-                gradient_smoothing=final_gradient_smoothing,
-                streak_length=final_streak_length,
-                decay_rate=decay_rate
-            )
-            if verbose:
-                if final_downsample == 1:
-                    print("Pre-computed final-resolution gradient field (full resolution)")
-                else:
-                    print(f"Pre-computed final-resolution gradient field ({final_downsample}x downsample)")
-        else:
-            final_res_cost_fn = None
-        
-        # Multi-resolution loop
+        # Loop through resolution stages
         for stage_idx, (downsample, stage_iter) in enumerate(
             zip(resolution_stages, max_iter_per_stage)
         ):
@@ -783,40 +797,44 @@ class LimbObservation(PlanetObservation):
                       f"1/{downsample}x ({stage_iter} iter)")
                 print(f"{'─'*60}")
             
-            # Downsample image
+            # Downsample image for this stage
             if downsample > 1:
-                h, w = original_image.shape[:2]
-                self.image = cv2.resize(original_image, (w // downsample, h // downsample))
+                h, w = full_res_image.shape[:2]
+                self.image = cv2.resize(
+                    full_res_image, 
+                    (w // downsample, h // downsample),
+                    interpolation=cv2.INTER_AREA
+                )
                 if verbose:
-                    print(f"Size: {original_image.shape[:2]} → {self.image.shape[:2]}")
+                    print(f"Size: {full_res_image.shape[:2]} → {self.image.shape[:2]}")
             else:
-                self.image = original_image
+                self.image = full_res_image
             
-            # Scale parameters - FIX: divide by downsample to get smaller values
+            # Scale parameters for this resolution
             self.init_parameter_values = self._scale_parameters_for_resolution(
-                original_params, 1.0 / downsample  # FIX: was just 'downsample'
+                original_params, 1.0 / downsample
             )
             
             # Warm start from previous stage
             if stage_idx > 0 and hasattr(self, 'best_parameters'):
-                # FIX: Scale UP from previous (lower) resolution to current resolution
-                # Example: from 1/2 res (downsample=2) to full res (downsample=1)
-                # scale = 2/1 = 2.0 (double the pixel values)
-                scale = resolution_stages[stage_idx - 1] / downsample  # FIX: was backwards
+                scale = resolution_stages[stage_idx - 1] / downsample
                 prev_solution = self._scale_parameters_for_resolution(
                     self.best_parameters, scale
                 )
-                self.init_parameter_values.update(prev_solution)
+                
                 if verbose:
-                    print("Warm start from previous stage")
+                    print("Warm start from previous stage:")
+                    print(f"  Scale factor: {scale:.2f}")
+                    print(f"  Free parameters from previous stage:")
+                    for param in self.free_parameters:
+                        if param in self.best_parameters:
+                            print(f"    {param}: {self.best_parameters[param]:.4f} → {prev_solution.get(param, 'N/A')}")
+                
+                self.init_parameter_values.update(prev_solution)
             
-            # Scale gradient parameters inversely with resolution
-            # This maintains constant physical distance across resolutions
-            # Example: at 4x downsample, gradient_smoothing=5.0 → 1.25
-            # so it still smooths over ~5 original pixels
+            # Scale gradient parameters
             scaled_gradient_smoothing = max(0.5, gradient_smoothing / downsample)
             scaled_streak_length = max(5, int(streak_length / downsample))
-            # decay_rate doesn't need scaling - it's a unitless exponential parameter
             
             if verbose:
                 print(f"Gradient params:")
@@ -828,8 +846,10 @@ class LimbObservation(PlanetObservation):
                     print(f"  streak_length: {scaled_streak_length}")
             
             # Fit at this resolution
-            # For final stage, use pre-computed cost function to avoid redundant gradient computation
-            use_precomputed = (downsample == final_downsample and final_res_cost_fn is not None)
+            if verbose:
+                print(f"Starting optimization with:")
+                for param in self.free_parameters:
+                    print(f"  {param}: {self.init_parameter_values.get(param, 'N/A')}")
             
             self._fit_single_resolution(
                 loss_function=loss_function,
@@ -841,119 +861,90 @@ class LimbObservation(PlanetObservation):
                 decay_rate=decay_rate,
                 minimizer_preset=minimizer_preset,
                 minimizer_kwargs=minimizer_kwargs,
-                verbose=verbose,
-                precomputed_cost_fn=final_res_cost_fn if use_precomputed else None
+                verbose=verbose
             )
             
             if verbose and hasattr(self, 'best_parameters'):
-                # Always evaluate against final-resolution cost function for apples-to-apples comparison
-                if final_res_cost_fn is not None:
-                    if downsample != final_downsample:
-                        # Scale solution to final resolution for comparison
-                        # IMPORTANT: Don't scale n_pix_x/n_pix_y - use final resolution values
-                        # Only scale x0/y0 since those are the fitted center positions
-                        final_res_solution = self.best_parameters.copy()
-                        
-                        # Scale pixel positions (x0, y0)
-                        scale_factor = downsample / final_downsample
-                        if 'x0' in final_res_solution:
-                            final_res_solution['x0'] = int(final_res_solution['x0'] * scale_factor)
-                        if 'y0' in final_res_solution:
-                            final_res_solution['y0'] = int(final_res_solution['y0'] * scale_factor)
-                        
-                        # Use final resolution dimensions (don't scale - prevents rounding errors!)
-                        final_res_solution['n_pix_x'] = final_res_inferred['n_pix_x']
-                        final_res_solution['n_pix_y'] = final_res_inferred['n_pix_y']
-                        
-                        cost = final_res_cost_fn.cost(final_res_solution)
-                    else:
-                        # Already at final resolution
-                        cost = self.cost_function.cost(self.fit_results.x)
+                cost = self.cost_function.cost(self.fit_results.x)
+                print(f"Cost at current resolution: {cost:.6f}")
+                if 'gradient_field' in loss_function:
+                    print(f"Flux at current resolution: {1.0 - cost:.6f}")
+                print(f"Final parameters:")
+                for param in self.free_parameters:
+                    print(f"  {param}: {self.best_parameters.get(param, 'N/A')}")
+                
+                # If not at final resolution, also evaluate at final resolution for comparison
+                if downsample != resolution_stages[-1]:
+                    # Scale parameters to final resolution
+                    final_downsample = resolution_stages[-1]
+                    scale_to_final = downsample / final_downsample
                     
-                    print(f"Cost: {cost:.6f}")
+                    final_res_params = self._scale_parameters_for_resolution(
+                        self.best_parameters, scale_to_final
+                    )
+                    # Update to actual final resolution dimensions
+                    final_res_params['n_pix_x'] = full_res_image.shape[1]
+                    final_res_params['n_pix_y'] = full_res_image.shape[0]
+                    final_res_params['x0'] = int(full_res_image.shape[1] * 0.5)
+                    final_res_params['y0'] = int(full_res_image.shape[0] * 0.5)
+                    
+                    # Create temporary cost function at final resolution
+                    temp_cost_fn = CostFunction(
+                        target=full_res_image if 'gradient_field' in loss_function else self.features.get("limb"),
+                        function=limb_arc,
+                        free_parameters=self.free_parameters,
+                        init_parameter_values=final_res_params,
+                        loss_function=loss_function,
+                        gradient_smoothing=gradient_smoothing,
+                        streak_length=streak_length,
+                        decay_rate=decay_rate
+                    )
+                    
+                    # Evaluate at final resolution
+                    final_cost = temp_cost_fn.cost(self.fit_results.x)
+                    print(f"Cost if evaluated at final resolution: {final_cost:.6f}")
                     if 'gradient_field' in loss_function:
-                        print(f"Flux: {1.0 - cost:.6f}")
+                        print(f"Flux if evaluated at final resolution: {1.0 - final_cost:.6f}")
 
         
-        # Restore and finalize
-        # Restore original unsmoothed image if image_smoothing was applied
-        if image_smoothing is not None and image_smoothing > 0 and 'gradient_field' in loss_function:
-            # Restore TRUE original image (uint8), not the smoothed working image (float32)
-            self.image = original_image_backup.astype(original_dtype)
-            # Also update original_image reference for final limb computation
-            original_image = original_image_backup.astype(original_dtype)
-            if verbose:
-                print(f"DEBUG: Restored image - dtype: {self.image.dtype}, range: [{self.image.min()}, {self.image.max()}]")
-        else:
-            self.image = original_image
-        if resolution_stages[-1] != 1:
-            # Final stage was downsampled, need to prepare for full resolution fitted limb
-            # Scale positional parameters (x0, y0) but use actual image dimensions
-            scale_factor = resolution_stages[-1]
-            scaled_params = self.best_parameters.copy()
-            
-            # Scale pixel positions
-            if 'x0' in scaled_params:
-                scaled_params['x0'] = int(scaled_params['x0'] * scale_factor)
-            if 'y0' in scaled_params:
-                scaled_params['y0'] = int(scaled_params['y0'] * scale_factor)
-            
-            # Use actual full resolution dimensions (prevents rounding errors!)
-            # Get from original_image_backup if smoothing was applied, otherwise from original_image
-            if image_smoothing is not None and image_smoothing > 0 and 'gradient_field' in loss_function:
-                actual_full_res_image = original_image_backup
-            else:
-                actual_full_res_image = original_image
-            
-            scaled_params['n_pix_x'] = actual_full_res_image.shape[1]
-            scaled_params['n_pix_y'] = actual_full_res_image.shape[0]
-            
-            self.best_parameters = scaled_params
-            self.init_parameter_values = original_params
-            
-            # Note: cost_function is already set to final_res_cost_fn from last stage
-        # else: final stage was at target resolution and already used pre-computed cost function!
+        # Restore full resolution
+        self.image = full_res_image
         
-        # Compute final limb at full resolution using original unsmoothed image
-        if hasattr(self, 'best_parameters'):
-            # Temporarily restore original unsmoothed image for limb computation if needed
-            temp_image = self.image
-            if image_smoothing is not None and image_smoothing > 0 and 'gradient_field' in loss_function:
-                # Use true original backup (uint8)
-                self.image = original_image_backup.astype(original_dtype)
-                final_limb_image = original_image_backup.astype(original_dtype)
-            else:
-                # Even without smoothing, use the true original, not 'original_image' which might be float32
-                self.image = original_image_backup.astype(original_dtype)
-                final_limb_image = original_image_backup.astype(original_dtype)
-            
-            # Update cost function to full resolution if not already
-            if final_downsample != 1:
-                # Need to create full-res cost function for final limb evaluation
-                full_res_inferred = {
-                    "n_pix_x": final_limb_image.shape[1],
-                    "n_pix_y": final_limb_image.shape[0],
-                    "x0": int(final_limb_image.shape[1] * 0.5),
-                    "y0": int(final_limb_image.shape[0] * 0.5),
-                }
-                full_res_params = self.best_parameters.copy()
-                full_res_params.update(full_res_inferred)
-                
-                self.cost_function = CostFunction(
-                    target=final_limb_image,
-                    function=limb_arc,
-                    free_parameters=self.free_parameters,
-                    init_parameter_values=full_res_params,
-                    loss_function=loss_function,
-                    gradient_smoothing=gradient_smoothing,
-                    streak_length=streak_length,
-                    decay_rate=decay_rate
-                )
-            
-            self.features["fitted_limb"] = self.cost_function.evaluate(
-                self.best_parameters
+        # Note: We don't restore init_parameter_values here because:
+        # 1. It's not needed for correctness (next fit will set its own)
+        # 2. It would break warm_start (where we want to keep updated values)
+        
+        # Scale final solution back to full resolution
+        if resolution_stages[-1] != 1:
+            scale_factor = resolution_stages[-1]
+            self.best_parameters = self._scale_parameters_for_resolution(
+                self.best_parameters, scale_factor
             )
-            self.image = temp_image
+            # Update image dimensions to actual full resolution
+            self.best_parameters['n_pix_x'] = full_res_image.shape[1]
+            self.best_parameters['n_pix_y'] = full_res_image.shape[0]
+            
+            # Recompute fitted limb at full resolution
+            inferred_parameters = {
+                "n_pix_x": full_res_image.shape[1],
+                "n_pix_y": full_res_image.shape[0],
+                "x0": int(full_res_image.shape[1] * 0.5),
+                "y0": int(full_res_image.shape[0] * 0.5),
+            }
+            full_res_params = self.best_parameters.copy()
+            full_res_params.update(inferred_parameters)
+            
+            self.cost_function = CostFunction(
+                target=full_res_image if 'gradient_field' in loss_function else self.features.get("limb"),
+                function=limb_arc,
+                free_parameters=self.free_parameters,
+                init_parameter_values=full_res_params,
+                loss_function=loss_function,
+                gradient_smoothing=gradient_smoothing,
+                streak_length=streak_length,
+                decay_rate=decay_rate
+            )
+            self.features["fitted_limb"] = self.cost_function.evaluate(self.best_parameters)
         
         if verbose:
             print(f"\n{'='*60}")
@@ -973,15 +964,12 @@ class LimbObservation(PlanetObservation):
         decay_rate: float,
         minimizer_preset: str,
         minimizer_kwargs: Optional[Dict],
-        verbose: bool,
-        precomputed_cost_fn: Optional[CostFunction] = None
+        verbose: bool
     ) -> "LimbObservation":
         """
         Internal method: single-resolution optimization.
         
-        Args:
-            precomputed_cost_fn: If provided, use this instead of creating a new CostFunction.
-                Used at final stage to avoid redundant gradient computation.
+        Note: self.image may be the smoothed version if image_smoothing was applied.
         """
         # Setup parameters
         # x0, y0 always inferred from image center (not free parameters)
@@ -997,7 +985,7 @@ class LimbObservation(PlanetObservation):
         # Choose target
         if 'gradient_field' in loss_function:
             target = self.image
-            if verbose and precomputed_cost_fn is None:
+            if verbose:
                 print(f"Gradient field: smoothing={gradient_smoothing}, "
                       f"streak={streak_length}, decay={decay_rate}")
         else:
@@ -1008,24 +996,17 @@ class LimbObservation(PlanetObservation):
                 )
             target = self.features["limb"]
         
-        # Create or use pre-computed cost function
-        if precomputed_cost_fn is not None:
-            # Use pre-computed cost function (avoids redundant gradient computation)
-            self.cost_function = precomputed_cost_fn
-            if verbose:
-                print(f"Using pre-computed cost function")
-        else:
-            # Create new cost function for this resolution
-            self.cost_function = CostFunction(
-                target=target,
-                function=limb_arc,
-                free_parameters=self.free_parameters,
-                init_parameter_values=working_parameters,
-                loss_function=loss_function,
-                gradient_smoothing=gradient_smoothing,
-                streak_length=streak_length,
-                decay_rate=decay_rate
-            )
+        # Create cost function for this resolution
+        self.cost_function = CostFunction(
+            target=target,
+            function=limb_arc,
+            free_parameters=self.free_parameters,
+            init_parameter_values=working_parameters,
+            loss_function=loss_function,
+            gradient_smoothing=gradient_smoothing,
+            streak_length=streak_length,
+            decay_rate=decay_rate
+        )
         
         # Get minimizer configuration
         if self.minimizer not in MINIMIZER_PRESETS:
