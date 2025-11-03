@@ -15,8 +15,7 @@
 # planet_ruler/validation.py
 
 """
-Standalone configuration validation function for planet_ruler.
-Can be dropped into observation.py or any other module.
+Validation functions for planet_ruler.
 """
 
 import math
