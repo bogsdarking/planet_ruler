@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 import numpy as np
+import pandas as pd
 import math
 from planet_ruler.image import (
     bidirectional_gradient_blur,
