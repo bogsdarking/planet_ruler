@@ -589,20 +589,20 @@ class TestLimbObservation:
             # Test 1: Verify original values are properly stored
             original_values = obs.init_parameter_values.copy()
             stored_original_values = obs._original_init_parameter_values.copy()
-            
+
             assert original_values == stored_original_values
-            assert hasattr(obs, '_original_init_parameter_values')
+            assert hasattr(obs, "_original_init_parameter_values")
             assert obs._original_init_parameter_values is not None
 
             # Test 2: Simulate a previous fit by setting best_parameters
             obs.best_parameters = {
-                'planet_radius': 6500000.0,  # Different from original 6371000.0
-                'altitude': 15000.0,         # Different from original 10000.0
+                "planet_radius": 6500000.0,  # Different from original 6371000.0
+                "altitude": 15000.0,  # Different from original 10000.0
             }
 
             # Test 3: Test warm_start=True behavior (manual simulation of fit_limb logic)
             # This simulates what happens in fit_limb when warm_start=True
-            if hasattr(obs, 'best_parameters') and obs.best_parameters is not None:
+            if hasattr(obs, "best_parameters") and obs.best_parameters is not None:
                 for param in obs.free_parameters:
                     if param in obs.best_parameters:
                         obs.init_parameter_values[param] = obs.best_parameters[param]
@@ -611,18 +611,25 @@ class TestLimbObservation:
             for param in obs.free_parameters:
                 expected = obs.best_parameters[param]
                 actual = obs.init_parameter_values[param]
-                assert actual == expected, f"Warm start failed for {param}: {actual} != {expected}"
+                assert (
+                    actual == expected
+                ), f"Warm start failed for {param}: {actual} != {expected}"
 
             # Test 4: Test warm_start=False behavior (restoration)
             # This simulates what happens in fit_limb when warm_start=False
-            if hasattr(obs, '_original_init_parameter_values') and obs._original_init_parameter_values is not None:
+            if (
+                hasattr(obs, "_original_init_parameter_values")
+                and obs._original_init_parameter_values is not None
+            ):
                 obs.init_parameter_values = obs._original_init_parameter_values.copy()
 
             # Verify restoration worked
             for param in obs.free_parameters:
                 expected = original_values[param]
                 actual = obs.init_parameter_values[param]
-                assert actual == expected, f"Restoration failed for {param}: {actual} != {expected}"
+                assert (
+                    actual == expected
+                ), f"Restoration failed for {param}: {actual} != {expected}"
 
             os.unlink(tmp_file.name)
 
@@ -644,8 +651,8 @@ class TestLimbObservation:
 
             # First fit cycle
             obs.best_parameters = {
-                'planet_radius': 6500000.0,
-                'altitude': 15000.0,
+                "planet_radius": 6500000.0,
+                "altitude": 15000.0,
             }
 
             # Apply warm start
@@ -655,8 +662,8 @@ class TestLimbObservation:
 
             # Second fit cycle with different results
             obs.best_parameters = {
-                'planet_radius': 6200000.0,
-                'altitude': 8000.0,
+                "planet_radius": 6200000.0,
+                "altitude": 8000.0,
             }
 
             # Apply second warm start
@@ -670,7 +677,9 @@ class TestLimbObservation:
             for param in obs.free_parameters:
                 expected = original_values[param]
                 actual = obs.init_parameter_values[param]
-                assert actual == expected, f"Multiple cycle restoration failed for {param}: {actual} != {expected}"
+                assert (
+                    actual == expected
+                ), f"Multiple cycle restoration failed for {param}: {actual} != {expected}"
 
             os.unlink(tmp_file.name)
 
@@ -692,7 +701,9 @@ class TestLimbObservation:
 
             # Simulate warm_start=True when no best_parameters exist
             # This should not change anything (fallback to original behavior)
-            if not (hasattr(obs, 'best_parameters') and obs.best_parameters is not None):
+            if not (
+                hasattr(obs, "best_parameters") and obs.best_parameters is not None
+            ):
                 # Parameters should remain unchanged
                 pass
             else:
@@ -704,7 +715,9 @@ class TestLimbObservation:
             for param in obs.free_parameters:
                 expected = original_values[param]
                 actual = obs.init_parameter_values[param]
-                assert actual == expected, f"Parameters changed without previous fit for {param}: {actual} != {expected}"
+                assert (
+                    actual == expected
+                ), f"Parameters changed without previous fit for {param}: {actual} != {expected}"
 
             os.unlink(tmp_file.name)
 
@@ -725,13 +738,15 @@ class TestLimbObservation:
             original_stored = obs._original_init_parameter_values.copy()
 
             # Modify init_parameter_values
-            obs.init_parameter_values['planet_radius'] = 9999999.0
+            obs.init_parameter_values["planet_radius"] = 9999999.0
 
             # Verify _original_init_parameter_values is unchanged
             for param in obs.free_parameters:
                 expected = original_stored[param]
                 actual = obs._original_init_parameter_values[param]
-                assert actual == expected, f"Original values were modified for {param}: {actual} != {expected}"
+                assert (
+                    actual == expected
+                ), f"Original values were modified for {param}: {actual} != {expected}"
 
             os.unlink(tmp_file.name)
 

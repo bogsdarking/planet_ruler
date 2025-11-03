@@ -155,7 +155,9 @@ class CostFunction:
 
         return cost
 
-    def _gradient_field_cost_simple(self, params: np.ndarray | dict, y_coords: np.ndarray = None) -> float:
+    def _gradient_field_cost_simple(
+        self, params: np.ndarray | dict, y_coords: np.ndarray = None
+    ) -> float:
         """
         Simplified gradient field cost using signed flux method.
 
@@ -271,9 +273,9 @@ class CostFunction:
 
         return cost
 
-    def _gradient_field_cost(self,
-                             params: np.ndarray | dict,
-                             y_coords: np.ndarray = None) -> float:
+    def _gradient_field_cost(
+        self, params: np.ndarray | dict, y_coords: np.ndarray = None
+    ) -> float:
         """
         Gradient field cost based on flux through the limb curve.
 

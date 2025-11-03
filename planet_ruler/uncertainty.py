@@ -128,7 +128,7 @@ def _uncertainty_from_population(
 
     # Extract parameter values from population
     population = observation.fit_results.population
-    param_values = population[:, param_idx] * scale_factor
+    param_values = population[:, param_idx] / scale_factor
 
     # Calculate spread
     std = np.std(param_values, ddof=1)
@@ -217,7 +217,7 @@ def _uncertainty_from_hessian(
                 "additional_info": "Negative variance - singular Hessian",
             }
 
-        std = np.sqrt(variance) * scale_factor
+        std = np.sqrt(variance) / scale_factor
 
         # Scale to desired confidence level
         from scipy import stats
@@ -231,7 +231,7 @@ def _uncertainty_from_hessian(
             "confidence_level": confidence_level,
             "additional_info": {
                 "std": std,
-                "variance": variance * scale_factor**2,
+                "variance": variance / scale_factor**2,
                 "condition_number": np.linalg.cond(hessian),
             },
         }
@@ -393,8 +393,8 @@ def _uncertainty_from_profile(
             }
 
         # Symmetric uncertainty (average of distances from optimum)
-        lower_uncertainty = abs(param_value_opt - lower_bound) * scale_factor
-        upper_uncertainty = abs(upper_bound - param_value_opt) * scale_factor
+        lower_uncertainty = abs(param_value_opt - lower_bound) / scale_factor
+        upper_uncertainty = abs(upper_bound - param_value_opt) / scale_factor
         uncertainty = (lower_uncertainty + upper_uncertainty) / 2
 
         return {
@@ -402,9 +402,9 @@ def _uncertainty_from_profile(
             "method": "profile",
             "confidence_level": confidence_level,
             "additional_info": {
-                "lower_bound": lower_bound * scale_factor,
-                "upper_bound": upper_bound * scale_factor,
-                "optimal_value": param_value_opt * scale_factor,
+                "lower_bound": lower_bound / scale_factor,
+                "upper_bound": upper_bound / scale_factor,
+                "optimal_value": param_value_opt / scale_factor,
                 "lower_uncertainty": lower_uncertainty,
                 "upper_uncertainty": upper_uncertainty,
                 "n_evaluations": n_points,
@@ -466,7 +466,7 @@ def _uncertainty_from_bootstrap(
             "additional_info": "Bootstrap not fully implemented",
         }
 
-    param_values = np.array(param_values) * scale_factor
+    param_values = np.array(param_values) / scale_factor
     std = np.std(param_values, ddof=1)
 
     from scipy import stats
