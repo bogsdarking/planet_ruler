@@ -298,6 +298,9 @@ class TestRealDemoDataIntegration:
     @patch("planet_ruler.image.Image.open")
     def test_image_processing_integration(self, mock_image_open):
         """Test image processing integration with synthetic planet image."""
+        # Set random seed for reproducible noise generation
+        np.random.seed(42)
+
         # Create synthetic planet image
         height, width = 400, 600
         image = np.zeros((height, width, 3), dtype="uint8")
@@ -306,7 +309,7 @@ class TestRealDemoDataIntegration:
         image[:200, :, :] = 30  # Dark space
         image[200:, :, :] = 180  # Bright planet surface
 
-        # Add some noise to make it realistic
+        # Add some noise to make it realistic (with fixed seed for reproducibility)
         noise = np.random.normal(0, 5, image.shape).astype("int16")
         image = np.clip(image.astype("int16") + noise, 0, 255).astype("uint8")
 

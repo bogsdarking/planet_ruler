@@ -1,7 +1,7 @@
 Testing
 =======
 
-Planet Ruler includes a comprehensive test suite with 208+ tests covering all functionality.
+Planet Ruler includes a comprehensive test suite with 492+ tests covering all functionality.
 
 Test Categories
 --------------
@@ -97,14 +97,22 @@ Test Coverage Analysis
 Current Coverage
 ~~~~~~~~~~~~~~~
 
-Planet Ruler maintains >95% test coverage across all modules:
+Planet Ruler maintains 80% overall test coverage with the following module-level coverage:
 
-* **planet_ruler.geometry**: 100% line coverage, 98% branch coverage
-* **planet_ruler.image**: 96% line coverage, 94% branch coverage  
-* **planet_ruler.observation**: 98% line coverage, 95% branch coverage
-* **planet_ruler.fit**: 100% line coverage, 97% branch coverage
-* **planet_ruler.plot**: 92% line coverage, 89% branch coverage
-* **planet_ruler.demo**: 95% line coverage, 93% branch coverage
+* **planet_ruler.__init__.py**: 100% line coverage (initialization module)
+* **planet_ruler.annotate.py**: 58% line coverage (annotation and marking functions)
+* **planet_ruler.camera.py**: 98% line coverage (camera model and optics)
+* **planet_ruler.cli.py**: 80% line coverage (command-line interface)
+* **planet_ruler.demo.py**: 100% line coverage (demo parameter loading)
+* **planet_ruler.fit.py**: 100% line coverage (cost functions and optimization)
+* **planet_ruler.geometry.py**: 68% line coverage (geometric calculations)
+* **planet_ruler.image.py**: 96% line coverage (image processing and gradient detection)
+* **planet_ruler.observation.py**: 47% line coverage (main observation workflows)
+* **planet_ruler.plot.py**: 98% line coverage (visualization and plotting)
+* **planet_ruler.uncertainty.py**: 86% line coverage (parameter uncertainty estimation)
+* **planet_ruler.validation.py**: 93% line coverage (input validation functions)
+
+**Total: 80% line coverage** (2120 statements, 431 missed)
 
 Coverage Reports
 ~~~~~~~~~~~~~~~
@@ -438,9 +446,9 @@ Test Quality Metrics
 
 The Planet Ruler test suite maintains high quality standards:
 
-* **Test Coverage**: >95% line coverage across all modules
-* **Execution Time**: Full test suite completes in <2 minutes
-* **Reliability**: 100% pass rate in CI across all supported environments
+* **Test Coverage**: 80% overall line coverage with 492+ comprehensive tests
+* **Execution Time**: Full test suite completes in ~2 minutes with 21 performance benchmarks
+* **Reliability**: 100% pass rate with deterministic test execution (fixed random seeds)
 * **Maintainability**: Clear test organization and comprehensive documentation
 * **Performance Tracking**: Continuous benchmarking prevents performance regressions
 

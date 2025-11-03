@@ -22,6 +22,7 @@ This module provides a simple CLI for measuring planetary radii from horizon pho
 import argparse
 import sys
 import os
+import subprocess
 from pathlib import Path
 import yaml
 import json
@@ -54,12 +55,27 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Using existing config file
+  # Basic measurement with config file
   planet-ruler measure photo.jpg --camera-config config/earth_iss.yaml
   
   # Auto-generate config from image EXIF data
   planet-ruler measure photo.jpg --auto-config --altitude 10668
-  planet-ruler measure photo.jpg --auto-config --altitude 10668 --planet earth
+  
+  # Advanced gradient field optimization with multi-resolution
+  planet-ruler measure photo.jpg --auto-config --altitude 10668 \\
+    --loss-function gradient_field --multi-resolution auto --verbose
+  
+  # Warm start optimization (refine previous results)
+  planet-ruler measure photo.jpg --camera-config config/earth_iss.yaml \\
+    --loss-function gradient_field --warm-start
+  
+  # Remove image artifacts and use robust optimization
+  planet-ruler measure photo.jpg --auto-config --altitude 10668 \\
+    --loss-function gradient_field --image-smoothing 2.0 --minimizer-preset robust
+  
+  # Custom multi-resolution stages
+  planet-ruler measure photo.jpg --camera-config config/earth_iss.yaml \\
+    --loss-function gradient_field --multi-resolution "8,4,2,1" --max-iterations 20000
   
   # Traditional demo
   planet-ruler demo --planet earth
@@ -104,6 +120,55 @@ Examples:
         choices=["manual", "gradient-break", "segmentation"],
         default="manual",
         help="Limb detection method (default: manual)",
+    )
+
+    # Fitting options
+    measure_parser.add_argument(
+        "--loss-function",
+        "-l",
+        choices=["l1", "l2", "log-l1", "gradient_field"],
+        default="l2",
+        help="Loss function for fitting (default: l2)",
+    )
+    measure_parser.add_argument(
+        "--warm-start",
+        action="store_true",
+        help="Use results from previous fit as starting point for optimization (requires previous fit)",
+    )
+    measure_parser.add_argument(
+        "--multi-resolution",
+        "--resolution-stages",
+        type=str,
+        help="Multi-resolution optimization stages. Use 'auto' for automatic, or comma-separated downsampling factors (e.g., '4,2,1'). Only works with gradient_field loss function.",
+    )
+    measure_parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=15000,
+        help="Maximum optimization iterations (default: 15000)",
+    )
+    measure_parser.add_argument(
+        "--minimizer-preset",
+        choices=["fast", "balanced", "robust", "planet-ruler", "scipy-default"],
+        default="balanced",
+        help="Optimization strategy preset (default: balanced)",
+    )
+    measure_parser.add_argument(
+        "--image-smoothing",
+        type=float,
+        help="Gaussian blur sigma for image preprocessing (removes artifacts like crater rims). Only applies to gradient_field loss.",
+    )
+    measure_parser.add_argument(
+        "--gradient-smoothing",
+        type=float,
+        default=5.0,
+        help="Gaussian blur for gradient field estimation (default: 5.0). Only applies to gradient_field loss.",
+    )
+    measure_parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show detailed fitting progress",
     )
 
     # Auto-config parameters
@@ -262,7 +327,43 @@ def measure_command(args):
         obs.detect_limb()
 
         print("Fitting limb model...")
-        obs.fit_limb()
+
+        # Parse multi-resolution stages if provided
+        resolution_stages = None
+        if args.multi_resolution:
+            if args.multi_resolution.lower() == "auto":
+                resolution_stages = "auto"
+            else:
+                try:
+                    resolution_stages = [
+                        int(x.strip()) for x in args.multi_resolution.split(",")
+                    ]
+                except ValueError:
+                    print(
+                        f"Error: Invalid multi-resolution format '{args.multi_resolution}'. Use 'auto' or comma-separated integers like '4,2,1'",
+                        file=sys.stderr,
+                    )
+                    return 1
+
+        # Build fit_limb kwargs
+        fit_kwargs = {
+            "loss_function": args.loss_function,
+            "max_iter": args.max_iterations,
+            "minimizer_preset": args.minimizer_preset,
+            "warm_start": args.warm_start,
+            "verbose": args.verbose,
+            "gradient_smoothing": args.gradient_smoothing,
+        }
+
+        # Add optional parameters
+        if resolution_stages is not None:
+            fit_kwargs["resolution_stages"] = resolution_stages
+
+        if args.image_smoothing is not None:
+            fit_kwargs["image_smoothing"] = args.image_smoothing
+
+        # Apply fit with options
+        obs.fit_limb(**fit_kwargs)
 
         # Display results
         print(f"\nResults:")
@@ -317,7 +418,6 @@ def demo_command(args):
     if args.interactive:
         try:
             import jupyter_core.command
-            import subprocess
 
             notebook_path = (
                 Path(__file__).parent.parent / "notebooks" / "limb_demo.ipynb"
