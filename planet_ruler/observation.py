@@ -171,6 +171,7 @@ class PlanetObservation:
 
     def __init__(self, image_filepath: str):
         self.image = load_image(image_filepath)
+        self._original_image = self.image.copy()
         self.image_filepath = image_filepath
         self.features = {}
         self._plot_functions = {}
@@ -662,7 +663,7 @@ class LimbObservation(PlanetObservation):
             # Restore original initial parameter values when not using warm start
             self.init_parameter_values = self._original_init_parameter_values.copy()
             if verbose:
-                print("Cold start: Restored original initial parameter values")
+                print("Cold start: Using original initial parameter values")
         
         # ====================================================================
         # STEP 1: Save original image ONCE (if smoothing will be applied)
@@ -787,6 +788,46 @@ class LimbObservation(PlanetObservation):
         full_res_image = self.image.copy()
         original_params = self.init_parameter_values.copy()
         
+        # Set up target resolution cost function (highest resolution if not native)
+
+        # Scale parameters to target resolution
+        target_downsample = int(resolution_stages[-1])
+        target_res_params = self._scale_parameters_for_resolution(
+            original_params, target_downsample
+        )
+        # Downsample image for this stage
+        if target_downsample > 1:
+            h, w = full_res_image.shape[:2]
+            target_image = cv2.resize(
+                full_res_image, 
+                (w // target_downsample, h // target_downsample),
+                interpolation=cv2.INTER_AREA
+            )
+        else:
+            target_image = full_res_image.copy()
+
+        if verbose:
+            print("Setting up target resolution loss function...")
+            print(f"Size: {full_res_image.shape[:2]} → {target_image.shape[:2]}")
+
+        # Update to actual final resolution dimensions
+        target_res_params['n_pix_x'] = target_image.shape[1]
+        target_res_params['n_pix_y'] = target_image.shape[0]
+        target_res_params['x0'] = int(target_image.shape[1] * 0.5)
+        target_res_params['y0'] = int(target_image.shape[0] * 0.5)
+
+        # Create temporary cost function at final resolution
+        target_cost_fn = CostFunction(
+            target=target_image if 'gradient_field' in loss_function else self.features.get("limb"),
+            function=limb_arc,
+            free_parameters=self.free_parameters,
+            init_parameter_values=target_res_params,
+            loss_function=loss_function,
+            gradient_smoothing=gradient_smoothing,
+            streak_length=streak_length,
+            decay_rate=decay_rate
+        )
+
         # Loop through resolution stages
         for stage_idx, (downsample, stage_iter) in enumerate(
             zip(resolution_stages, max_iter_per_stage)
@@ -798,18 +839,22 @@ class LimbObservation(PlanetObservation):
                 print(f"{'─'*60}")
             
             # Downsample image for this stage
-            if downsample > 1:
+            if downsample == resolution_stages[-1]:
+                self.image = target_image
+            else:
+            # elif downsample > 1:
                 h, w = full_res_image.shape[:2]
                 self.image = cv2.resize(
                     full_res_image, 
                     (w // downsample, h // downsample),
                     interpolation=cv2.INTER_AREA
                 )
-                if verbose:
-                    print(f"Size: {full_res_image.shape[:2]} → {self.image.shape[:2]}")
-            else:
-                self.image = full_res_image
+            # else:
+            #     self.image = full_res_image
             
+            if verbose:
+                print(f"Size: {full_res_image.shape[:2]} → {self.image.shape[:2]}")
+
             # Scale parameters for this resolution
             self.init_parameter_values = self._scale_parameters_for_resolution(
                 original_params, 1.0 / downsample
@@ -817,20 +862,13 @@ class LimbObservation(PlanetObservation):
             
             # Warm start from previous stage
             if stage_idx > 0 and hasattr(self, 'best_parameters'):
-                scale = resolution_stages[stage_idx - 1] / downsample
-                prev_solution = self._scale_parameters_for_resolution(
-                    self.best_parameters, scale
-                )
-                
                 if verbose:
                     print("Warm start from previous stage:")
-                    print(f"  Scale factor: {scale:.2f}")
-                    print(f"  Free parameters from previous stage:")
-                    for param in self.free_parameters:
-                        if param in self.best_parameters:
-                            print(f"    {param}: {self.best_parameters[param]:.4f} → {prev_solution.get(param, 'N/A')}")
-                
-                self.init_parameter_values.update(prev_solution)
+                for param in self.free_parameters:
+                    if param in self.best_parameters:
+                        if verbose:
+                            print(f"    {param}: {self.init_parameter_values[param]:.4f} → {self.best_parameters.get(param, 'N/A')}")
+                        self.init_parameter_values[param] = self.best_parameters[param]
             
             # Scale gradient parameters
             scaled_gradient_smoothing = max(0.5, gradient_smoothing / downsample)
@@ -865,46 +903,15 @@ class LimbObservation(PlanetObservation):
             )
             
             if verbose and hasattr(self, 'best_parameters'):
-                cost = self.cost_function.cost(self.fit_results.x)
-                print(f"Cost at current resolution: {cost:.6f}")
-                if 'gradient_field' in loss_function:
-                    print(f"Flux at current resolution: {1.0 - cost:.6f}")
-                print(f"Final parameters:")
+                print(f"Fitted parameters:")
                 for param in self.free_parameters:
                     print(f"  {param}: {self.best_parameters.get(param, 'N/A')}")
-                
-                # If not at final resolution, also evaluate at final resolution for comparison
-                if downsample != resolution_stages[-1]:
-                    # Scale parameters to final resolution
-                    final_downsample = resolution_stages[-1]
-                    scale_to_final = downsample / final_downsample
                     
-                    final_res_params = self._scale_parameters_for_resolution(
-                        self.best_parameters, scale_to_final
-                    )
-                    # Update to actual final resolution dimensions
-                    final_res_params['n_pix_x'] = full_res_image.shape[1]
-                    final_res_params['n_pix_y'] = full_res_image.shape[0]
-                    final_res_params['x0'] = int(full_res_image.shape[1] * 0.5)
-                    final_res_params['y0'] = int(full_res_image.shape[0] * 0.5)
-                    
-                    # Create temporary cost function at final resolution
-                    temp_cost_fn = CostFunction(
-                        target=full_res_image if 'gradient_field' in loss_function else self.features.get("limb"),
-                        function=limb_arc,
-                        free_parameters=self.free_parameters,
-                        init_parameter_values=final_res_params,
-                        loss_function=loss_function,
-                        gradient_smoothing=gradient_smoothing,
-                        streak_length=streak_length,
-                        decay_rate=decay_rate
-                    )
-                    
-                    # Evaluate at final resolution
-                    final_cost = temp_cost_fn.cost(self.fit_results.x)
-                    print(f"Cost if evaluated at final resolution: {final_cost:.6f}")
-                    if 'gradient_field' in loss_function:
-                        print(f"Flux if evaluated at final resolution: {1.0 - final_cost:.6f}")
+                # Evaluate at target resolution
+                target_cost = target_cost_fn.cost(self.fit_results.x)
+                print(f"Cost: {target_cost:.6f}")
+                if 'gradient_field' in loss_function:
+                    print(f"Flux: {1.0 - target_cost:.6f}")
 
         
         # Restore full resolution

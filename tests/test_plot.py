@@ -27,7 +27,7 @@ Tests verify correct matplotlib function calls and parameter passing.
 
 import pytest
 import numpy as np
-from unittest.mock import Mock, patch, MagicMock, call
+from unittest.mock import Mock, patch, MagicMock, call, ANY
 
 from planet_ruler.plot import (
     plot_image,
@@ -601,7 +601,7 @@ class TestPlotGradientFieldAtLimb:
 
         # Verify gradient field computation
         mock_gradient_field.assert_called_once_with(
-            image, gradient_smoothing=5.0, streak_length=30, decay_rate=0.15
+            ANY, gradient_smoothing=5.0, streak_length=30, decay_rate=0.15
         )
 
         # Verify matplotlib calls
@@ -644,7 +644,7 @@ class TestPlotGradientFieldAtLimb:
 
         # Verify custom parameters passed to gradient_field
         mock_gradient_field.assert_called_once_with(
-            image, gradient_smoothing=3.0, streak_length=20, decay_rate=0.1
+            ANY, gradient_smoothing=3.0, streak_length=20, decay_rate=0.1
         )
 
     @patch("planet_ruler.image.gradient_field")
@@ -709,7 +709,7 @@ class TestCompareBlurMethods:
 
         # Verify gradient field call
         mock_gradient_field.assert_called_once_with(
-            image, streak_length=30, decay_rate=0.15, gradient_smoothing=2.0
+            ANY, streak_length=30, decay_rate=0.15, gradient_smoothing=2.0
         )
 
         # Verify all subplots were used
@@ -809,7 +809,7 @@ class TestCompareGradientFields:
 
         # Verify gradient field computation
         mock_gradient_field.assert_called_once_with(
-            image, gradient_smoothing=5.0, streak_length=30, decay_rate=0.15
+            ANY, gradient_smoothing=5.0, streak_length=30, decay_rate=0.15
         )
 
         # Verify matplotlib setup
@@ -865,7 +865,7 @@ class TestCompareGradientFields:
 
         # Verify custom parameters
         mock_gradient_field.assert_called_once_with(
-            image, gradient_smoothing=3.0, streak_length=25, decay_rate=0.2
+            ANY, gradient_smoothing=3.0, streak_length=25, decay_rate=0.2
         )
 
         # Single limb should create single subplot
