@@ -16,6 +16,7 @@
 import pytest
 import numpy as np
 import pandas as pd
+import math
 from unittest.mock import MagicMock, Mock
 from planet_ruler.fit import (
     unpack_parameters,
@@ -232,17 +233,15 @@ class TestCostFunction:
         assert np.isclose(cost, 0.0, atol=1e-10)
 
     def test_cost_invalid_loss_function(self, simple_target, simple_function):
-        """Test that invalid loss function raises ValueError"""
-        cost_func = CostFunction(
-            target=simple_target,
-            function=simple_function,
-            free_parameters=["m", "b"],
-            init_parameter_values={"m": 1.0, "b": 1.0},
-            loss_function="invalid_loss",
-        )
-
+        """Test that invalid loss function raises ValueError during initialization"""
         with pytest.raises(ValueError, match="Unrecognized loss function"):
-            cost_func.cost({"m": 1.0, "b": 1.0})
+            CostFunction(
+                target=simple_target,
+                function=simple_function,
+                free_parameters=["m", "b"],
+                init_parameter_values={"m": 1.0, "b": 1.0},
+                loss_function="invalid_loss",
+            )
 
     def test_cost_with_nans(self, simple_function):
         """Test cost function handling of NaN values"""
@@ -416,9 +415,7 @@ class TestCalculateParameterUncertainty:
                 }
             )
         )
-        monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
-        )
+        monkeypatch.setattr("planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack)
 
         result = calculate_parameter_uncertainty(mock_observation_basic, method="auto")
 
@@ -458,9 +455,7 @@ class TestCalculateParameterUncertainty:
         """Test DE method with standard deviation uncertainty"""
         mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
-        )
+        monkeypatch.setattr("planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack)
 
         result = calculate_parameter_uncertainty(
             mock_observation_basic,
@@ -480,9 +475,7 @@ class TestCalculateParameterUncertainty:
         """Test DE method with peak-to-peak uncertainty"""
         mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
-        )
+        monkeypatch.setattr("planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack)
 
         result = calculate_parameter_uncertainty(
             mock_observation_basic,
@@ -500,9 +493,7 @@ class TestCalculateParameterUncertainty:
         """Test DE method with interquartile range uncertainty"""
         mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
-        )
+        monkeypatch.setattr("planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack)
 
         result = calculate_parameter_uncertainty(
             mock_observation_basic,
@@ -520,9 +511,7 @@ class TestCalculateParameterUncertainty:
         """Test DE method with confidence interval uncertainty"""
         mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
-        )
+        monkeypatch.setattr("planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack)
 
         result = calculate_parameter_uncertainty(
             mock_observation_basic,
@@ -545,9 +534,7 @@ class TestCalculateParameterUncertainty:
         """Test that scale factor is correctly applied to results"""
         mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
-        )
+        monkeypatch.setattr("planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack)
 
         scale_factor = 1000.0  # Convert to km
         result = calculate_parameter_uncertainty(
@@ -574,9 +561,7 @@ class TestCalculateParameterUncertainty:
             }
         )
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
-        )
+        monkeypatch.setattr("planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack)
 
         result = calculate_parameter_uncertainty(mock_observation_basic, parameter="h")
 
@@ -588,9 +573,7 @@ class TestCalculateParameterUncertainty:
         """Test error when parameter not found in population data"""
         mock_df = pd.DataFrame({"r": [6371000, 6371200]})  # Missing 'h' parameter
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
-        )
+        monkeypatch.setattr("planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack)
 
         with pytest.raises(
             ValueError, match="Parameter 'h' not found in population posteriors"
@@ -601,9 +584,7 @@ class TestCalculateParameterUncertainty:
         """Test error for unsupported uncertainty type"""
         mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800]})
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
-        )
+        monkeypatch.setattr("planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack)
 
         with pytest.raises(
             ValueError, match="Unsupported uncertainty type: invalid_type"
@@ -640,17 +621,16 @@ class TestCalculateParameterUncertainty:
     def test_import_error_handling(self, mock_observation_basic, monkeypatch):
         """Test handling of import error for unpack function"""
 
-        # Mock import to raise ImportError
+        # Mock unpack function to raise ImportError (simulating pandas import failure)
         def mock_import_error(*args, **kwargs):
             raise ImportError("Mocked import error")
 
         monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_import_error
+            "planet_ruler.fit.unpack_diff_evol_posteriors", mock_import_error
         )
 
-        with pytest.raises(
-            ImportError, match="Could not import unpack_diff_evol_posteriors function"
-        ):
+        # Since the function is now in the same module, ImportError will be passed through directly
+        with pytest.raises(ImportError, match="Mocked import error"):
             calculate_parameter_uncertainty(
                 mock_observation_basic, method="differential_evolution"
             )
@@ -659,9 +639,7 @@ class TestCalculateParameterUncertainty:
         """Test that raw data is included in results"""
         mock_df = pd.DataFrame({"r": [6371000, 6371200, 6371800, 6372000, 6371400]})
         mock_unpack = Mock(return_value=mock_df)
-        monkeypatch.setattr(
-            "planet_ruler.observation.unpack_diff_evol_posteriors", mock_unpack
-        )
+        monkeypatch.setattr("planet_ruler.fit.unpack_diff_evol_posteriors", mock_unpack)
 
         result = calculate_parameter_uncertainty(mock_observation_basic)
 
@@ -821,6 +799,495 @@ class TestFormatParameterResult:
             )
             result = format_parameter_result(uncertainty_result, units=units)
             assert result == expected
+
+
+class TestGradientFieldCostFunction:
+    """Test CostFunction with gradient field loss functions"""
+
+    @pytest.fixture
+    def test_image(self):
+        """Create a test image with simple gradient structure"""
+        # Create 100x150 test image with horizontal gradient
+        image = np.zeros((100, 150), dtype=np.uint8)
+
+        # Create horizontal gradient (left dark, right bright)
+        for i in range(150):
+            image[:, i] = int(255 * i / 149)
+
+        # Add noise to make it more realistic
+        noise = np.random.normal(0, 5, image.shape)
+        image = np.clip(image.astype(float) + noise, 0, 255).astype(np.uint8)
+
+        return image
+
+    @pytest.fixture
+    def simple_horizon_function(self):
+        """Simple function that returns a horizontal line"""
+
+        def horizon_func(y_center=50.0, **kwargs):
+            x_coords = np.arange(150)
+            return np.full_like(x_coords, y_center, dtype=float)
+
+        return horizon_func
+
+    def test_gradient_field_initialization(self, test_image, simple_horizon_function):
+        """Test CostFunction initialization with gradient_field loss"""
+        cost_func = CostFunction(
+            target=test_image,
+            function=simple_horizon_function,
+            free_parameters=["y_center"],
+            init_parameter_values={"y_center": 50.0},
+            loss_function="gradient_field",
+            gradient_smoothing=3.0,
+            streak_length=10,
+            decay_rate=0.2,
+        )
+
+        # Should have gradient field data
+        assert hasattr(cost_func, "grad_mag")
+        assert hasattr(cost_func, "grad_angle")
+        assert hasattr(cost_func, "grad_x")
+        assert hasattr(cost_func, "grad_y")
+        assert hasattr(cost_func, "grad_sin")
+        assert hasattr(cost_func, "grad_cos")
+        assert hasattr(cost_func, "grad_mag_dx")
+        assert hasattr(cost_func, "grad_mag_dy")
+        assert hasattr(cost_func, "grad_sin_dx")
+        assert hasattr(cost_func, "grad_sin_dy")
+        assert hasattr(cost_func, "grad_cos_dx")
+        assert hasattr(cost_func, "grad_cos_dy")
+
+        # Check dimensions match image
+        assert cost_func.image_height == test_image.shape[0]
+        assert cost_func.image_width == test_image.shape[1]
+        assert cost_func.grad_mag.shape == test_image.shape
+
+        # Target should be None for gradient field
+        assert cost_func.target is None
+        assert cost_func.loss_function == "gradient_field"
+
+        # x should match image width
+        assert len(cost_func.x) == test_image.shape[1]
+
+    def test_gradient_field_simple_initialization(
+        self, test_image, simple_horizon_function
+    ):
+        """Test CostFunction initialization with gradient_field_simple loss"""
+        cost_func = CostFunction(
+            target=test_image,
+            function=simple_horizon_function,
+            free_parameters=["y_center"],
+            init_parameter_values={"y_center": 50.0},
+            loss_function="gradient_field_simple",
+        )
+
+        # Should have same gradient field data as regular gradient_field
+        assert hasattr(cost_func, "grad_mag")
+        assert cost_func.loss_function == "gradient_field_simple"
+        assert cost_func.target is None
+
+    def test_gradient_field_cost_valid_params(
+        self, test_image, simple_horizon_function
+    ):
+        """Test gradient field cost with valid parameters"""
+        cost_func = CostFunction(
+            target=test_image,
+            function=simple_horizon_function,
+            free_parameters=["y_center"],
+            init_parameter_values={"y_center": 50.0},
+            loss_function="gradient_field",
+        )
+
+        # Test with parameters in bounds
+        cost = cost_func.cost({"y_center": 50.0})
+
+        # Cost should be a finite number between 0 and some reasonable upper bound
+        assert np.isfinite(cost)
+        assert cost >= 0
+        assert cost <= 10  # Reasonable upper bound
+
+    def test_gradient_field_cost_simple_valid_params(
+        self, test_image, simple_horizon_function
+    ):
+        """Test gradient field simple cost with valid parameters"""
+        cost_func = CostFunction(
+            target=test_image,
+            function=simple_horizon_function,
+            free_parameters=["y_center"],
+            init_parameter_values={"y_center": 50.0},
+            loss_function="gradient_field_simple",
+        )
+
+        # Test with parameters in bounds
+        cost = cost_func.cost({"y_center": 50.0})
+
+        # Cost should be finite and reasonable
+        assert np.isfinite(cost)
+        assert cost >= 0
+        assert cost <= 10
+
+    def test_gradient_field_cost_invalid_coords(
+        self, test_image, simple_horizon_function
+    ):
+        """Test gradient field cost with invalid coordinates (NaN/inf)"""
+
+        def bad_function(**kwargs):
+            return np.full(150, np.nan)
+
+        cost_func = CostFunction(
+            target=test_image,
+            function=bad_function,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="gradient_field",
+        )
+
+        cost = cost_func.cost({})
+        assert cost == 1e10  # Should return penalty for invalid coords
+
+    def test_gradient_field_cost_simple_invalid_coords(
+        self, test_image, simple_horizon_function
+    ):
+        """Test gradient field simple cost with invalid coordinates"""
+
+        def bad_function(**kwargs):
+            return np.full(150, np.inf)
+
+        cost_func = CostFunction(
+            target=test_image,
+            function=bad_function,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="gradient_field_simple",
+        )
+
+        cost = cost_func.cost({})
+        assert cost == 1e10
+
+    def test_gradient_field_cost_out_of_bounds(
+        self, test_image, simple_horizon_function
+    ):
+        """Test gradient field cost with curve mostly out of bounds"""
+
+        def out_of_bounds_function(**kwargs):
+            # Return y-coordinates way outside image bounds
+            return np.full(150, -50.0)
+
+        cost_func = CostFunction(
+            target=test_image,
+            function=out_of_bounds_function,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="gradient_field",
+        )
+
+        cost = cost_func.cost({})
+
+        # Should return boundary penalty (> 5.0)
+        assert cost > 5.0
+        assert np.isfinite(cost)
+
+    def test_gradient_field_cost_simple_out_of_bounds(self, test_image):
+        """Test gradient field simple cost with boundary penalty"""
+
+        def out_of_bounds_function(**kwargs):
+            return np.full(150, 150.0)  # Way above image height
+
+        cost_func = CostFunction(
+            target=test_image,
+            function=out_of_bounds_function,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="gradient_field_simple",
+        )
+
+        cost = cost_func.cost({})
+
+        # Should trigger boundary penalty
+        assert cost > 5.0
+        assert np.isfinite(cost)
+
+    def test_gradient_field_cost_partial_in_bounds(self, test_image):
+        """Test gradient field cost with curve partially in bounds"""
+
+        def partial_function(**kwargs):
+            # Half in bounds, half out
+            y_coords = np.full(150, 50.0)
+            y_coords[75:] = -10.0  # Second half out of bounds
+            return y_coords
+
+        cost_func = CostFunction(
+            target=test_image,
+            function=partial_function,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="gradient_field",
+        )
+
+        cost = cost_func.cost({})
+
+        # Should work since >30% is in bounds
+        assert np.isfinite(cost)
+        assert cost >= 0
+
+    def test_gradient_field_cost_boundary_threshold(self, test_image):
+        """Test gradient field cost at boundary threshold (30% in bounds)"""
+
+        def boundary_function(**kwargs):
+            # Exactly 30% in bounds
+            y_coords = np.full(150, -10.0)  # Out of bounds
+            in_bound_count = int(0.3 * 150)  # 30%
+            y_coords[:in_bound_count] = 50.0  # In bounds
+            return y_coords
+
+        cost_func = CostFunction(
+            target=test_image,
+            function=boundary_function,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="gradient_field_simple",
+        )
+
+        cost = cost_func.cost({})
+
+        # Should work at exactly 30% threshold
+        assert np.isfinite(cost)
+        assert cost >= 0
+
+    def test_gradient_field_evaluate_method(self, test_image, simple_horizon_function):
+        """Test that evaluate method works with gradient field cost functions"""
+        cost_func = CostFunction(
+            target=test_image,
+            function=simple_horizon_function,
+            free_parameters=["y_center"],
+            init_parameter_values={"y_center": 50.0},
+            loss_function="gradient_field",
+        )
+
+        # Test with dict params
+        result = cost_func.evaluate({"y_center": 45.0})
+        expected = np.full(150, 45.0)
+        assert np.array_equal(result, expected)
+
+        # Test with array params
+        result_array = cost_func.evaluate(np.array([45.0]))
+        assert np.array_equal(result_array, expected)
+
+
+class TestCostFunctionErrorHandling:
+    """Test error handling in CostFunction"""
+
+    @pytest.fixture
+    def simple_target_and_function(self):
+        target = np.array([1.0, 2.0, 3.0])
+
+        def func(a=1.0, **kwargs):
+            return np.array([a, a * 2, a * 3])
+
+        return target, func
+
+    def test_unrecognized_loss_function_in_cost(self, simple_target_and_function):
+        """Test that unrecognized loss function in cost method raises error"""
+        target, func = simple_target_and_function
+
+        # Create cost function with valid loss function first
+        cost_func = CostFunction(
+            target=target,
+            function=func,
+            free_parameters=["a"],
+            init_parameter_values={"a": 1.0},
+            loss_function="l2",
+        )
+
+        # Manually change loss function to invalid one
+        cost_func.loss_function = "invalid_loss_function"
+
+        # Should raise ValueError when calling cost
+        with pytest.raises(ValueError, match="Unrecognized loss function"):
+            cost_func.cost({"a": 1.0})
+
+
+class TestUnpackDiffEvolPosteriors:
+    """Test unpack_diff_evol_posteriors function"""
+
+    def test_unpack_diff_evol_posteriors_basic(self):
+        """Test basic functionality of unpack_diff_evol_posteriors"""
+        # Mock observation object
+        obs = Mock()
+        obs.init_parameter_values = {"r": 6371000, "h": 10000, "f": 0.05}
+        obs.free_parameters = ["r", "h", "f"]
+
+        # Mock fit results with population
+        obs.fit_results = {
+            "population": [
+                [6371100, 9900, 0.051],
+                [6371200, 9800, 0.049],
+                [6371300, 10100, 0.052],
+            ],
+            "population_energies": [0.1, 0.2, 0.15],
+        }
+
+        # Import the function (pandas should be available in the environment)
+        from planet_ruler.fit import unpack_diff_evol_posteriors
+
+        result = unpack_diff_evol_posteriors(obs)
+
+        # Should return DataFrame
+        import pandas as pd
+
+        assert isinstance(result, pd.DataFrame)
+
+        # Check structure
+        assert len(result) == 3  # 3 solutions
+        assert "r" in result.columns
+        assert "h" in result.columns
+        assert "f" in result.columns
+        assert "mse" in result.columns
+
+        # Check values
+        assert result.iloc[0]["r"] == 6371100
+        assert result.iloc[0]["h"] == 9900
+        assert result.iloc[0]["f"] == 0.051
+        assert result.iloc[0]["mse"] == 0.1
+
+        # Check that init values are used as base
+        assert all(result["r"] != obs.init_parameter_values["r"])  # Should be updated
+
+    def test_unpack_diff_evol_posteriors_with_fixed_params(self):
+        """Test unpacking when some parameters are not in free_parameters"""
+        obs = Mock()
+        obs.init_parameter_values = {"r": 6371000, "h": 10000, "f": 0.05, "theta": 0.0}
+        obs.free_parameters = ["r", "h"]  # Only r and h are free
+
+        obs.fit_results = {
+            "population": [
+                [6371100, 9900],  # Only values for free parameters
+                [6371200, 9800],
+            ],
+            "population_energies": [0.1, 0.2],
+        }
+
+        from planet_ruler.fit import unpack_diff_evol_posteriors
+
+        result = unpack_diff_evol_posteriors(obs)
+
+        # Should have all parameters (free + fixed)
+        assert "r" in result.columns
+        assert "h" in result.columns
+        assert "f" in result.columns  # Fixed parameter
+        assert "theta" in result.columns  # Fixed parameter
+
+        # Fixed parameters should have init values
+        assert all(result["f"] == 0.05)
+        assert all(result["theta"] == 0.0)
+
+        # Free parameters should vary
+        assert result.iloc[0]["r"] == 6371100
+        assert result.iloc[1]["r"] == 6371200
+
+    def test_unpack_diff_evol_posteriors_empty_population(self):
+        """Test with empty population"""
+        obs = Mock()
+        obs.init_parameter_values = {"r": 6371000}
+        obs.free_parameters = ["r"]
+        obs.fit_results = {"population": [], "population_energies": []}
+
+        from planet_ruler.fit import unpack_diff_evol_posteriors
+
+        result = unpack_diff_evol_posteriors(obs)
+
+        import pandas as pd
+
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == 0  # Empty DataFrame
+        assert (
+            "r" in result.columns or len(result.columns) == 0
+        )  # Depending on pandas behavior
+
+
+class TestCostFunctionEdgeCases:
+    """Test edge cases and boundary conditions for CostFunction"""
+
+    def test_cost_function_with_zero_length_target(self):
+        """Test cost function with empty target array"""
+        target = np.array([])
+
+        def empty_func(**kwargs):
+            return np.array([])
+
+        cost_func = CostFunction(
+            target=target,
+            function=empty_func,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="l2",
+        )
+
+        cost = cost_func.cost({})
+        # nanmean of empty array should be NaN
+        assert np.isnan(cost)
+
+    def test_cost_function_all_nan_residuals(self):
+        """Test cost function when all residuals are NaN"""
+        target = np.array([np.nan, np.nan, np.nan])
+
+        def nan_func(**kwargs):
+            return np.array([1.0, 2.0, 3.0])
+
+        cost_func = CostFunction(
+            target=target,
+            function=nan_func,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="l2",
+        )
+
+        cost = cost_func.cost({})
+        # nanmean should handle all-NaN case
+        assert np.isnan(cost)
+
+    def test_log_l1_with_zero_residuals(self):
+        """Test log-L1 loss with perfect fit (zero residuals)"""
+        target = np.array([1.0, 2.0, 3.0])
+
+        def perfect_func(**kwargs):
+            return np.array([1.0, 2.0, 3.0])  # Perfect match
+
+        cost_func = CostFunction(
+            target=target,
+            function=perfect_func,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="log-l1",
+        )
+
+        cost = cost_func.cost({})
+        # log(0 + 1) = log(1) = 0
+        assert np.isclose(cost, 0.0)
+
+    def test_log_l1_with_large_residuals(self):
+        """Test log-L1 loss with large residuals"""
+        target = np.array([1.0, 2.0])
+
+        def bad_func(**kwargs):
+            return np.array([1000.0, 2000.0])  # Large errors
+
+        cost_func = CostFunction(
+            target=target,
+            function=bad_func,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="log-l1",
+        )
+
+        cost = cost_func.cost({})
+        # Should be finite and positive
+        assert np.isfinite(cost)
+        assert cost > 0
+
+        # Should be approximately log(999+1) + log(1998+1) / 2
+        expected = (math.log(999 + 1) + math.log(1998 + 1)) / 2
+        assert np.isclose(cost, expected, rtol=1e-10)
 
 
 if __name__ == "__main__":

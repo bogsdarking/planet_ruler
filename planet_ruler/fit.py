@@ -14,7 +14,13 @@
 
 from __future__ import annotations
 import numpy as np
+import pandas as pd
 import math
+from planet_ruler.image import (
+    bidirectional_gradient_blur,
+    bilinear_interpolate,
+    gradient_field,
+)
 from typing import Callable
 
 
@@ -52,13 +58,12 @@ class CostFunction:
 
     Args:
         target (np.ndarray): True value(s), e.g., the actual limb position.
+                            For gradient_field loss, this should be the image.
         function (Callable): Function mapping parameters to target of interest.
         free_parameters (list): List of free parameter names.
         init_parameter_values (dict): Initial values for named parameters.
-        loss_function (str): Type of loss function, must be one of ['l2', 'l1', 'log-l1'].
-
-    Returns:
-        param_list (list): List of parameter values.
+        loss_function (str): Type of loss function, must be one of
+                            ['l2', 'l1', 'log-l1', 'gradient_field'].
     """
 
     def __init__(
@@ -68,14 +73,54 @@ class CostFunction:
         free_parameters: list,
         init_parameter_values,
         loss_function="l2",
+        gradient_smoothing=5.0,
+        streak_length=30,
+        decay_rate=0.15,
     ):
-
         self.function = function
         self.free_parameters = free_parameters
         self.init_parameter_values = init_parameter_values
-        self.x = np.arange(len(target))
-        self.target = target
         self.loss_function = loss_function
+
+        # For traditional loss functions, target is the detected limb
+        if loss_function in ["l2", "l1", "log-l1"]:
+            self.x = np.arange(len(target))
+            self.target = target
+
+        # For gradient field loss, target is the image
+        elif (
+            loss_function == "gradient_field"
+            or loss_function == "gradient_field_simple"
+        ):
+            self.target = None
+            self.x = np.arange(target.shape[1])  # Image width
+
+            # Use the new standalone gradient_field function
+            grad_data = gradient_field(
+                target,
+                gradient_smoothing=gradient_smoothing,
+                streak_length=streak_length,
+                decay_rate=decay_rate,
+            )
+
+            # Store the gradient field components as instance variables
+            self.grad_mag = grad_data["grad_mag"]
+            self.grad_angle = grad_data["grad_angle"]
+            self.grad_x = grad_data["grad_x"]
+            self.grad_y = grad_data["grad_y"]
+            self.grad_sin = grad_data["grad_sin"]
+            self.grad_cos = grad_data["grad_cos"]
+            self.grad_mag_dx = grad_data["grad_mag_dx"]
+            self.grad_mag_dy = grad_data["grad_mag_dy"]
+            self.grad_sin_dx = grad_data["grad_sin_dx"]
+            self.grad_sin_dy = grad_data["grad_sin_dy"]
+            self.grad_cos_dx = grad_data["grad_cos_dx"]
+            self.grad_cos_dy = grad_data["grad_cos_dy"]
+            self.image_height = grad_data["image_height"]
+            self.image_width = grad_data["image_width"]
+
+        else:
+            raise ValueError(f"Unrecognized loss function: {loss_function}")
 
     def cost(self, params: np.ndarray | dict) -> float:
         """
@@ -89,6 +134,13 @@ class CostFunction:
         Returns:
             cost (float): Cost given parameters.
         """
+
+        if self.loss_function == "gradient_field":
+            return self._gradient_field_cost(params)
+        elif self.loss_function == "gradient_field_simple":
+            return self._gradient_field_cost_simple(params)
+
+        # Traditional loss functions
         y = self.evaluate(params)
 
         if self.loss_function == "l2":
@@ -98,10 +150,245 @@ class CostFunction:
             cost = np.nanmean(abs_diff)
         elif self.loss_function == "log-l1":
             abs_diff = abs(y - self.target)
-            # cost = np.sum(abs_diff) + np.sum(pow(abs_diff+1, -0.5))
             cost = np.nanmean([math.log(float(x) + 1) for x in abs_diff.flatten()])
         else:
             raise ValueError("Unrecognized loss function.")
+
+        return cost
+
+    def _gradient_field_cost_simple(
+        self, params: np.ndarray | dict, y_coords: np.ndarray = None
+    ) -> float:
+        """
+        Simplified gradient field cost using signed flux method.
+
+        Key differences from full version:
+        - Hard boundary penalty (no blending)
+        - Simpler out-of-bounds handling
+        - Same core signed flux computation
+
+        The signed flux naturally discriminates:
+        - Coherent edges (limb): gradients aligned → large |flux|
+        - Incoherent features (striations): mixed gradients → cancellation → small |flux|
+        """
+        if y_coords is None:
+            # Get predicted horizon curve
+            y_coords = self.evaluate(params)
+
+        # Handle invalid coordinates
+        if np.any(np.isnan(y_coords)) or np.any(np.isinf(y_coords)):
+            return 1e10
+
+        # Check what fraction is in bounds
+        in_bounds = (y_coords >= 0) & (y_coords < self.image_height)
+        fraction_in_bounds = np.mean(in_bounds)
+
+        # HARD BOUNDARY: Need at least 30% in frame
+        if fraction_in_bounds < 0.3:
+            # Simple distance penalty
+            center_y = self.image_height / 2
+            mean_dist = np.mean(np.abs(y_coords - center_y))
+            return 5.0 + mean_dist / self.image_height
+
+        # ONLY process in-bounds pixels
+        x_in = self.x[in_bounds]
+        y_in = y_coords[in_bounds]
+
+        # Compute curve normal direction at in-bounds points
+        dy_dx_full = np.gradient(y_coords)
+        dy_dx = dy_dx_full[in_bounds]
+
+        # Tangent vector: (1, dy/dx)
+        tangent_x = np.ones_like(dy_dx)
+        tangent_y = dy_dx
+        tangent_mag = np.sqrt(tangent_x**2 + tangent_y**2)
+
+        # Normalize tangent
+        tangent_x_unit = tangent_x / tangent_mag
+        tangent_y_unit = tangent_y / tangent_mag
+
+        # Normal: rotate tangent 90° CCW: (x,y) → (-y, x)
+        normal_x_unit = -tangent_y_unit
+        normal_y_unit = tangent_x_unit
+
+        normal_angle = np.arctan2(normal_y_unit, normal_x_unit)
+
+        # Integer indices and fractional offsets
+        ix = x_in.astype(int)
+        iy_float = y_in.copy()
+        iy = iy_float.astype(int)
+
+        fx = x_in - ix
+        fy = iy_float - iy
+
+        # Clip to valid range
+        iy = np.clip(iy, 0, self.image_height - 1)
+        ix = np.clip(ix, 0, self.image_width - 1)
+
+        # Taylor expansion interpolation
+        mag = (
+            self.grad_mag[iy, ix]
+            + fx * self.grad_mag_dx[iy, ix]
+            + fy * self.grad_mag_dy[iy, ix]
+        )
+
+        sin_val = (
+            self.grad_sin[iy, ix]
+            + fx * self.grad_sin_dx[iy, ix]
+            + fy * self.grad_sin_dy[iy, ix]
+        )
+
+        cos_val = (
+            self.grad_cos[iy, ix]
+            + fx * self.grad_cos_dx[iy, ix]
+            + fy * self.grad_cos_dy[iy, ix]
+        )
+
+        angle = np.arctan2(sin_val, cos_val)
+
+        # Compute SIGNED flux perpendicular to curve
+        # gradient · normal = mag × cos(angle_difference)
+        angle_diff = np.arctan2(
+            np.sin(angle - normal_angle), np.cos(angle - normal_angle)
+        )
+
+        # Signed contributions - coherent gradients sum, incoherent cancel
+        flux_contribution = mag * np.cos(angle_diff)
+
+        # Net flux (can be positive or negative)
+        net_flux = np.sum(flux_contribution)
+
+        # Normalize by arc length
+        ds = np.sqrt(1 + dy_dx**2)
+        arc_length = np.sum(ds)
+        flux_density = net_flux / (arc_length + 1e-10)
+
+        # Normalize by typical gradient magnitude (contrast-invariant)
+        typical_mag = np.mean(self.grad_mag)
+        normalized_flux = flux_density / (typical_mag + 1e-10)
+
+        # Cost = negative absolute flux
+        # Maximize |flux| = prefer coherent gradients
+        # Penalize weak/canceling flux = incoherent features
+        cost = 1.0 - np.abs(normalized_flux)
+
+        return cost
+
+    def _gradient_field_cost(
+        self, params: np.ndarray | dict, y_coords: np.ndarray = None
+    ) -> float:
+        """
+        Gradient field cost based on flux through the limb curve.
+
+        Computes the total "flow" of gradient field through the proposed limb,
+        where each pixel contributes based on:
+        - Gradient strength (stronger = more contribution)
+        - Alignment with curve normal (perpendicular = full contribution)
+
+        This naturally prefers strong, well-aligned gradients without arbitrary thresholds.
+        """
+        if y_coords is None:
+            # Get predicted horizon curve (sub-pixel precision!)
+            y_coords = self.evaluate(params)
+
+        # Handle invalid coordinates
+        if np.any(np.isnan(y_coords)) or np.any(np.isinf(y_coords)):
+            return 1e10
+
+        # Determine which pixels are in bounds
+        in_bounds = (y_coords >= 0) & (y_coords < self.image_height)
+        fraction_in_bounds = np.mean(in_bounds)
+
+        # Require minimum fraction in frame
+        if fraction_in_bounds < 0.3:
+            # Distance penalty for out-of-frame
+            center_y = self.image_height / 2
+            mean_dist = np.mean(np.abs(y_coords - center_y))
+            return 5.0 + mean_dist / self.image_height
+
+        # ONLY process in-bounds pixels from here on
+        x_in = self.x[in_bounds]
+        y_in = y_coords[in_bounds]
+
+        # Compute curve normal direction at in-bounds points
+        dy_dx_full = np.gradient(y_coords)
+        dy_dx = dy_dx_full[in_bounds]
+
+        # Tangent vector: (1, dy/dx)
+        tangent_x = np.ones_like(dy_dx)
+        tangent_y = dy_dx
+        tangent_mag = np.sqrt(tangent_x**2 + tangent_y**2)
+
+        # Normalize tangent
+        tangent_x_unit = tangent_x / tangent_mag
+        tangent_y_unit = tangent_y / tangent_mag
+
+        # Normal: rotate tangent 90° CCW: (x,y) → (-y, x)
+        normal_x_unit = -tangent_y_unit
+        normal_y_unit = tangent_x_unit
+
+        normal_angle = np.arctan2(normal_y_unit, normal_x_unit)
+
+        # Integer indices and fractional offsets (in-bounds only)
+        ix = x_in.astype(int)
+        iy_float = y_in.copy()
+        iy = iy_float.astype(int)
+
+        fx = x_in - ix
+        fy = iy_float - iy
+
+        # Clip to valid range (should already be valid, but safety check)
+        iy = np.clip(iy, 0, self.image_height - 1)
+        ix = np.clip(ix, 0, self.image_width - 1)
+
+        # Taylor expansion interpolation
+        mag = (
+            self.grad_mag[iy, ix]
+            + fx * self.grad_mag_dx[iy, ix]
+            + fy * self.grad_mag_dy[iy, ix]
+        )
+
+        sin_val = (
+            self.grad_sin[iy, ix]
+            + fx * self.grad_sin_dx[iy, ix]
+            + fy * self.grad_sin_dy[iy, ix]
+        )
+
+        cos_val = (
+            self.grad_cos[iy, ix]
+            + fx * self.grad_cos_dx[iy, ix]
+            + fy * self.grad_cos_dy[iy, ix]
+        )
+
+        angle = np.arctan2(sin_val, cos_val)
+
+        # Compute flux perpendicular to curve
+        # gradient · normal = mag × cos(angle_difference)
+        angle_diff = np.arctan2(
+            np.sin(angle - normal_angle), np.cos(angle - normal_angle)
+        )
+
+        # SIGNED flux: positive and negative contributions can cancel
+        # - Coherent gradients (all same direction) → large |flux|
+        # - Incoherent gradients (random directions) → cancellation → small |flux|
+        flux_contribution = mag * np.cos(angle_diff)
+
+        # Net flux (can be positive or negative)
+        net_flux = np.sum(flux_contribution)
+
+        # Normalize by arc length
+        ds = np.sqrt(1 + dy_dx**2)
+        arc_length = np.sum(ds)
+        flux_density = net_flux / (arc_length + 1e-10)
+
+        # Normalize by typical gradient magnitude (contrast-invariant)
+        typical_mag = np.mean(self.grad_mag)
+        normalized_flux = flux_density / (typical_mag + 1e-10)
+
+        # Cost = negative absolute flux
+        # Maximize |flux| = prefer coherent gradients in either direction
+        # Penalize weak/canceling flux = incoherent features
+        cost = 1.0 - np.abs(normalized_flux)
 
         return cost
 
@@ -201,13 +488,8 @@ def calculate_parameter_uncertainty(
                 "Differential evolution posteriors not available in fit_results"
             )
 
-        # Import here to avoid circular imports
-        try:
-            from planet_ruler.observation import unpack_diff_evol_posteriors
-
-            population_df = unpack_diff_evol_posteriors(observation)
-        except ImportError:
-            raise ImportError("Could not import unpack_diff_evol_posteriors function")
+        # Use unpack_diff_evol_posteriors from same module
+        population_df = unpack_diff_evol_posteriors(observation)
 
         if parameter not in population_df.columns:
             raise ValueError(
@@ -285,3 +567,30 @@ def format_parameter_result(uncertainty_result: dict, units: str = "") -> str:
         )
 
         return f"{param} = {value:.1f} {uncertainty_type_name}{uncertainty:.1f} {units}"
+
+
+def unpack_diff_evol_posteriors(observation) -> "pd.DataFrame":
+    """
+    Extract the final state population of a differential evolution
+    minimization and organize as a DataFrame.
+
+    Args:
+        observation (object): Instance of LimbObservation (must have
+            used differential evolution minimizer).
+
+    Returns:
+        population (pd.DataFrame): Population (rows) and properties (columns).
+    """
+    import pandas as pd
+
+    pop = []
+    en = observation.fit_results["population_energies"]
+    for i, sol in enumerate(observation.fit_results["population"]):
+        mse = en[i]
+        updated = observation.init_parameter_values.copy()
+        updated.update(unpack_parameters(sol, observation.free_parameters))
+        updated["mse"] = mse
+        pop.append(updated)
+    pop = pd.DataFrame.from_records(pop)
+
+    return pop
