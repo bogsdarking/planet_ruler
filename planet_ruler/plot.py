@@ -275,11 +275,11 @@ def plot_gradient_field_at_limb(
 
     if image_smoothing is not None:
         working_image = cv2.GaussianBlur(
-                    image.astype(np.float32),
-                    (0, 0),  # Kernel size auto-determined from sigma
-                    sigmaX=image_smoothing,
-                    sigmaY=image_smoothing
-                )
+            image.astype(np.float32),
+            (0, 0),  # Kernel size auto-determined from sigma
+            sigmaX=image_smoothing,
+            sigmaY=image_smoothing,
+        )
     else:
         working_image = image.copy()
 
@@ -582,11 +582,11 @@ def compare_gradient_fields(
 
     if image_smoothing is not None:
         working_image = cv2.GaussianBlur(
-                    image.astype(np.float32),
-                    (0, 0),  # Kernel size auto-determined from sigma
-                    sigmaX=image_smoothing,
-                    sigmaY=image_smoothing
-                )
+            image.astype(np.float32),
+            (0, 0),  # Kernel size auto-determined from sigma
+            sigmaX=image_smoothing,
+            sigmaY=image_smoothing,
+        )
     else:
         working_image = image.copy()
 

@@ -28,7 +28,7 @@ from planet_ruler.plot import (
     plot_limb,
     plot_diff_evol_posteriors,
     plot_full_limb,
-    plot_segmentation_masks
+    plot_segmentation_masks,
 )
 from planet_ruler.image import (
     load_image,
@@ -48,118 +48,104 @@ from planet_ruler.geometry import limb_arc
 # ============================================================================
 
 MINIMIZER_PRESETS = {
-    'differential-evolution': {
-        'fast': {
-            'strategy': 'best1bin',
-            'popsize': 10,
-            'mutation': [0.1, 1.5],
-            'recombination': 0.7,
-            'polish': True,
-            'init': 'sobol',
-            'atol': 1.0,
-            'tol': 0.01
+    "differential-evolution": {
+        "fast": {
+            "strategy": "best1bin",
+            "popsize": 10,
+            "mutation": [0.1, 1.5],
+            "recombination": 0.7,
+            "polish": True,
+            "init": "sobol",
+            "atol": 1.0,
+            "tol": 0.01,
         },
-        'balanced': {
-            'strategy': 'best2bin',
-            'popsize': 15,
-            'mutation': [0.1, 1.9],
-            'recombination': 0.7,
-            'polish': True,
-            'init': 'sobol',
-            'atol': 1.0,
-            'tol': 0.01
+        "balanced": {
+            "strategy": "best2bin",
+            "popsize": 15,
+            "mutation": [0.1, 1.9],
+            "recombination": 0.7,
+            "polish": True,
+            "init": "sobol",
+            "atol": 1.0,
+            "tol": 0.01,
         },
-        'planet-ruler': {
-            'strategy': 'best2bin',
-            'popsize': 15,
-            'mutation': [0.1, 1.9],
-            'recombination': 0.7,
-            'polish': True,
-            'init': 'sobol',
-            'atol': 0,
-            'tol': 0.01
+        "planet-ruler": {
+            "strategy": "best2bin",
+            "popsize": 15,
+            "mutation": [0.1, 1.9],
+            "recombination": 0.7,
+            "polish": True,
+            "init": "sobol",
+            "atol": 0,
+            "tol": 0.01,
         },
-        'robust': {
-            'strategy': 'best2bin',
-            'popsize': 20,
-            'mutation': [0.5, 1.9],
-            'recombination': 0.7,
-            'polish': True,
-            'init': 'sobol',
-            'atol': 0.1,
-            'tol': 0.001
+        "robust": {
+            "strategy": "best2bin",
+            "popsize": 20,
+            "mutation": [0.5, 1.9],
+            "recombination": 0.7,
+            "polish": True,
+            "init": "sobol",
+            "atol": 0.1,
+            "tol": 0.001,
         },
-        'scipy-default': {
+        "scipy-default": {
             # Exact scipy differential_evolution defaults
             # Use this to match original prototype behavior
-            'strategy': 'best1bin',
-            'popsize': 15,
-            'mutation': (0.5, 1),
-            'recombination': 0.7,
-            'polish': True,
-            'init': 'latinhypercube',
-            'atol': 0,
-            'tol': 0.01
-        }
+            "strategy": "best1bin",
+            "popsize": 15,
+            "mutation": (0.5, 1),
+            "recombination": 0.7,
+            "polish": True,
+            "init": "latinhypercube",
+            "atol": 0,
+            "tol": 0.01,
+        },
     },
-    'dual-annealing': {
-        'fast': {
-            'initial_temp': 10000,
-            'restart_temp_ratio': 2e-5,
-            'visit': 2.5,
-            'accept': -5.0,
-            'no_local_search': False
+    "dual-annealing": {
+        "fast": {
+            "initial_temp": 10000,
+            "restart_temp_ratio": 2e-5,
+            "visit": 2.5,
+            "accept": -5.0,
+            "no_local_search": False,
         },
-        'balanced': {
-            'initial_temp': 20000,
-            'restart_temp_ratio': 1e-4,
-            'visit': 2.8,
-            'accept': -10.0,
-            'no_local_search': False
+        "balanced": {
+            "initial_temp": 20000,
+            "restart_temp_ratio": 1e-4,
+            "visit": 2.8,
+            "accept": -10.0,
+            "no_local_search": False,
         },
-        'robust': {
-            'initial_temp': 50000,
-            'restart_temp_ratio': 5e-4,
-            'visit': 3.0,
-            'accept': -15.0,
-            'no_local_search': False
+        "robust": {
+            "initial_temp": 50000,
+            "restart_temp_ratio": 5e-4,
+            "visit": 3.0,
+            "accept": -15.0,
+            "no_local_search": False,
         },
-        'scipy-default': {
+        "scipy-default": {
             # Exact scipy dual_annealing defaults
             # Use this to match original prototype behavior
-            'initial_temp': 5230.0,
-            'restart_temp_ratio': 2e-05,
-            'visit': 2.62,
-            'accept': -5.0,
-            'no_local_search': False
-        }
+            "initial_temp": 5230.0,
+            "restart_temp_ratio": 2e-05,
+            "visit": 2.62,
+            "accept": -5.0,
+            "no_local_search": False,
+        },
     },
-    'basinhopping': {
-        'fast': {
-            'niter': 100,
-            'T': 1.5,
-            'stepsize': 0.5,
-            'local_maxiter': 50
-        },
-        'balanced': {
-            'niter': 200,
-            'T': 2.0,
-            'stepsize': 0.5,
-            'local_maxiter': 100
-        },
-        'robust': {
-            'niter': 500,
-            'T': 3.0,
-            'stepsize': 0.7,
-            'local_maxiter': 200
-        }
-    }
+    "basinhopping": {
+        "fast": {"niter": 100, "T": 1.5, "stepsize": 0.5, "local_maxiter": 50},
+        "balanced": {"niter": 200, "T": 2.0, "stepsize": 0.5, "local_maxiter": 100},
+        "robust": {"niter": 500, "T": 3.0, "stepsize": 0.7, "local_maxiter": 200},
+    },
 }
 
 
 # ============================================================================
 # MAIN CLASSES
 # ============================================================================
+
 
 class PlanetObservation:
     """
@@ -224,7 +210,9 @@ class LimbObservation(PlanetObservation):
 
         self.free_parameters = None
         self.init_parameter_values = None
-        self._original_init_parameter_values = None  # Store original values for warm start protection
+        self._original_init_parameter_values = (
+            None  # Store original values for warm start protection
+        )
         self.parameter_limits = None
         self.load_fit_config(fit_config)
         assert limb_detection in ["gradient-break", "segmentation", "manual"]
@@ -304,7 +292,7 @@ class LimbObservation(PlanetObservation):
     def radius_uncertainty(self) -> float:
         """
         Get parameter uncertainty for radius.
-        
+
         Automatically selects best method based on minimizer:
         - differential_evolution: Uses population spread (fast, exact)
         - dual_annealing/basinhopping: Uses Hessian approximation (fast, approximate)
@@ -336,11 +324,11 @@ class LimbObservation(PlanetObservation):
         method: str = "auto",
         scale_factor: float = 1.0,
         confidence_level: float = 0.68,
-        **kwargs
+        **kwargs,
     ) -> Dict:
         """
         Get uncertainty for any fitted parameter.
-        
+
         Args:
             parameter: Parameter name (e.g., 'r', 'h', 'f', 'theta_x')
             method: Uncertainty method
@@ -351,26 +339,26 @@ class LimbObservation(PlanetObservation):
             scale_factor: Scale result (e.g., 1000.0 for m→km)
             confidence_level: Confidence level (0.68=1σ, 0.95=2σ)
             **kwargs: Additional arguments passed to uncertainty calculator
-            
+
         Returns:
             dict with 'uncertainty', 'method', 'confidence_level', 'additional_info'
-            
+
         Examples:
             # Radius uncertainty in km (1-sigma)
             obs.parameter_uncertainty('r', scale_factor=1000.0)
-            
+
             # Altitude uncertainty in km (2-sigma / 95% CI)
             obs.parameter_uncertainty('h', scale_factor=1000.0, confidence_level=0.95)
-            
+
             # Focal length uncertainty in mm (using profile likelihood)
             obs.parameter_uncertainty('f', scale_factor=1000.0, method='profile')
         """
         if not hasattr(self, "fit_results") or self.fit_results is None:
             return {
-                'uncertainty': 0.0,
-                'method': 'none',
-                'confidence_level': confidence_level,
-                'additional_info': 'No fit performed'
+                "uncertainty": 0.0,
+                "method": "none",
+                "confidence_level": confidence_level,
+                "additional_info": "No fit performed",
             }
 
         try:
@@ -382,15 +370,15 @@ class LimbObservation(PlanetObservation):
                 method=method,
                 scale_factor=scale_factor,
                 confidence_level=confidence_level,
-                **kwargs
+                **kwargs,
             )
         except Exception as e:
             logging.warning(f"Could not calculate {parameter} uncertainty: {e}")
             return {
-                'uncertainty': 0.0,
-                'method': 'error',
-                'confidence_level': confidence_level,
-                'additional_info': str(e)
+                "uncertainty": 0.0,
+                "method": "error",
+                "confidence_level": confidence_level,
+                "additional_info": str(e),
             }
 
     def plot_3d(self, **kwargs) -> None:
@@ -461,7 +449,9 @@ class LimbObservation(PlanetObservation):
         self.free_parameters = base_config["free_parameters"]
         self.init_parameter_values = base_config["init_parameter_values"]
         # Store a deep copy of original initial values for warm start protection
-        self._original_init_parameter_values = base_config["init_parameter_values"].copy()
+        self._original_init_parameter_values = base_config[
+            "init_parameter_values"
+        ].copy()
         self.parameter_limits = base_config["parameter_limits"]
 
     def register_limb(self, limb: np.ndarray) -> "LimbObservation":
@@ -566,17 +556,17 @@ class LimbObservation(PlanetObservation):
         gradient_smoothing: float = 5.0,
         streak_length: int = 50,
         decay_rate: float = 0.10,
-        minimizer_preset: str = 'balanced',
+        minimizer_preset: str = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         warm_start: bool = False,
-        verbose: bool = False
+        verbose: bool = False,
     ) -> "LimbObservation":
         """
         Fit the limb to determine planetary parameters.
-        
+
         Supports single-resolution or multi-resolution (coarse-to-fine) optimization.
         Multi-resolution is recommended for gradient_field loss to avoid local minima.
-        
+
         Args:
             loss_function: Loss function type
                 - 'l2', 'l1', 'log-l1': Traditional (requires detected limb)
@@ -594,7 +584,7 @@ class LimbObservation(PlanetObservation):
             image_smoothing: For gradient_field - Gaussian blur sigma applied to image
                 before gradient computation. Removes high-frequency artifacts (crater rims,
                 striations) that could mislead optimization. Different from gradient_smoothing.
-            gradient_smoothing: For gradient_field - initial blur for gradient direction 
+            gradient_smoothing: For gradient_field - initial blur for gradient direction
                 estimation. Makes the gradient field smoother for directional sampling.
             streak_length: For gradient_field - sampling distance along gradients
             decay_rate: For gradient_field - exponential decay for samples
@@ -604,23 +594,23 @@ class LimbObservation(PlanetObservation):
                 - 'robust': Thorough exploration, slower
             minimizer_kwargs: Override specific minimizer parameters (advanced)
             warm_start: If True, use previous fit's results as starting point
-                (useful for iterative refinement). If False (default), use 
+                (useful for iterative refinement). If False (default), use
                 original init_parameter_values.
-                Note: Multi-resolution stages always warm-start from previous 
-                stages automatically. This parameter is for warm-starting across 
+                Note: Multi-resolution stages always warm-start from previous
+                stages automatically. This parameter is for warm-starting across
                 separate fit_limb() calls.
             verbose: Print detailed progress
-            
+
         Returns:
             self: For method chaining
-            
+
         Examples:
             # Simple single-resolution fit
             obs.fit_limb(loss_function='l1')
-            
+
             # Auto multi-resolution for gradient field
             obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
-            
+
             # Remove image artifacts before optimization
             obs.fit_limb(
                 loss_function='gradient_field',
@@ -628,30 +618,34 @@ class LimbObservation(PlanetObservation):
                 image_smoothing=2.0,  # Remove crater rims, striations
                 gradient_smoothing=5.0  # Smooth gradient field
             )
-            
+
             # Custom stages with robust optimization
             obs.fit_limb(
                 loss_function='gradient_field',
                 resolution_stages=[8, 4, 2, 1],
                 minimizer_preset='robust'
             )
-            
+
             # Override specific minimizer parameters
             obs.fit_limb(
                 loss_function='gradient_field',
                 minimizer_kwargs={'popsize': 25, 'atol': 0.5}
             )
-            
+
             # Iterative refinement with warm start
             obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
-            obs.fit_limb(loss_function='gradient_field', warm_start=True, 
+            obs.fit_limb(loss_function='gradient_field', warm_start=True,
                          minimizer_preset='robust')  # Refine with more thorough search
         """
-        
+
         # ====================================================================
         # STEP 0: Warm start handling - protect original values
         # ====================================================================
-        if warm_start and hasattr(self, 'best_parameters') and self.best_parameters is not None:
+        if (
+            warm_start
+            and hasattr(self, "best_parameters")
+            and self.best_parameters is not None
+        ):
             # Update init_parameter_values with previous fit's results
             # Only update free parameters (don't touch inferred ones like n_pix_x, n_pix_y, x0, y0)
             for param in self.free_parameters:
@@ -659,19 +653,27 @@ class LimbObservation(PlanetObservation):
                     self.init_parameter_values[param] = self.best_parameters[param]
             if verbose:
                 print("Warm start: Using previous fit's results as starting point")
-        elif not warm_start and hasattr(self, '_original_init_parameter_values') and self._original_init_parameter_values is not None:
+        elif (
+            not warm_start
+            and hasattr(self, "_original_init_parameter_values")
+            and self._original_init_parameter_values is not None
+        ):
             # Restore original initial parameter values when not using warm start
             self.init_parameter_values = self._original_init_parameter_values.copy()
             if verbose:
                 print("Cold start: Using original initial parameter values")
-        
+
         # ====================================================================
         # STEP 1: Save original image ONCE (if smoothing will be applied)
         # ====================================================================
         original_image = None
-        if image_smoothing is not None and image_smoothing > 0 and 'gradient_field' in loss_function:
+        if (
+            image_smoothing is not None
+            and image_smoothing > 0
+            and "gradient_field" in loss_function
+        ):
             original_image = self.image.copy()  # Save ONCE
-            
+
             # Apply smoothing to self.image
             if verbose:
                 print(f"Applying Gaussian blur to image (sigma={image_smoothing:.1f})")
@@ -679,23 +681,23 @@ class LimbObservation(PlanetObservation):
                 self.image.astype(np.float32),
                 (0, 0),  # Kernel size auto-determined from sigma
                 sigmaX=image_smoothing,
-                sigmaY=image_smoothing
+                sigmaY=image_smoothing,
             )
-        
+
         # ====================================================================
         # STEP 2: Determine resolution strategy
         # ====================================================================
-        use_multires = (resolution_stages is not None)
-        
+        use_multires = resolution_stages is not None
+
         # Multi-resolution only works with gradient_field loss functions
-        if use_multires and 'gradient_field' not in loss_function:
+        if use_multires and "gradient_field" not in loss_function:
             logging.warning(
                 f"Multi-resolution optimization is only supported for gradient_field loss functions. "
                 f"Got loss_function='{loss_function}'. Falling back to single-resolution."
             )
             use_multires = False
             resolution_stages = None
-        
+
         # ====================================================================
         # STEP 3: Run optimization (single or multi-resolution)
         # ====================================================================
@@ -711,7 +713,7 @@ class LimbObservation(PlanetObservation):
                     decay_rate=decay_rate,
                     minimizer_preset=minimizer_preset,
                     minimizer_kwargs=minimizer_kwargs,
-                    verbose=verbose
+                    verbose=verbose,
                 )
             else:
                 result = self._fit_multi_resolution(
@@ -726,7 +728,7 @@ class LimbObservation(PlanetObservation):
                     decay_rate=decay_rate,
                     minimizer_preset=minimizer_preset,
                     minimizer_kwargs=minimizer_kwargs,
-                    verbose=verbose
+                    verbose=verbose,
                 )
         finally:
             # ================================================================
@@ -736,7 +738,7 @@ class LimbObservation(PlanetObservation):
                 self.image = original_image
                 if verbose:
                     print(f"Restored original unsmoothed image")
-        
+
         return self
 
     def _fit_multi_resolution(
@@ -752,15 +754,15 @@ class LimbObservation(PlanetObservation):
         decay_rate: float,
         minimizer_preset: str,
         minimizer_kwargs: Optional[Dict],
-        verbose: bool
+        verbose: bool,
     ) -> "LimbObservation":
         """
         Multi-resolution optimization (internal method).
-        
+
         Note: self.image may be the smoothed version if image_smoothing was applied.
         """
         # Auto-generate stages
-        if resolution_stages == 'auto':
+        if resolution_stages == "auto":
             min_dim = min(self.image.shape[:2])
             if min_dim >= 2000:
                 resolution_stages = [4, 2, 1]
@@ -768,26 +770,26 @@ class LimbObservation(PlanetObservation):
                 resolution_stages = [2, 1]
             else:
                 resolution_stages = [1]
-        
+
         # Auto-determine iterations per stage
         if max_iter_per_stage is None:
             total_weight = sum(range(1, len(resolution_stages) + 1))
             max_iter_per_stage = [
-                int(max_iter * (i + 1) / total_weight) 
+                int(max_iter * (i + 1) / total_weight)
                 for i in range(len(resolution_stages))
             ]
-        
+
         if verbose:
             print(f"\n{'='*60}")
             print(f"Multi-Resolution Optimization")
             print(f"Stages: {resolution_stages}, Iterations: {max_iter_per_stage}")
             print(f"Loss: {loss_function}, Preset: {minimizer_preset}")
             print(f"{'='*60}\n")
-        
+
         # Store current state (might be smoothed version)
         full_res_image = self.image.copy()
         original_params = self.init_parameter_values.copy()
-        
+
         # Set up target resolution cost function (highest resolution if not native)
 
         # Scale parameters to target resolution
@@ -799,9 +801,9 @@ class LimbObservation(PlanetObservation):
         if target_downsample > 1:
             h, w = full_res_image.shape[:2]
             target_image = cv2.resize(
-                full_res_image, 
+                full_res_image,
                 (w // target_downsample, h // target_downsample),
-                interpolation=cv2.INTER_AREA
+                interpolation=cv2.INTER_AREA,
             )
         else:
             target_image = full_res_image.copy()
@@ -811,21 +813,25 @@ class LimbObservation(PlanetObservation):
             print(f"Size: {full_res_image.shape[:2]} → {target_image.shape[:2]}")
 
         # Update to actual final resolution dimensions
-        target_res_params['n_pix_x'] = target_image.shape[1]
-        target_res_params['n_pix_y'] = target_image.shape[0]
-        target_res_params['x0'] = int(target_image.shape[1] * 0.5)
-        target_res_params['y0'] = int(target_image.shape[0] * 0.5)
+        target_res_params["n_pix_x"] = target_image.shape[1]
+        target_res_params["n_pix_y"] = target_image.shape[0]
+        target_res_params["x0"] = int(target_image.shape[1] * 0.5)
+        target_res_params["y0"] = int(target_image.shape[0] * 0.5)
 
         # Create temporary cost function at final resolution
         target_cost_fn = CostFunction(
-            target=target_image if 'gradient_field' in loss_function else self.features.get("limb"),
+            target=(
+                target_image
+                if "gradient_field" in loss_function
+                else self.features.get("limb")
+            ),
             function=limb_arc,
             free_parameters=self.free_parameters,
             init_parameter_values=target_res_params,
             loss_function=loss_function,
             gradient_smoothing=gradient_smoothing,
             streak_length=streak_length,
-            decay_rate=decay_rate
+            decay_rate=decay_rate,
         )
 
         # Loop through resolution stages
@@ -834,24 +840,26 @@ class LimbObservation(PlanetObservation):
         ):
             if verbose:
                 print(f"\n{'─'*60}")
-                print(f"Stage {stage_idx + 1}/{len(resolution_stages)}: "
-                      f"1/{downsample}x ({stage_iter} iter)")
+                print(
+                    f"Stage {stage_idx + 1}/{len(resolution_stages)}: "
+                    f"1/{downsample}x ({stage_iter} iter)"
+                )
                 print(f"{'─'*60}")
-            
+
             # Downsample image for this stage
             if downsample == resolution_stages[-1]:
                 self.image = target_image
             else:
-            # elif downsample > 1:
+                # elif downsample > 1:
                 h, w = full_res_image.shape[:2]
                 self.image = cv2.resize(
-                    full_res_image, 
+                    full_res_image,
                     (w // downsample, h // downsample),
-                    interpolation=cv2.INTER_AREA
+                    interpolation=cv2.INTER_AREA,
                 )
             # else:
             #     self.image = full_res_image
-            
+
             if verbose:
                 print(f"Size: {full_res_image.shape[:2]} → {self.image.shape[:2]}")
 
@@ -859,36 +867,40 @@ class LimbObservation(PlanetObservation):
             self.init_parameter_values = self._scale_parameters_for_resolution(
                 original_params, 1.0 / downsample
             )
-            
+
             # Warm start from previous stage
-            if stage_idx > 0 and hasattr(self, 'best_parameters'):
+            if stage_idx > 0 and hasattr(self, "best_parameters"):
                 if verbose:
                     print("Warm start from previous stage:")
                 for param in self.free_parameters:
                     if param in self.best_parameters:
                         if verbose:
-                            print(f"    {param}: {self.init_parameter_values[param]:.4f} → {self.best_parameters.get(param, 'N/A')}")
+                            print(
+                                f"    {param}: {self.init_parameter_values[param]:.4f} → {self.best_parameters.get(param, 'N/A')}"
+                            )
                         self.init_parameter_values[param] = self.best_parameters[param]
-            
+
             # Scale gradient parameters
             scaled_gradient_smoothing = max(0.5, gradient_smoothing / downsample)
             scaled_streak_length = max(5, int(streak_length / downsample))
-            
+
             if verbose:
                 print(f"Gradient params:")
                 if downsample > 1:
-                    print(f"  smoothing: {gradient_smoothing:.1f} → {scaled_gradient_smoothing:.1f}")
+                    print(
+                        f"  smoothing: {gradient_smoothing:.1f} → {scaled_gradient_smoothing:.1f}"
+                    )
                     print(f"  streak_length: {streak_length} → {scaled_streak_length}")
                 else:
                     print(f"  smoothing: {scaled_gradient_smoothing:.1f}")
                     print(f"  streak_length: {scaled_streak_length}")
-            
+
             # Fit at this resolution
             if verbose:
                 print(f"Starting optimization with:")
                 for param in self.free_parameters:
                     print(f"  {param}: {self.init_parameter_values.get(param, 'N/A')}")
-            
+
             self._fit_single_resolution(
                 loss_function=loss_function,
                 max_iter=stage_iter,
@@ -899,28 +911,27 @@ class LimbObservation(PlanetObservation):
                 decay_rate=decay_rate,
                 minimizer_preset=minimizer_preset,
                 minimizer_kwargs=minimizer_kwargs,
-                verbose=verbose
+                verbose=verbose,
             )
-            
-            if verbose and hasattr(self, 'best_parameters'):
+
+            if verbose and hasattr(self, "best_parameters"):
                 print(f"Fitted parameters:")
                 for param in self.free_parameters:
                     print(f"  {param}: {self.best_parameters.get(param, 'N/A')}")
-                    
+
                 # Evaluate at target resolution
                 target_cost = target_cost_fn.cost(self.fit_results.x)
                 print(f"Cost: {target_cost:.6f}")
-                if 'gradient_field' in loss_function:
+                if "gradient_field" in loss_function:
                     print(f"Flux: {1.0 - target_cost:.6f}")
 
-        
         # Restore full resolution
         self.image = full_res_image
-        
+
         # Note: We don't restore init_parameter_values here because:
         # 1. It's not needed for correctness (next fit will set its own)
         # 2. It would break warm_start (where we want to keep updated values)
-        
+
         # Scale final solution back to full resolution
         if resolution_stages[-1] != 1:
             scale_factor = resolution_stages[-1]
@@ -928,9 +939,9 @@ class LimbObservation(PlanetObservation):
                 self.best_parameters, scale_factor
             )
             # Update image dimensions to actual full resolution
-            self.best_parameters['n_pix_x'] = full_res_image.shape[1]
-            self.best_parameters['n_pix_y'] = full_res_image.shape[0]
-            
+            self.best_parameters["n_pix_x"] = full_res_image.shape[1]
+            self.best_parameters["n_pix_y"] = full_res_image.shape[0]
+
             # Recompute fitted limb at full resolution
             inferred_parameters = {
                 "n_pix_x": full_res_image.shape[1],
@@ -940,24 +951,30 @@ class LimbObservation(PlanetObservation):
             }
             full_res_params = self.best_parameters.copy()
             full_res_params.update(inferred_parameters)
-            
+
             self.cost_function = CostFunction(
-                target=full_res_image if 'gradient_field' in loss_function else self.features.get("limb"),
+                target=(
+                    full_res_image
+                    if "gradient_field" in loss_function
+                    else self.features.get("limb")
+                ),
                 function=limb_arc,
                 free_parameters=self.free_parameters,
                 init_parameter_values=full_res_params,
                 loss_function=loss_function,
                 gradient_smoothing=gradient_smoothing,
                 streak_length=streak_length,
-                decay_rate=decay_rate
+                decay_rate=decay_rate,
             )
-            self.features["fitted_limb"] = self.cost_function.evaluate(self.best_parameters)
-        
+            self.features["fitted_limb"] = self.cost_function.evaluate(
+                self.best_parameters
+            )
+
         if verbose:
             print(f"\n{'='*60}")
             print("Optimization Complete!")
             print(f"{'='*60}\n")
-        
+
         return self
 
     def _fit_single_resolution(
@@ -971,11 +988,11 @@ class LimbObservation(PlanetObservation):
         decay_rate: float,
         minimizer_preset: str,
         minimizer_kwargs: Optional[Dict],
-        verbose: bool
+        verbose: bool,
     ) -> "LimbObservation":
         """
         Internal method: single-resolution optimization.
-        
+
         Note: self.image may be the smoothed version if image_smoothing was applied.
         """
         # Setup parameters
@@ -988,21 +1005,23 @@ class LimbObservation(PlanetObservation):
         }
         working_parameters = self.init_parameter_values.copy()
         working_parameters.update(inferred_parameters)
-        
+
         # Choose target
-        if 'gradient_field' in loss_function:
+        if "gradient_field" in loss_function:
             target = self.image
             if verbose:
-                print(f"Gradient field: smoothing={gradient_smoothing}, "
-                      f"streak={streak_length}, decay={decay_rate}")
+                print(
+                    f"Gradient field: smoothing={gradient_smoothing}, "
+                    f"streak={streak_length}, decay={decay_rate}"
+                )
         else:
-            if 'limb' not in self.features:
+            if "limb" not in self.features:
                 raise ValueError(
                     f"Loss '{loss_function}' requires detected limb. "
                     "Use detect_limb() or loss_function='gradient_field'"
                 )
             target = self.features["limb"]
-        
+
         # Create cost function for this resolution
         self.cost_function = CostFunction(
             target=target,
@@ -1012,32 +1031,32 @@ class LimbObservation(PlanetObservation):
             loss_function=loss_function,
             gradient_smoothing=gradient_smoothing,
             streak_length=streak_length,
-            decay_rate=decay_rate
+            decay_rate=decay_rate,
         )
-        
+
         # Get minimizer configuration
         if self.minimizer not in MINIMIZER_PRESETS:
             raise ValueError(f"Unknown minimizer: {self.minimizer}")
-        
+
         if minimizer_preset not in MINIMIZER_PRESETS[self.minimizer]:
             raise ValueError(
                 f"Unknown preset '{minimizer_preset}' for {self.minimizer}. "
                 f"Choose from: {list(MINIMIZER_PRESETS[self.minimizer].keys())}"
             )
-        
+
         # Start with preset, then apply overrides
         config = MINIMIZER_PRESETS[self.minimizer][minimizer_preset].copy()
         if minimizer_kwargs:
             config.update(minimizer_kwargs)
-        
+
         # Prepare bounds and initial guess
         bounds = [self.parameter_limits[key] for key in self.free_parameters]
         x0 = [working_parameters[key] for key in self.free_parameters]
-        
+
         # Run minimizer
         if self.minimizer == "differential-evolution":
             updating = "deferred" if n_jobs > 1 else "immediate"
-            
+
             self.fit_results = differential_evolution(
                 self.cost_function.cost,
                 bounds,
@@ -1047,38 +1066,39 @@ class LimbObservation(PlanetObservation):
                 updating=updating,
                 disp=verbose,
                 seed=seed,
-                **config  # Apply preset + overrides
+                **config,  # Apply preset + overrides
             )
-        
+
         elif self.minimizer == "dual-annealing":
             from scipy.optimize import dual_annealing
-            
+
             self.fit_results = dual_annealing(
                 self.cost_function.cost,
                 bounds=bounds,
                 x0=x0,
                 maxiter=max_iter,
                 seed=seed,
-                **config
+                **config,
             )
-        
+
         elif self.minimizer == "basinhopping":
             from scipy.optimize import basinhopping
-            
+
             class BoundsChecker:
                 def __init__(self, bounds):
                     self.bounds = bounds
+
                 def __call__(self, **kwargs):
                     x = kwargs["x_new"]
                     return all(l <= xi <= u for xi, (l, u) in zip(x, self.bounds))
-            
-            local_maxiter = config.pop('local_maxiter', 100)
+
+            local_maxiter = config.pop("local_maxiter", 100)
             minimizer_kwargs_local = {
                 "method": "L-BFGS-B",
                 "bounds": bounds,
-                "options": {"maxiter": local_maxiter, "ftol": 1e-6}
+                "options": {"maxiter": local_maxiter, "ftol": 1e-6},
             }
-            
+
             self.fit_results = basinhopping(
                 self.cost_function.cost,
                 x0,
@@ -1087,44 +1107,42 @@ class LimbObservation(PlanetObservation):
                 interval=20,
                 disp=verbose,
                 seed=seed,
-                **config
+                **config,
             )
-        
+
         # Extract results
         best_parameters = unpack_parameters(self.fit_results.x, self.free_parameters)
         working_parameters.update(best_parameters)
         self.best_parameters = working_parameters
         self.features["fitted_limb"] = self.cost_function.evaluate(self.best_parameters)
         self._plot_functions["fitted_limb"] = plot_limb
-        
+
         return self
 
     def _scale_parameters_for_resolution(
-        self,
-        params: Dict,
-        scale_factor: float
+        self, params: Dict, scale_factor: float
     ) -> Dict:
         """
         Scale parameters for different image resolution.
-        
+
         Args:
             params: Parameter dictionary
             scale_factor: Resolution scale (0.5 = half res, 2.0 = double res)
-            
+
         Returns:
             Scaled parameters
         """
         scaled = params.copy()
-        
+
         # Parameters that scale with image dimensions
-        pixel_params = ['n_pix_x', 'n_pix_y', 'x0', 'y0']
+        pixel_params = ["n_pix_x", "n_pix_y", "x0", "y0"]
         for key in pixel_params:
             if key in scaled:
                 scaled[key] = int(scaled[key] * scale_factor)
-        
+
         # Parameters that don't scale (physical units)
         # r, h, f, fov, theta_x, theta_y, theta_z remain unchanged
-        
+
         return scaled
 
     def save_limb(self, filepath: str) -> None:
