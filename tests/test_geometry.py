@@ -236,8 +236,10 @@ class TestLimbArcGeneration:
         # (exact values depend on viewing geometry)
 
     def test_limb_arc_return_full(self):
-        """Test limb arc with return_full=True"""
-        result = limb_arc(
+        """Test limb arc sample with return_full=True"""
+        from planet_ruler.geometry import limb_arc_sample
+
+        result = limb_arc_sample(
             r=1_000_000,
             n_pix_x=100,
             n_pix_y=100,

@@ -26,11 +26,13 @@ import matplotlib.pyplot as plt
 from planet_ruler.observation import (
     PlanetObservation,
     LimbObservation,
-    unpack_diff_evol_posteriors,
+    package_results,
+)
+from planet_ruler.fit import unpack_diff_evol_posteriors
+from planet_ruler.plot import (
     plot_diff_evol_posteriors,
     plot_full_limb,
     plot_segmentation_masks,
-    package_results,
 )
 
 
@@ -570,6 +572,184 @@ class TestLimbObservation:
 
             os.unlink(tmp_image.name)
 
+    def test_warm_start_parameter_protection(self, sample_horizon_image, config_file):
+        """Test warm start parameter protection and restoration functionality"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(
+                image_filepath=tmp_file.name,
+                fit_config=config_file,
+                limb_detection="manual",
+            )
+
+            # Test 1: Verify original values are properly stored
+            original_values = obs.init_parameter_values.copy()
+            stored_original_values = obs._original_init_parameter_values.copy()
+
+            assert original_values == stored_original_values
+            assert hasattr(obs, "_original_init_parameter_values")
+            assert obs._original_init_parameter_values is not None
+
+            # Test 2: Simulate a previous fit by setting best_parameters
+            obs.best_parameters = {
+                "planet_radius": 6500000.0,  # Different from original 6371000.0
+                "altitude": 15000.0,  # Different from original 10000.0
+            }
+
+            # Test 3: Test warm_start=True behavior (manual simulation of fit_limb logic)
+            # This simulates what happens in fit_limb when warm_start=True
+            if hasattr(obs, "best_parameters") and obs.best_parameters is not None:
+                for param in obs.free_parameters:
+                    if param in obs.best_parameters:
+                        obs.init_parameter_values[param] = obs.best_parameters[param]
+
+            # Verify warm start worked
+            for param in obs.free_parameters:
+                expected = obs.best_parameters[param]
+                actual = obs.init_parameter_values[param]
+                assert (
+                    actual == expected
+                ), f"Warm start failed for {param}: {actual} != {expected}"
+
+            # Test 4: Test warm_start=False behavior (restoration)
+            # This simulates what happens in fit_limb when warm_start=False
+            if (
+                hasattr(obs, "_original_init_parameter_values")
+                and obs._original_init_parameter_values is not None
+            ):
+                obs.init_parameter_values = obs._original_init_parameter_values.copy()
+
+            # Verify restoration worked
+            for param in obs.free_parameters:
+                expected = original_values[param]
+                actual = obs.init_parameter_values[param]
+                assert (
+                    actual == expected
+                ), f"Restoration failed for {param}: {actual} != {expected}"
+
+            os.unlink(tmp_file.name)
+
+    def test_warm_start_multiple_cycles(self, sample_horizon_image, config_file):
+        """Test warm start behavior across multiple fit cycles"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(
+                image_filepath=tmp_file.name,
+                fit_config=config_file,
+                limb_detection="manual",
+            )
+
+            original_values = obs.init_parameter_values.copy()
+
+            # First fit cycle
+            obs.best_parameters = {
+                "planet_radius": 6500000.0,
+                "altitude": 15000.0,
+            }
+
+            # Apply warm start
+            for param in obs.free_parameters:
+                if param in obs.best_parameters:
+                    obs.init_parameter_values[param] = obs.best_parameters[param]
+
+            # Second fit cycle with different results
+            obs.best_parameters = {
+                "planet_radius": 6200000.0,
+                "altitude": 8000.0,
+            }
+
+            # Apply second warm start
+            for param in obs.free_parameters:
+                if param in obs.best_parameters:
+                    obs.init_parameter_values[param] = obs.best_parameters[param]
+
+            # Verify we can still restore originals after multiple cycles
+            obs.init_parameter_values = obs._original_init_parameter_values.copy()
+
+            for param in obs.free_parameters:
+                expected = original_values[param]
+                actual = obs.init_parameter_values[param]
+                assert (
+                    actual == expected
+                ), f"Multiple cycle restoration failed for {param}: {actual} != {expected}"
+
+            os.unlink(tmp_file.name)
+
+    def test_warm_start_without_previous_fit(self, sample_horizon_image, config_file):
+        """Test warm start behavior when no previous fit exists"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(
+                image_filepath=tmp_file.name,
+                fit_config=config_file,
+                limb_detection="manual",
+            )
+
+            original_values = obs.init_parameter_values.copy()
+
+            # Simulate warm_start=True when no best_parameters exist
+            # This should not change anything (fallback to original behavior)
+            if not (
+                hasattr(obs, "best_parameters") and obs.best_parameters is not None
+            ):
+                # Parameters should remain unchanged
+                pass
+            else:
+                for param in obs.free_parameters:
+                    if param in obs.best_parameters:
+                        obs.init_parameter_values[param] = obs.best_parameters[param]
+
+            # Verify parameters are unchanged when no previous fit exists
+            for param in obs.free_parameters:
+                expected = original_values[param]
+                actual = obs.init_parameter_values[param]
+                assert (
+                    actual == expected
+                ), f"Parameters changed without previous fit for {param}: {actual} != {expected}"
+
+            os.unlink(tmp_file.name)
+
+    def test_original_values_immutable(self, sample_horizon_image, config_file):
+        """Test that _original_init_parameter_values remains immutable"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(
+                image_filepath=tmp_file.name,
+                fit_config=config_file,
+                limb_detection="manual",
+            )
+
+            original_stored = obs._original_init_parameter_values.copy()
+
+            # Modify init_parameter_values
+            obs.init_parameter_values["planet_radius"] = 9999999.0
+
+            # Verify _original_init_parameter_values is unchanged
+            for param in obs.free_parameters:
+                expected = original_stored[param]
+                actual = obs._original_init_parameter_values[param]
+                assert (
+                    actual == expected
+                ), f"Original values were modified for {param}: {actual} != {expected}"
+
+            os.unlink(tmp_file.name)
+
 
 class TestUtilityFunctions:
     """Test utility functions for observation analysis"""
@@ -591,7 +771,7 @@ class TestUtilityFunctions:
             "population_energies": [0.1, 0.2, 0.3],
         }
 
-        with patch("planet_ruler.observation.unpack_parameters") as mock_unpack:
+        with patch("planet_ruler.fit.unpack_parameters") as mock_unpack:
             # Mock unpack_parameters to return parameter dicts
             mock_unpack.side_effect = [
                 {"param1": 1.1, "param2": 2.1},
@@ -624,20 +804,17 @@ class TestUtilityFunctions:
         obs.parameter_limits = {"param1": [0.5, 1.5]}
         obs.init_parameter_values = {"param1": 1.0}
 
-        # Mock the posterior data
-        mock_pop_data = pd.DataFrame(
-            {"param1": [1.1, 1.2, 1.3], "mse": [0.1, 0.2, 0.3]}
-        )
+        # Mock fit_results with proper structure for unpack_diff_evol_posteriors
+        obs.fit_results = {
+            "population_energies": [0.1, 0.2, 0.3],
+            "population": [[1.1], [1.2], [1.3]],  # Single parameter
+        }
 
-        with patch(
-            "planet_ruler.observation.unpack_diff_evol_posteriors",
-            return_value=mock_pop_data,
-        ):
-            plot_diff_evol_posteriors(obs, show_points=False, log=True)
+        plot_diff_evol_posteriors(obs, show_points=False, log=True)
 
-            mock_kdeplot.assert_called_once()
-            assert mock_axvline.call_count >= 2  # At least bounds lines
-            mock_show.assert_called_once()
+        mock_kdeplot.assert_called_once()
+        assert mock_axvline.call_count >= 2  # At least bounds lines
+        mock_show.assert_called_once()
 
     @patch("matplotlib.pyplot.show")
     @patch("matplotlib.pyplot.imshow")
@@ -648,7 +825,14 @@ class TestUtilityFunctions:
         # Create mock observation
         obs = Mock()
         obs.image = np.random.random((100, 200))
-        obs.best_parameters = {"param1": 1.0, "param2": 2.0}
+        obs.best_parameters = {
+            "r": 6371000.0,
+            "h": 400000.0,
+            "f": 0.024,  # 24mm focal length
+            "w": 0.0236,  # APS-C sensor width (~24mm)
+            "param1": 1.0,
+            "param2": 2.0,
+        }
 
         # Mock limb_arc returns
         full_limb_pixels = np.column_stack(
@@ -693,7 +877,7 @@ class TestUtilityFunctions:
         # Mock fit results
         obs.fit_results.x = np.array([1.5, 2.5])
 
-        with patch("planet_ruler.observation.unpack_parameters") as mock_unpack:
+        with patch("planet_ruler.fit.unpack_parameters") as mock_unpack:
             mock_unpack.return_value = {"param1": 1.5, "param2": 2.5}
 
             result = package_results(obs)

@@ -25,6 +25,7 @@ from . import plot
 from . import annotate
 from . import camera
 from . import validation
+from . import uncertainty
 
 # Main classes for user-facing API
 from .observation import LimbObservation, PlanetObservation
@@ -39,6 +40,7 @@ __all__ = [
     "observation",
     "plot",
     "annotate",
+    "uncertainty",
     # Main classes
     "LimbObservation",
     "PlanetObservation",
@@ -46,4 +48,4 @@ __all__ = [
 ]
 
 # Version information
-__version__ = "1.3.0"
+__version__ = "1.4.0"

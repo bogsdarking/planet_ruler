@@ -27,9 +27,20 @@ Tests verify correct matplotlib function calls and parameter passing.
 
 import pytest
 import numpy as np
-from unittest.mock import Mock, patch, MagicMock, call
+from unittest.mock import Mock, patch, MagicMock, call, ANY
 
-from planet_ruler.plot import plot_image, plot_limb, plot_3d_solution, plot_topography
+from planet_ruler.plot import (
+    plot_image,
+    plot_limb,
+    plot_3d_solution,
+    plot_topography,
+    plot_gradient_field_at_limb,
+    compare_blur_methods,
+    compare_gradient_fields,
+    plot_diff_evol_posteriors,
+    plot_full_limb,
+    plot_segmentation_masks,
+)
 
 
 class TestPlotImage:
@@ -561,3 +572,554 @@ class TestMatplotlibConfig:
         # Note: These might have been modified by other imports, so we just verify they exist
         assert "figure.figsize" in matplotlib.rcParams
         assert "font.size" in matplotlib.rcParams
+
+
+class TestPlotGradientFieldAtLimb:
+    """Test gradient field visualization at limb curves."""
+
+    @patch("planet_ruler.image.gradient_field")
+    @patch("planet_ruler.plot.plt")
+    def test_plot_gradient_field_at_limb_basic(self, mock_plt, mock_gradient_field):
+        """Test basic gradient field plotting at limb."""
+        # Mock gradient field data
+        mock_gradient_field.return_value = {
+            "grad_mag": np.ones((100, 200)) * 0.5,
+            "grad_angle": np.zeros((100, 200)),
+            "image_height": 100,
+        }
+
+        # Mock figure and axis
+        mock_fig = Mock()
+        mock_ax = Mock()
+        mock_plt.subplots.return_value = (mock_fig, mock_ax)
+
+        # Test data
+        y_pixels = np.array([30, 31, 32, 31, 30, 29, 28])
+        image = np.random.random((100, 200, 3))
+
+        result = plot_gradient_field_at_limb(y_pixels, image)
+
+        # Verify gradient field computation
+        mock_gradient_field.assert_called_once_with(
+            ANY, gradient_smoothing=5.0, streak_length=30, decay_rate=0.15
+        )
+
+        # Verify matplotlib calls
+        mock_plt.subplots.assert_called_once_with(figsize=(16, 10))
+        mock_ax.imshow.assert_called_once()
+        mock_ax.plot.assert_called()  # Limb curve
+        assert mock_ax.arrow.call_count > 0  # Gradient arrows
+
+        # Verify legend creation
+        mock_ax.legend.assert_called_once()
+
+        assert result == (mock_fig, mock_ax)
+
+    @patch("planet_ruler.image.gradient_field")
+    @patch("planet_ruler.plot.plt")
+    def test_plot_gradient_field_custom_params(self, mock_plt, mock_gradient_field):
+        """Test gradient field plotting with custom parameters."""
+        mock_gradient_field.return_value = {
+            "grad_mag": np.ones((50, 100)) * 0.3,
+            "grad_angle": 3.14159 * np.ones((50, 100)),
+            "image_height": 50,
+        }
+
+        mock_fig = Mock()
+        mock_ax = Mock()
+        mock_plt.subplots.return_value = (mock_fig, mock_ax)
+
+        y_pixels = np.linspace(20, 30, 100)
+        image = np.random.random((50, 100, 3))
+
+        plot_gradient_field_at_limb(
+            y_pixels,
+            image,
+            gradient_smoothing=3.0,
+            streak_length=20,
+            decay_rate=0.1,
+            sample_spacing=25,
+            arrow_scale=10,
+        )
+
+        # Verify custom parameters passed to gradient_field
+        mock_gradient_field.assert_called_once_with(
+            ANY, gradient_smoothing=3.0, streak_length=20, decay_rate=0.1
+        )
+
+    @patch("planet_ruler.image.gradient_field")
+    @patch("planet_ruler.plot.plt")
+    def test_plot_gradient_field_edge_cases(self, mock_plt, mock_gradient_field):
+        """Test gradient field plotting with edge cases."""
+        mock_gradient_field.return_value = {
+            "grad_mag": np.zeros((20, 30)),
+            "grad_angle": np.full((20, 30), np.nan),
+            "image_height": 20,
+        }
+
+        mock_fig = Mock()
+        mock_ax = Mock()
+        mock_plt.subplots.return_value = (mock_fig, mock_ax)
+
+        # Very short limb curve to avoid numpy gradient issues
+        y_pixels = np.array(
+            [15, 16, 17]
+        )  # Minimum length to avoid gradient calculation issues
+        image = np.random.random((20, 30))
+
+        plot_gradient_field_at_limb(y_pixels, image, sample_spacing=10)
+
+        # Should still create plot without errors
+        mock_plt.subplots.assert_called_once()
+        mock_ax.imshow.assert_called_once()
+
+
+class TestCompareBlurMethods:
+    """Test gradient blur method comparison."""
+
+    @patch("planet_ruler.image.gradient_field")
+    @patch("planet_ruler.plot.cv2")
+    @patch("planet_ruler.plot.plt")
+    def test_compare_blur_methods_basic(self, mock_plt, mock_cv2, mock_gradient_field):
+        """Test basic blur method comparison."""
+        # Mock cv2 GaussianBlur
+        mock_cv2.GaussianBlur.return_value = np.ones((50, 60)) * 100
+
+        # Mock gradient field
+        mock_gradient_field.return_value = {
+            "grad_mag": np.ones((50, 60)) * 0.5,
+            "grad_angle": np.zeros((50, 60)),
+        }
+
+        # Mock figure and axes
+        mock_fig = Mock()
+        mock_axes = np.array([[Mock(), Mock()], [Mock(), Mock()]])
+        mock_plt.subplots.return_value = (mock_fig, mock_axes)
+
+        # Test with 3-channel image
+        image = np.random.random((50, 60, 3))
+
+        result = compare_blur_methods(image)
+
+        # Verify matplotlib setup
+        mock_plt.subplots.assert_called_once_with(2, 2, figsize=(14, 12))
+
+        # Verify Gaussian blur call
+        mock_cv2.GaussianBlur.assert_called_once()
+
+        # Verify gradient field call
+        mock_gradient_field.assert_called_once_with(
+            ANY, streak_length=30, decay_rate=0.15, gradient_smoothing=2.0
+        )
+
+        # Verify all subplots were used
+        for ax in mock_axes.flat:
+            ax.imshow.assert_called()
+            ax.set_title.assert_called()
+            ax.axis.assert_called_with("off")
+
+        assert result == (mock_fig, mock_axes)
+
+    @patch("planet_ruler.image.gradient_field")
+    @patch("planet_ruler.plot.cv2")
+    @patch("planet_ruler.plot.plt")
+    def test_compare_blur_methods_with_limb(
+        self, mock_plt, mock_cv2, mock_gradient_field
+    ):
+        """Test blur method comparison with limb overlay."""
+        mock_cv2.GaussianBlur.return_value = np.ones((40, 50)) * 50
+        mock_gradient_field.return_value = {
+            "grad_mag": np.ones((40, 50)) * 0.3,
+            "grad_angle": np.ones((40, 50)) * 3.14159 / 4,
+        }
+
+        mock_fig = Mock()
+        mock_axes = np.array([[Mock(), Mock()], [Mock(), Mock()]])
+        mock_plt.subplots.return_value = (mock_fig, mock_axes)
+
+        image = np.random.random((40, 50, 3))
+        y_pixels = np.random.random(50) * 40
+
+        compare_blur_methods(image, y_pixels=y_pixels)
+
+        # Verify limb curve plotting on all subplots
+        plot_call_count = sum(ax.plot.call_count for ax in mock_axes.flat)
+        assert plot_call_count >= 4  # Should plot limb on all 4 subplots
+
+    @patch("planet_ruler.image.gradient_field")
+    @patch("planet_ruler.plot.cv2")
+    @patch("planet_ruler.plot.plt")
+    def test_compare_blur_methods_grayscale(
+        self, mock_plt, mock_cv2, mock_gradient_field
+    ):
+        """Test blur method comparison with grayscale image."""
+        mock_cv2.GaussianBlur.return_value = np.ones((30, 40)) * 75
+        mock_gradient_field.return_value = {
+            "grad_mag": np.ones((30, 40)) * 0.4,
+            "grad_angle": np.zeros((30, 40)),
+        }
+
+        mock_fig = Mock()
+        mock_axes = np.array([[Mock(), Mock()], [Mock(), Mock()]])
+        mock_plt.subplots.return_value = (mock_fig, mock_axes)
+
+        # Grayscale image (2D)
+        image = np.random.random((30, 40))
+
+        compare_blur_methods(image)
+
+        # Should handle grayscale input
+        mock_plt.subplots.assert_called_once()
+        mock_cv2.GaussianBlur.assert_called_once()
+        mock_gradient_field.assert_called_once()
+
+
+class TestCompareGradientFields:
+    """Test gradient field comparison for multiple limbs."""
+
+    @patch("planet_ruler.image.gradient_field")
+    @patch("planet_ruler.plot.plt")
+    @patch("matplotlib.collections.LineCollection")
+    def test_compare_gradient_fields_multiple_limbs(
+        self, mock_line_collection, mock_plt, mock_gradient_field
+    ):
+        """Test gradient field comparison with multiple limb proposals."""
+        mock_gradient_field.return_value = {
+            "grad_mag": np.ones((60, 80)) * 0.5,
+            "grad_angle": np.zeros((60, 80)),
+        }
+
+        # Mock LineCollection
+        mock_lc = Mock()
+        mock_line_collection.return_value = mock_lc
+
+        # Mock figure and axes
+        mock_fig = Mock()
+        mock_ax1 = Mock()
+        mock_ax2 = Mock()
+        mock_axes = [mock_ax1, mock_ax2]
+        mock_plt.subplots.return_value = (mock_fig, mock_axes)
+
+        # Test data - multiple limb proposals
+        y_pixels_list = [np.array([25, 26, 27, 26, 25]), np.array([30, 31, 32, 31, 30])]
+        labels = ["Limb A", "Limb B"]
+        image = np.random.random((60, 80, 3))
+
+        result = compare_gradient_fields(y_pixels_list, labels, image)
+
+        # Verify gradient field computation
+        mock_gradient_field.assert_called_once_with(
+            ANY, gradient_smoothing=5.0, streak_length=30, decay_rate=0.15
+        )
+
+        # Verify matplotlib setup
+        mock_plt.subplots.assert_called_once_with(2, 1, figsize=(16, 10))
+
+        # Verify both axes were used
+        for ax in mock_axes:
+            ax.imshow.assert_called_once()
+            ax.set_title.assert_called_once()
+            ax.set_xlabel.assert_called_once()
+            ax.set_ylabel.assert_called_once()
+            ax.add_collection.assert_called_once()
+
+        # Verify colorbar creation
+        assert mock_plt.colorbar.call_count == 2
+
+        assert result == (mock_fig, mock_axes)
+
+    @patch("planet_ruler.image.gradient_field")
+    @patch("planet_ruler.plot.plt")
+    @patch("matplotlib.collections.LineCollection")
+    def test_compare_gradient_fields_single_limb(
+        self, mock_line_collection, mock_plt, mock_gradient_field
+    ):
+        """Test gradient field comparison with single limb."""
+        mock_gradient_field.return_value = {
+            "grad_mag": np.ones((40, 50)) * 0.3,
+            "grad_angle": np.ones((40, 50)) * 3.14159 / 2,
+        }
+
+        mock_lc = Mock()
+        mock_line_collection.return_value = mock_lc
+
+        mock_fig = Mock()
+        mock_ax = Mock()
+        mock_plt.subplots.return_value = (
+            mock_fig,
+            mock_ax,
+        )  # Single axis, will be wrapped by function
+
+        y_pixels_list = [np.array([20, 21, 22, 21, 20])]
+        labels = ["Single Limb"]
+        image = np.random.random((40, 50, 3))
+
+        compare_gradient_fields(
+            y_pixels_list,
+            labels,
+            image,
+            gradient_smoothing=3.0,
+            streak_length=25,
+            decay_rate=0.2,
+        )
+
+        # Verify custom parameters
+        mock_gradient_field.assert_called_once_with(
+            ANY, gradient_smoothing=3.0, streak_length=25, decay_rate=0.2
+        )
+
+        # Single limb should create single subplot
+        mock_plt.subplots.assert_called_once_with(1, 1, figsize=(16, 5))
+
+
+class TestPlotDiffEvolPosteriors:
+    """Test differential evolution posterior plotting."""
+
+    @patch("planet_ruler.plot.unpack_diff_evol_posteriors")
+    @patch("planet_ruler.plot.plt")
+    @patch("planet_ruler.plot.sns")
+    def test_plot_diff_evol_posteriors_basic(self, mock_sns, mock_plt, mock_unpack):
+        """Test basic differential evolution posterior plotting."""
+        # Mock observation object
+        mock_obs = Mock()
+        mock_obs.free_parameters = ["r", "h"]
+        mock_obs.parameter_limits = {"r": [6000000, 7000000], "h": [300000, 500000]}
+        mock_obs.init_parameter_values = {"r": 6371000, "h": 400000}
+
+        # Mock population data
+        mock_pop = pd.DataFrame(
+            {
+                "r": [6350000, 6370000, 6390000],
+                "h": [390000, 410000, 430000],
+                "mse": [0.1, 0.2, 0.15],
+                "other_param": [1, 2, 3],  # Should be ignored
+            }
+        )
+        mock_unpack.return_value = mock_pop
+
+        # Mock matplotlib
+        mock_ax = Mock()
+        mock_plt.gca.return_value = mock_ax
+        mock_ax.get_legend_handles_labels.return_value = ([], [])
+
+        plot_diff_evol_posteriors(mock_obs, show_points=True, log=True)
+
+        # Verify population unpacking
+        mock_unpack.assert_called_once_with(mock_obs)
+
+        # Verify plotting for each free parameter
+        assert mock_plt.scatter.call_count == 2  # r and h parameters
+        assert mock_sns.kdeplot.call_count == 2
+        assert mock_plt.axvline.call_count == 6  # 2 bounds + 1 initial per parameter
+        assert mock_plt.title.call_count == 2
+        assert mock_plt.show.call_count == 2
+
+    @patch("planet_ruler.plot.unpack_diff_evol_posteriors")
+    @patch("planet_ruler.plot.plt")
+    @patch("planet_ruler.plot.sns")
+    def test_plot_diff_evol_posteriors_no_points(self, mock_sns, mock_plt, mock_unpack):
+        """Test posterior plotting without individual points."""
+        mock_obs = Mock()
+        mock_obs.free_parameters = ["r"]
+        mock_obs.parameter_limits = {"r": [5000000, 8000000]}
+        mock_obs.init_parameter_values = {"r": 6371000}
+
+        mock_pop = pd.DataFrame(
+            {"r": [6300000, 6400000, 6500000], "mse": [0.05, 0.1, 0.08]}
+        )
+        mock_unpack.return_value = mock_pop
+
+        mock_ax = Mock()
+        mock_plt.gca.return_value = mock_ax
+        mock_ax.get_legend_handles_labels.return_value = ([], [])
+
+        plot_diff_evol_posteriors(mock_obs, show_points=False, log=False)
+
+        # Should not show individual points
+        mock_plt.scatter.assert_not_called()
+        # But should still show KDE plot
+        mock_sns.kdeplot.assert_called_once()
+
+        # Verify log scale setting
+        mock_ax.set_yscale.assert_not_called()  # log=False
+
+    @patch("planet_ruler.plot.unpack_diff_evol_posteriors")
+    @patch("planet_ruler.plot.plt")
+    @patch("planet_ruler.plot.sns")
+    def test_plot_diff_evol_posteriors_missing_init_values(
+        self, mock_sns, mock_plt, mock_unpack
+    ):
+        """Test posterior plotting with missing initial parameter values."""
+        mock_obs = Mock()
+        mock_obs.free_parameters = ["r", "h"]
+        mock_obs.parameter_limits = {"r": [6000000, 7000000], "h": [300000, 500000]}
+        mock_obs.init_parameter_values = {"r": 6371000}  # Missing 'h'
+
+        mock_pop = pd.DataFrame(
+            {"r": [6350000, 6370000], "h": [390000, 410000], "mse": [0.1, 0.2]}
+        )
+        mock_unpack.return_value = mock_pop
+
+        mock_ax = Mock()
+        mock_plt.gca.return_value = mock_ax
+        mock_ax.get_legend_handles_labels.return_value = ([], [])
+
+        plot_diff_evol_posteriors(mock_obs)
+
+        # Should handle missing initial values gracefully (KeyError catch)
+        mock_unpack.assert_called_once_with(mock_obs)
+
+
+class TestPlotFullLimb:
+    """Test full limb visualization including unseen sections."""
+
+    @patch("planet_ruler.plot.limb_arc")
+    @patch("planet_ruler.plot.plt")
+    def test_plot_full_limb_with_best_parameters(self, mock_plt, mock_limb_arc):
+        """Test full limb plotting with best parameters."""
+        # Mock observation with best parameters
+        mock_obs = Mock()
+        mock_obs.best_parameters = {"r": 6371000, "h": 400000, "cx": 500, "cy": 300}
+        mock_obs.image = np.random.random((600, 1000, 3))
+
+        # Mock limb_arc returns
+        mock_limb_arc.side_effect = [
+            np.array([[100, 200], [101, 201], [102, 202]]),  # Full limb points
+            np.array([200, 201, 202]),  # Image section limb
+        ]
+
+        mock_ax = Mock()
+        mock_plt.gca.return_value = mock_ax
+
+        plot_full_limb(mock_obs, x_min=0, x_max=1000, y_min=0, y_max=600)
+
+        # Verify image display
+        mock_plt.imshow.assert_called_once_with(mock_obs.image)
+
+        # Verify limb_arc calls
+        assert mock_limb_arc.call_count == 2
+
+        # First call: full limb with return_full=True
+        first_call = mock_limb_arc.call_args_list[0]
+        assert first_call[0][0] == 6371000  # radius
+        assert first_call[1]["return_full"] == True
+
+        # Second call: image section limb
+        second_call = mock_limb_arc.call_args_list[1]
+        assert second_call[0][0] == 6371000  # radius
+        assert "return_full" not in second_call[1]
+
+        # Verify scatter plots
+        assert mock_plt.scatter.call_count == 2
+
+        # Verify axis limits
+        mock_ax.set_xlim.assert_called_once_with(0, 1000)
+        mock_ax.set_ylim.assert_called_once_with(0, 600)
+
+        mock_plt.show.assert_called_once()
+
+    @patch("planet_ruler.plot.limb_arc")
+    @patch("planet_ruler.plot.plt")
+    def test_plot_full_limb_with_init_parameters(self, mock_plt, mock_limb_arc):
+        """Test full limb plotting fallback to init parameters."""
+        # Mock observation without best_parameters (triggers AttributeError)
+        mock_obs = Mock()
+        del mock_obs.best_parameters  # Simulate AttributeError
+        mock_obs.init_parameter_values = {
+            "r": 3390000,
+            "h": 200000,
+            "cx": 400,
+            "cy": 250,
+        }
+        mock_obs.image = np.random.random((500, 800, 3))
+
+        mock_limb_arc.side_effect = [
+            np.array([[50, 100], [51, 101]]),
+            np.array([100, 101]),
+        ]
+
+        mock_ax = Mock()
+        mock_plt.gca.return_value = mock_ax
+
+        plot_full_limb(mock_obs)
+
+        # Should use init_parameter_values when best_parameters not available
+        first_call = mock_limb_arc.call_args_list[0]
+        assert first_call[0][0] == 3390000  # radius from init values
+
+    @patch("planet_ruler.plot.limb_arc")
+    @patch("planet_ruler.plot.plt")
+    def test_plot_full_limb_no_limits(self, mock_plt, mock_limb_arc):
+        """Test full limb plotting without axis limits."""
+        mock_obs = Mock()
+        mock_obs.best_parameters = {"r": 1737000, "h": 100000}  # Moon parameters
+        mock_obs.image = np.random.random((400, 600, 3))
+
+        mock_limb_arc.side_effect = [np.array([[25, 50], [26, 51]]), np.array([50, 51])]
+
+        mock_ax = Mock()
+        mock_plt.gca.return_value = mock_ax
+
+        plot_full_limb(mock_obs)
+
+        # Should set limits to None when not provided
+        mock_ax.set_xlim.assert_called_once_with(None, None)
+        mock_ax.set_ylim.assert_called_once_with(None, None)
+
+
+class TestPlotSegmentationMasks:
+    """Test segmentation mask visualization."""
+
+    @patch("planet_ruler.plot.plt")
+    def test_plot_segmentation_masks_basic(self, mock_plt):
+        """Test basic segmentation mask plotting."""
+        # Mock observation with segmentation masks
+        mock_obs = Mock()
+        mock_obs._segmenter._masks = [
+            {"segmentation": np.random.random((100, 150))},
+            {"segmentation": np.random.random((100, 150))},
+            {"segmentation": np.random.random((100, 150))},
+        ]
+
+        plot_segmentation_masks(mock_obs)
+
+        # Verify plotting for each mask
+        assert mock_plt.imshow.call_count == 3
+        assert mock_plt.title.call_count == 3
+        assert mock_plt.show.call_count == 3
+
+        # Verify titles
+        title_calls = mock_plt.title.call_args_list
+        expected_titles = ["Mask 0", "Mask 1", "Mask 2"]
+        for i, call in enumerate(title_calls):
+            assert call[0][0] == expected_titles[i]
+
+    @patch("planet_ruler.plot.plt")
+    def test_plot_segmentation_masks_single_mask(self, mock_plt):
+        """Test segmentation mask plotting with single mask."""
+        mock_obs = Mock()
+        mock_obs._segmenter._masks = [{"segmentation": np.random.random((50, 75))}]
+
+        plot_segmentation_masks(mock_obs)
+
+        # Should handle single mask
+        mock_plt.imshow.assert_called_once()
+        mock_plt.title.assert_called_once_with("Mask 0")
+        mock_plt.show.assert_called_once()
+
+    @patch("planet_ruler.plot.plt")
+    def test_plot_segmentation_masks_empty(self, mock_plt):
+        """Test segmentation mask plotting with no masks."""
+        mock_obs = Mock()
+        mock_obs._segmenter._masks = []
+
+        plot_segmentation_masks(mock_obs)
+
+        # Should handle empty mask list gracefully
+        mock_plt.imshow.assert_not_called()
+        mock_plt.title.assert_not_called()
+        mock_plt.show.assert_not_called()
+
+
+# Import pandas for DataFrame creation
+import pandas as pd
