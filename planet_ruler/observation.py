@@ -41,6 +41,7 @@ from planet_ruler.annotate import TkLimbAnnotator
 from planet_ruler.validation import validate_limb_config
 from planet_ruler.fit import CostFunction, unpack_parameters
 from planet_ruler.geometry import limb_arc
+from planet_ruler.dashboard import FitDashboard
 
 
 # ============================================================================
@@ -559,6 +560,8 @@ class LimbObservation(PlanetObservation):
         minimizer_preset: str = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         warm_start: bool = False,
+        dashboard: bool = False,
+        target_planet: str = 'earth',
         verbose: bool = False,
     ) -> "LimbObservation":
         """
@@ -599,6 +602,9 @@ class LimbObservation(PlanetObservation):
                 Note: Multi-resolution stages always warm-start from previous
                 stages automatically. This parameter is for warm-starting across
                 separate fit_limb() calls.
+            dashboard: Show live progress dashboard during optimization
+            target_planet: Reference planet for dashboard comparisons
+                ('earth', 'mars', 'jupiter', 'saturn', 'moon', 'pluto')
             verbose: Print detailed progress
 
         Returns:
@@ -713,6 +719,8 @@ class LimbObservation(PlanetObservation):
                     decay_rate=decay_rate,
                     minimizer_preset=minimizer_preset,
                     minimizer_kwargs=minimizer_kwargs,
+                    dashboard=dashboard,
+                    target_planet=target_planet,
                     verbose=verbose,
                 )
             else:
@@ -728,6 +736,8 @@ class LimbObservation(PlanetObservation):
                     decay_rate=decay_rate,
                     minimizer_preset=minimizer_preset,
                     minimizer_kwargs=minimizer_kwargs,
+                    dashboard=dashboard,
+                    target_planet=target_planet,
                     verbose=verbose,
                 )
         finally:
@@ -754,6 +764,8 @@ class LimbObservation(PlanetObservation):
         decay_rate: float,
         minimizer_preset: str,
         minimizer_kwargs: Optional[Dict],
+        dashboard: bool,
+        target_planet: str,
         verbose: bool,
     ) -> "LimbObservation":
         """
@@ -911,6 +923,8 @@ class LimbObservation(PlanetObservation):
                 decay_rate=decay_rate,
                 minimizer_preset=minimizer_preset,
                 minimizer_kwargs=minimizer_kwargs,
+                dashboard=dashboard if stage_idx == len(resolution_stages) - 1 else False,
+                target_planet=target_planet,
                 verbose=verbose,
             )
 
@@ -988,6 +1002,8 @@ class LimbObservation(PlanetObservation):
         decay_rate: float,
         minimizer_preset: str,
         minimizer_kwargs: Optional[Dict],
+        dashboard: bool,
+        target_planet: str,
         verbose: bool,
     ) -> "LimbObservation":
         """
@@ -1034,6 +1050,31 @@ class LimbObservation(PlanetObservation):
             decay_rate=decay_rate,
         )
 
+        # Initialize dashboard if requested
+        dash = None
+        if dashboard:
+            dash = FitDashboard(
+                initial_params=working_parameters,
+                target_planet=target_planet,
+                max_iter=max_iter,
+                free_params=self.free_parameters
+            )
+        
+        # Create callback for dashboard updates
+        def dashboard_callback(xk, convergence=None):
+            if dash is not None:
+                # Unpack parameters
+                current_params = unpack_parameters(xk, self.free_parameters)
+                full_params = working_parameters.copy()
+                full_params.update(current_params)
+                
+                # Calculate current loss
+                loss = self.cost_function.cost(xk)
+                
+                # Update dashboard
+                dash.update(full_params, loss)
+            return False  # Don't stop optimization
+
         # Get minimizer configuration
         if self.minimizer not in MINIMIZER_PRESETS:
             raise ValueError(f"Unknown minimizer: {self.minimizer}")
@@ -1064,6 +1105,7 @@ class LimbObservation(PlanetObservation):
                 workers=n_jobs,
                 maxiter=max_iter,
                 updating=updating,
+                callback=dashboard_callback if dashboard else None,
                 disp=verbose,
                 seed=seed,
                 **config,  # Apply preset + overrides
@@ -1077,6 +1119,7 @@ class LimbObservation(PlanetObservation):
                 bounds=bounds,
                 x0=x0,
                 maxiter=max_iter,
+                callback=dashboard_callback if dashboard else None,
                 seed=seed,
                 **config,
             )
@@ -1104,6 +1147,7 @@ class LimbObservation(PlanetObservation):
                 x0,
                 minimizer_kwargs=minimizer_kwargs_local,
                 accept_test=BoundsChecker(bounds),
+                callback=dashboard_callback if dashboard else None,
                 interval=20,
                 disp=verbose,
                 seed=seed,
@@ -1116,6 +1160,11 @@ class LimbObservation(PlanetObservation):
         self.best_parameters = working_parameters
         self.features["fitted_limb"] = self.cost_function.evaluate(self.best_parameters)
         self._plot_functions["fitted_limb"] = plot_limb
+
+        # Finalize dashboard if used
+        if dash is not None:
+            success = self.fit_results.success if hasattr(self.fit_results, 'success') else True
+            dash.finalize(success=success)
 
         return self
 
