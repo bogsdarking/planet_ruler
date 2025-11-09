@@ -170,6 +170,31 @@ Examples:
         action="store_true",
         help="Show detailed fitting progress",
     )
+    
+    # Dashboard options
+    measure_parser.add_argument(
+        "--dashboard",
+        action="store_true",
+        help="Show live progress dashboard during optimization",
+    )
+    measure_parser.add_argument(
+        "--dashboard-width",
+        type=int,
+        default=63,
+        help="Dashboard width in characters (default: 63)",
+    )
+    measure_parser.add_argument(
+        "--max-warnings",
+        type=int,
+        default=3,
+        help="Number of warning message slots in dashboard (default: 3)",
+    )
+    measure_parser.add_argument(
+        "--max-hints",
+        type=int,
+        default=3,
+        help="Number of hint message slots in dashboard (default: 3)",
+    )
 
     # Auto-config parameters
     measure_parser.add_argument(
@@ -353,7 +378,16 @@ def measure_command(args):
             "warm_start": args.warm_start,
             "verbose": args.verbose,
             "gradient_smoothing": args.gradient_smoothing,
+            "dashboard": args.dashboard,
         }
+        
+        # Dashboard configuration
+        if args.dashboard:
+            fit_kwargs["dashboard_kwargs"] = {
+                "width": args.dashboard_width,
+                "max_warnings": args.max_warnings,
+                "max_hints": args.max_hints,
+            }
 
         # Add optional parameters
         if resolution_stages is not None:
