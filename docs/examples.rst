@@ -90,6 +90,35 @@ Complete Auto-Config Analysis
    
    # Override auto-detected parameters if needed
    planet-ruler measure --auto-config --altitude 10 --planet earth --field-of-view 50 your_photo.jpg
+   
+   # With live dashboard
+   planet-ruler measure --auto-config --altitude 10 --planet earth --dashboard your_photo.jpg
+
+Using the Live Dashboard
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Monitor optimization progress in real-time with an adaptive dashboard:
+
+.. code-block:: python
+
+   # Basic usage
+   observation.fit_limb(
+       loss_function='gradient_field',
+       resolution_stages='auto',
+       dashboard=True  # Enable dashboard
+   )
+   
+   # Configure dashboard display
+   observation.fit_limb(
+       dashboard=True,
+       dashboard_kwargs={
+           'width': 80,           # Wider dashboard
+           'max_warnings': 5,     # More warning slots
+           'max_hints': 4,        # More hint slots
+       }
+   )
+
+The dashboard automatically adjusts refresh rate based on optimization activity (20Hz during rapid descent, 2-5Hz at convergence).
 
 Example 1: Earth from International Space Station
 -------------------------------------------------

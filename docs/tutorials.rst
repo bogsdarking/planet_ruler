@@ -197,6 +197,36 @@ Now we optimize the planetary radius to match the observed horizon curvature:
    print("Fit completed successfully!")
    print(f"Fitted parameters: {observation.best_parameters}")
 
+**Monitoring Progress with Dashboard:**
+
+For long optimizations, enable the live progress dashboard:
+
+.. code-block:: python
+
+   # Enable dashboard for real-time monitoring
+   observation.fit_limb(
+       method="differential_evolution",
+       maxiter=1000,
+       dashboard=True  # Shows live progress
+   )
+   
+   # Configure dashboard display
+   observation.fit_limb(
+       dashboard=True,
+       dashboard_kwargs={
+           'width': 80,         # Wider display
+           'max_warnings': 5,   # More warning slots
+           'max_hints': 4,      # More hint slots
+       }
+   )
+
+The dashboard shows:
+- Current parameter estimates
+- Loss reduction progress
+- Convergence status
+- Warnings and optimization hints
+- Adaptive refresh rate (fast during descent, slow at convergence)
+
 Step 5: Calculate Uncertainty
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

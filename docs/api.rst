@@ -170,6 +170,21 @@ The CLI module provides command-line access to planet_ruler:
 * **Demo functionality**: `demo_command` - run example scenarios
 * **Configuration**: `load_config`, `list_command` - manage configuration files
 
+Dashboard Module
+~~~~~~~~~~~~~~~~
+
+.. automodule:: planet_ruler.dashboard
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+The dashboard module provides real-time optimization monitoring:
+
+* **FitDashboard**: Live progress dashboard with adaptive refresh rate
+* **OutputCapture**: Capture stdout/stderr for display in dashboard
+* **Adaptive refresh**: Automatically adjusts update frequency (20Hz → 2Hz) based on optimization activity
+* **Configurable display**: Adjust width, message slots, and display time
+
 Demo and Configuration
 ~~~~~~~~~~~~~~~~~~~~~
 
