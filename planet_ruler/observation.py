@@ -561,6 +561,7 @@ class LimbObservation(PlanetObservation):
         minimizer_kwargs: Optional[Dict] = None,
         warm_start: bool = False,
         dashboard: bool = False,
+        dashboard_kwargs: Optional[Dict] = None,
         target_planet: str = 'earth',
         verbose: bool = False,
     ) -> "LimbObservation":
@@ -603,6 +604,12 @@ class LimbObservation(PlanetObservation):
                 stages automatically. This parameter is for warm-starting across
                 separate fit_limb() calls.
             dashboard: Show live progress dashboard during optimization
+            dashboard_kwargs: Additional kwargs for FitDashboard
+                - output_capture: OutputCapture instance for print/log display
+                - show_output: Show output section (default True if capture provided)
+                - max_output_lines: Number of output lines to show (default 3)
+                - min_refresh_delay: Fixed refresh delay (0.0 for adaptive, default)
+                - refresh_frequency: Refresh every N iterations (default 1)
             target_planet: Reference planet for dashboard comparisons
                 ('earth', 'mars', 'jupiter', 'saturn', 'moon', 'pluto')
             verbose: Print detailed progress
@@ -637,6 +644,16 @@ class LimbObservation(PlanetObservation):
                 loss_function='gradient_field',
                 minimizer_kwargs={'popsize': 25, 'atol': 0.5}
             )
+            
+            # Dashboard with output capture
+            from planet_ruler.dashboard import OutputCapture
+            capture = OutputCapture()
+            with capture:
+                obs.fit_limb(
+                    loss_function='gradient_field',
+                    dashboard=True,
+                    dashboard_kwargs={'output_capture': capture}
+                )
 
             # Iterative refinement with warm start
             obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
@@ -720,6 +737,7 @@ class LimbObservation(PlanetObservation):
                     minimizer_preset=minimizer_preset,
                     minimizer_kwargs=minimizer_kwargs,
                     dashboard=dashboard,
+                    dashboard_kwargs=dashboard_kwargs,
                     target_planet=target_planet,
                     verbose=verbose,
                 )
@@ -737,6 +755,7 @@ class LimbObservation(PlanetObservation):
                     minimizer_preset=minimizer_preset,
                     minimizer_kwargs=minimizer_kwargs,
                     dashboard=dashboard,
+                    dashboard_kwargs=dashboard_kwargs,
                     target_planet=target_planet,
                     verbose=verbose,
                 )
@@ -765,6 +784,7 @@ class LimbObservation(PlanetObservation):
         minimizer_preset: str,
         minimizer_kwargs: Optional[Dict],
         dashboard: bool,
+        dashboard_kwargs: Optional[Dict],
         target_planet: str,
         verbose: bool,
     ) -> "LimbObservation":
@@ -846,15 +866,49 @@ class LimbObservation(PlanetObservation):
             decay_rate=decay_rate,
         )
 
+        # Initialize dashboard for multi-stage if requested
+        dash = None
+        if dashboard:
+            # Create dashboard with multi-stage awareness
+            total_iters = sum(max_iter_per_stage)
+            # Determine initial resolution label
+            first_downsample = resolution_stages[0]
+            if first_downsample == 1:
+                initial_resolution_label = "full"
+            else:
+                initial_resolution_label = f"1/{first_downsample}x"
+            
+            dash = FitDashboard(
+                initial_params=original_params,
+                target_planet=target_planet,
+                max_iter=max_iter_per_stage[0],  # First stage iterations
+                free_params=self.free_parameters,
+                total_stages=len(resolution_stages),
+                cumulative_max_iter=total_iters,
+                **(dashboard_kwargs or {})
+            )
+            # Set initial resolution label
+            dash.resolution_label = initial_resolution_label
+
         # Loop through resolution stages
         for stage_idx, (downsample, stage_iter) in enumerate(
             zip(resolution_stages, max_iter_per_stage)
         ):
+            # Create resolution label for dashboard
+            if downsample == 1:
+                resolution_label = "full"
+            else:
+                resolution_label = f"1/{downsample}x"
+            
+            # Start new stage in dashboard (except first stage which starts automatically)
+            if dash is not None and stage_idx > 0:
+                dash.start_stage(stage_idx + 1, resolution_label, stage_iter)
+            
             if verbose:
                 print(f"\n{'─'*60}")
                 print(
                     f"Stage {stage_idx + 1}/{len(resolution_stages)}: "
-                    f"1/{downsample}x ({stage_iter} iter)"
+                    f"{resolution_label} ({stage_iter} iter)"
                 )
                 print(f"{'─'*60}")
 
@@ -923,9 +977,11 @@ class LimbObservation(PlanetObservation):
                 decay_rate=decay_rate,
                 minimizer_preset=minimizer_preset,
                 minimizer_kwargs=minimizer_kwargs,
-                dashboard=dashboard if stage_idx == len(resolution_stages) - 1 else False,
+                dashboard=dashboard,  # Boolean flag
+                dashboard_kwargs=dashboard_kwargs,
                 target_planet=target_planet,
                 verbose=verbose,
+                dashboard_obj=dash,  # Pass dashboard object for multi-stage
             )
 
             if verbose and hasattr(self, "best_parameters"):
@@ -988,6 +1044,11 @@ class LimbObservation(PlanetObservation):
             print(f"\n{'='*60}")
             print("Optimization Complete!")
             print(f"{'='*60}\n")
+        
+        # Finalize dashboard after all stages complete
+        if dash is not None:
+            success = self.fit_results.success if hasattr(self.fit_results, 'success') else True
+            dash.finalize(success=success)
 
         return self
 
@@ -1003,8 +1064,10 @@ class LimbObservation(PlanetObservation):
         minimizer_preset: str,
         minimizer_kwargs: Optional[Dict],
         dashboard: bool,
+        dashboard_kwargs: Optional[Dict],
         target_planet: str,
         verbose: bool,
+        dashboard_obj: Optional['FitDashboard'] = None,
     ) -> "LimbObservation":
         """
         Internal method: single-resolution optimization.
@@ -1051,17 +1114,27 @@ class LimbObservation(PlanetObservation):
         )
 
         # Initialize dashboard if requested
-        dash = None
-        if dashboard:
+        dash = dashboard_obj  # Use passed dashboard if provided (multi-stage)
+        if dash is None and dashboard:
+            # Create new dashboard for single-stage optimization
             dash = FitDashboard(
                 initial_params=working_parameters,
                 target_planet=target_planet,
                 max_iter=max_iter,
-                free_params=self.free_parameters
+                free_params=self.free_parameters,
+                **(dashboard_kwargs or {})
             )
         
         # Create callback for dashboard updates
-        def dashboard_callback(xk, convergence=None):
+        def dashboard_callback(xk, *args, **kwargs):
+            """
+            Universal callback for all minimizers.
+            
+            Signatures vary by minimizer:
+            - differential_evolution: callback(xk, convergence=None)
+            - dual_annealing: callback(x, f, context)
+            - basinhopping: callback(x, f, accept)
+            """
             if dash is not None:
                 # Unpack parameters
                 current_params = unpack_parameters(xk, self.free_parameters)
@@ -1069,7 +1142,11 @@ class LimbObservation(PlanetObservation):
                 full_params.update(current_params)
                 
                 # Calculate current loss
-                loss = self.cost_function.cost(xk)
+                # For dual_annealing and basinhopping, loss is passed as second arg
+                if len(args) > 0 and isinstance(args[0], (int, float)):
+                    loss = args[0]
+                else:
+                    loss = self.cost_function.cost(xk)
                 
                 # Update dashboard
                 dash.update(full_params, loss)
@@ -1161,8 +1238,9 @@ class LimbObservation(PlanetObservation):
         self.features["fitted_limb"] = self.cost_function.evaluate(self.best_parameters)
         self._plot_functions["fitted_limb"] = plot_limb
 
-        # Finalize dashboard if used
-        if dash is not None:
+        # Finalize dashboard only if we created it (single-stage)
+        # Multi-stage will finalize after all stages complete
+        if dash is not None and dashboard_obj is None:
             success = self.fit_results.success if hasattr(self.fit_results, 'success') else True
             dash.finalize(success=success)
 

@@ -33,7 +33,11 @@ Example
 
 import time
 import sys
-from typing import Dict, List, Optional
+
+from typing import Dict, List, Optional, TextIO
+from collections import deque
+from contextlib import contextmanager
+import threading
 
 
 # Planet radii for reference (meters)
@@ -45,6 +49,128 @@ PLANET_RADII = {
     'moon': 1737400,
     'pluto': 1188300,
 }
+
+
+class OutputCapture:
+    """
+    Capture stdout/stderr for display in dashboard.
+    
+    Thread-safe ring buffer that stores recent output lines.
+    Designed to integrate with FitDashboard for live output display.
+    
+    Parameters
+    ----------
+    max_lines : int, default 5
+        Maximum number of recent lines to keep
+    line_width : int, default 55
+        Maximum width before wrapping (dashboard constraint)
+    capture_stderr : bool, default True
+        Also capture stderr (warnings, errors)
+    
+    Examples
+    --------
+    >>> capture = OutputCapture(max_lines=5)
+    >>> with capture:
+    ...     print("Iteration 100: loss = 123.45")
+    ...     print("Warning: parameter drift detected")
+    >>> lines = capture.get_lines()
+    """
+    
+    def __init__(
+        self,
+        max_lines: int = 5,
+        line_width: int = 55,
+        capture_stderr: bool = True
+    ):
+        self.max_lines = max_lines
+        self.line_width = line_width
+        self.capture_stderr = capture_stderr
+        
+        # Ring buffer for recent output
+        self.lines: deque = deque(maxlen=max_lines)
+        self._lock = threading.Lock()
+        
+        # Original streams (for restoration)
+        self._original_stdout = None
+        self._original_stderr = None
+        
+        # Active capture state
+        self._capturing = False
+    
+    def write(self, text: str) -> None:
+        """Write text to buffer (called by sys.stdout redirect)."""
+        if not text or text == '\n':
+            return
+        
+        # Split on newlines and wrap long lines
+        for line in text.splitlines():
+            if not line.strip():
+                continue
+            
+            # Wrap line if too long
+            wrapped = self._wrap_line(line.strip())
+            
+            with self._lock:
+                for wrapped_line in wrapped:
+                    self.lines.append(wrapped_line)
+    
+    def flush(self) -> None:
+        """Flush (no-op, required for file-like interface)."""
+        pass
+    
+    def _wrap_line(self, line: str) -> List[str]:
+        """Wrap a long line to fit dashboard width."""
+        if len(line) <= self.line_width:
+            return [line]
+        
+        # Simple word-aware wrapping
+        wrapped = []
+        current = ""
+        
+        for word in line.split():
+            if len(current) + len(word) + 1 <= self.line_width:
+                current += (" " if current else "") + word
+            else:
+                if current:
+                    wrapped.append(current)
+                current = word
+        
+        if current:
+            wrapped.append(current)
+        
+        return wrapped or [line[:self.line_width]]
+    
+    def get_lines(self) -> List[str]:
+        """Get recent output lines (thread-safe)."""
+        with self._lock:
+            return list(self.lines)
+    
+    def clear(self) -> None:
+        """Clear captured output."""
+        with self._lock:
+            self.lines.clear()
+    
+    def __enter__(self):
+        """Start capturing (context manager)."""
+        self._original_stdout = sys.stdout
+        if self.capture_stderr:
+            self._original_stderr = sys.stderr
+        
+        sys.stdout = self
+        if self.capture_stderr:
+            sys.stderr = self
+        
+        self._capturing = True
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Stop capturing and restore streams."""
+        sys.stdout = self._original_stdout
+        if self.capture_stderr and self._original_stderr:
+            sys.stderr = self._original_stderr
+        
+        self._capturing = False
+        return False
 
 
 def is_jupyter() -> bool:
@@ -78,6 +204,28 @@ class FitDashboard:
         Maximum iterations (if known)
     free_params : list of str, optional
         Which parameters are being optimized
+    total_stages : int, default 1
+        Number of optimization stages (for multi-resolution)
+    cumulative_max_iter : int, optional
+        Total iterations across all stages
+    min_refresh_delay : float, default 0.0
+        Minimum time (seconds) between refreshes (0.0 enables adaptive)
+    refresh_frequency : int, default 1
+        Refresh every N iterations
+    output_capture : OutputCapture, optional
+        Output capture instance for displaying print/log statements
+    show_output : bool, default True
+        Show output section in dashboard (requires output_capture)
+    max_output_lines : int, default 3
+        Maximum number of output lines to display
+    max_warnings : int, default 3
+        Number of warning message slots
+    max_hints : int, default 3
+        Number of hint message slots
+    min_message_display_time : float, default 3.0
+        Minimum time (seconds) to display warnings/hints before removal
+    width : int, default 63
+        Dashboard width in characters (includes borders)
     
     Attributes
     ----------
@@ -94,7 +242,18 @@ class FitDashboard:
         initial_params: Dict[str, float],
         target_planet: str = 'earth',
         max_iter: Optional[int] = None,
-        free_params: Optional[List[str]] = None
+        free_params: Optional[List[str]] = None,
+        total_stages: int = 1,
+        cumulative_max_iter: Optional[int] = None,
+        min_refresh_delay: float = 0.00,
+        refresh_frequency: int = 1,
+        output_capture: Optional[OutputCapture] = None,
+        show_output: bool = True,
+        max_output_lines: int = 3,
+        max_warnings: int = 3,
+        max_hints: int = 3,
+        min_message_display_time: float = 3.0,
+        width: int = 63,
     ):
         self.initial_params = initial_params.copy()
         self.target_planet = target_planet.lower()
@@ -102,21 +261,108 @@ class FitDashboard:
         self.max_iter = max_iter or 1000
         self.free_params = free_params or ['r', 'h', 'f', 'w']
         
+        # Dashboard dimensions
+        self.width = width
+        self.content_width = width - 4  # "│ " + content + " │"
+        self.bullet_content_width = width - 9  # "│   • " + content + " │"
+        self.output_content_width = width - 6  # "│   " + content + " │"
+        
+        # Multi-stage tracking
+        self.total_stages = total_stages
+        self.current_stage = 1
+        self.resolution_label = "full" if total_stages == 1 else "1/4x"
+        self.stage_start_iteration = 0
+        self.cumulative_max_iter = cumulative_max_iter or max_iter
+        
         # Tracking
         self.start_time = time.time()
         self.iteration = 0
+        self.cumulative_iteration = 0
         self.loss_history: List[float] = []
         self.param_history: List[Dict[str, float]] = []
         self.last_render_time = 0
+        self.min_refresh_delay = min_refresh_delay
+        self.refresh_frequency = refresh_frequency
+        
+        # Adaptive refresh system
+        self._enable_adaptive_refresh = (min_refresh_delay == 0.0)  # Only if not manually set
+        self._adaptive_delay = 0.05  # Start at 50ms (20 Hz)
+        self._loss_velocity_window = 10  # Window for loss velocity calculation
+        self._last_loss_velocity = 0.0
+        
+        # For proper loss reduction calculation across stages
+        self.stage_start_loss = None
+        self.initial_loss = None
         
         # State
         self.converged = False
         self.in_jupyter = is_jupyter()
-        self.dashboard_height = 25  # Fixed height: always exactly 25 lines
+        
+        # Output capture integration
+        self.output_capture = output_capture
+        self.show_output = show_output and output_capture is not None
+        self.max_output_lines = max_output_lines
+        
+        # Message display config
+        self.max_warnings = max_warnings
+        self.max_hints = max_hints
+        self.min_message_display_time = min_message_display_time
+        
+        # Message tracking (message -> first_seen_time)
+        self._warnings_tracking: Dict[str, float] = {}
+        self._hints_tracking: Dict[str, float] = {}
+        
+        # Dynamic dashboard height based on features
+        # Core dashboard: title(3) + progress(1-2) + params(7) + quality(5) + time(1) = 16-17
+        base_height = 16 if total_stages == 1 else 17
+        
+        # Add warning section (blank + header + slots)
+        base_height += 2 + max_warnings
+        
+        # Add hint section (blank + header + slots)
+        base_height += 2 + max_hints
+        
+        # Add output section if enabled (blank + header + slots)
+        if self.show_output:
+            base_height += 2 + max_output_lines
+        
+        # Closing border
+        base_height += 1
+        
+        self.dashboard_height = base_height
         self._display_handle = None  # For Jupyter display updates
         
         # Initial render
         self._first_render = True
+    
+    def _border_top(self) -> str:
+        """Generate top border."""
+        return "┌" + "─" * (self.width - 2) + "┐"
+    
+    def _border_middle(self) -> str:
+        """Generate middle border."""
+        return "├" + "─" * (self.width - 2) + "┤"
+    
+    def _border_bottom(self) -> str:
+        """Generate bottom border."""
+        return "└" + "─" * (self.width - 2) + "┘"
+    
+    def _line(self, content: str) -> str:
+        """Generate content line with proper padding."""
+        return f"│ {content:<{self.content_width}} │"
+    
+    def _line_bullet(self, content: str) -> str:
+        """Generate bullet line with proper padding."""
+        return f"│    - {content:<{self.bullet_content_width}} │"
+        # return f"│   • {content:<{self.bullet_content_width}} │"
+    
+    def _line_indent(self, content: str) -> str:
+        """Generate indented line (for parameters/output)."""
+        return f"│   {content:<{self.output_content_width}} │"
+    
+    def _blank_line(self) -> str:
+        """Generate blank line."""
+        return "│" + " " * (self.width - 2) + "│"
     
     def update(self, current_params: Dict[str, float], loss: float) -> None:
         """
@@ -132,12 +378,31 @@ class FitDashboard:
             Current loss function value
         """
         self.iteration += 1
+        self.cumulative_iteration += 1
         self.loss_history.append(loss)
         self.param_history.append(current_params.copy())
         
-        # Throttle rendering to avoid flicker (max 10 Hz)
+        # Capture initial loss for percentage calculation
+        if self.initial_loss is None:
+            self.initial_loss = loss
+        if self.stage_start_loss is None:
+            self.stage_start_loss = loss
+        
+        # Update adaptive refresh rate if enabled
+        if self._enable_adaptive_refresh:
+            self._update_adaptive_delay()
+        
+        # Throttle rendering with adaptive or fixed delay
         current_time = time.time()
-        if current_time - self.last_render_time > 0.1 or self._first_render:
+        effective_delay = self._adaptive_delay if self._enable_adaptive_refresh else self.min_refresh_delay
+        
+        should_render = (
+            (current_time - self.last_render_time > effective_delay and 
+             not self.iteration % self.refresh_frequency) or 
+            self._first_render
+        )
+        
+        if should_render:
             self._render()
             self.last_render_time = current_time
     
@@ -169,6 +434,75 @@ class FitDashboard:
                 print("✓ Optimization completed successfully!")
             else:
                 print("⚠ Optimization stopped (may not have converged)")
+    
+    def start_stage(self, stage_num: int, resolution_label: str, max_iter: int) -> None:
+        """
+        Start a new optimization stage (for multi-resolution).
+        
+        Parameters
+        ----------
+        stage_num : int
+            Stage number (1-indexed)
+        resolution_label : str
+            Resolution label (e.g., "1/4x", "1/2x", "full")
+        max_iter : int
+            Maximum iterations for this stage
+        """
+        self.current_stage = stage_num
+        self.resolution_label = resolution_label
+        self.max_iter = max_iter
+        self.iteration = 0
+        self.stage_start_iteration = self.cumulative_iteration
+        self.stage_start_loss = None  # Will be set on first update of new stage
+    
+    def _update_adaptive_delay(self) -> None:
+        """
+        Dynamically adjust refresh rate based on optimization state.
+        
+        Strategy:
+        - Fast updates (20 Hz) when loss changing rapidly
+        - Slow updates (2-5 Hz) when converging/stable
+        - Balance responsiveness vs CPU efficiency
+        """
+        if len(self.loss_history) < self._loss_velocity_window:
+            # Early iterations: keep it snappy
+            self._adaptive_delay = 0.05  # 20 Hz
+            return
+        
+        # Calculate loss velocity (relative change per iteration)
+        recent_losses = self.loss_history[-self._loss_velocity_window:]
+        if recent_losses[0] == 0:
+            loss_velocity = 0.0
+        else:
+            loss_velocity = abs((recent_losses[-1] - recent_losses[0]) / recent_losses[0])
+        
+        self._last_loss_velocity = loss_velocity
+        
+        # Determine refresh rate based on activity level
+        # High activity (>1% change) → 20 Hz (50ms)
+        # Medium activity (0.1-1%) → 10 Hz (100ms)
+        # Low activity (0.01-0.1%) → 5 Hz (200ms)
+        # Very low (<0.01%) → 2 Hz (500ms)
+        
+        if loss_velocity > 0.01:
+            # Rapid changes: update frequently
+            self._adaptive_delay = 0.05  # 20 Hz
+        elif loss_velocity > 0.001:
+            # Moderate changes
+            self._adaptive_delay = 0.10  # 10 Hz
+        elif loss_velocity > 0.0001:
+            # Slow changes
+            self._adaptive_delay = 0.20  # 5 Hz
+        else:
+            # Nearly converged
+            self._adaptive_delay = 0.50  # 2 Hz
+        
+        # Additional adjustment: slow down for very long runs
+        elapsed = time.time() - self.start_time
+        if elapsed > 60:  # After 1 minute
+            self._adaptive_delay = max(self._adaptive_delay, 0.20)  # Max 5 Hz
+        if elapsed > 300:  # After 5 minutes
+            self._adaptive_delay = max(self._adaptive_delay, 0.50)  # Max 2 Hz
     
     def _render(self) -> None:
         """Draw/update the dashboard."""
@@ -220,14 +554,9 @@ class FitDashboard:
         focal_mm = current_params.get('f', 0) * 1000
         sensor_mm = current_params.get('w', 0) * 1000
         
-        # Progress
-        progress_pct = (self.iteration / self.max_iter) * 100
-        progress_bar = self._make_progress_bar(progress_pct)
-        
-        # Loss change
-        if len(self.loss_history) > 1:
-            initial_loss = self.loss_history[0]
-            loss_reduction = ((initial_loss - current_loss) / initial_loss) * 100
+        # Loss change (from stage start)
+        if len(self.loss_history) > 1 and self.stage_start_loss is not None:
+            loss_reduction = ((self.stage_start_loss - current_loss) / self.stage_start_loss) * 100
         else:
             loss_reduction = 0
         
@@ -236,103 +565,151 @@ class FitDashboard:
         
         # Time estimates
         elapsed = time.time() - self.start_time
-        if self.iteration > 0:
-            time_per_iter = elapsed / self.iteration
-            remaining_iters = max(0, self.max_iter - self.iteration)
+        if self.cumulative_iteration > 0:
+            time_per_iter = elapsed / self.cumulative_iteration
+            remaining_iters = max(0, self.cumulative_max_iter - self.cumulative_iteration)
             estimated_remaining = time_per_iter * remaining_iters
         else:
             estimated_remaining = 0
         
         # Warnings and hints
+        current_time = time.time()
         warnings_list = self._check_warnings(current_params)
         hints_list = self._generate_hints()
         
-        # Build dashboard - all content must be exactly 61 chars wide
-        lines = [
-            "┌─────────────────────────────────────────────────────────────┐",
-            "│ FITTING PLANETARY RADIUS                                    │",
-            "├─────────────────────────────────────────────────────────────┤",
-        ]
+        # Filter messages based on time visible
+        warnings_list = self._filter_messages_by_time(
+            warnings_list, self._warnings_tracking, current_time
+        )
+        hints_list = self._filter_messages_by_time(
+            hints_list, self._hints_tracking, current_time
+        )
         
-        # Progress line
-        prog_text = f"Progress: {progress_bar} {self.iteration}/{self.max_iter} iterations"
-        lines.append(f"│ {prog_text:<59} │")
+        # Build dashboard
+        lines = []
         
-        lines.append("│                                                             │")
-        lines.append("│ Current Best Estimate:                                      │")
+        # Title varies based on single vs multi-stage
+        if self.total_stages > 1:
+            title = f"STAGE {self.current_stage}/{self.total_stages}: {self.resolution_label.upper()} RESOLUTION"
+            lines.extend([
+                self._border_top(),
+                self._line(title),
+                self._border_middle(),
+            ])
+        else:
+            lines.extend([
+                self._border_top(),
+                self._line("FITTING PLANETARY RADIUS"),
+                self._border_middle(),
+            ])
         
-        # Radius line
-        radius_text = f"Radius:       {radius_km:>7,.0f} km  (target: ~{self.target_radius/1000:,.0f} km)"
-        lines.append(f"│   {radius_text:<57} │")
+        # Progress bars
+        if self.total_stages > 1:
+            # Stage progress
+            stage_pct = (self.iteration / self.max_iter) * 100
+            stage_bar = self._make_progress_bar(stage_pct, width=18)
+            stage_text = f"Stage:   {stage_bar} {self.iteration}/{self.max_iter} iter"
+            lines.append(self._line(stage_text))
+            
+            # Overall progress
+            overall_pct = (self.cumulative_iteration / self.cumulative_max_iter) * 100
+            overall_bar = self._make_progress_bar(overall_pct, width=18)
+            overall_text = f"Overall: {overall_bar} {self.cumulative_iteration}/{self.cumulative_max_iter} iter"
+            lines.append(self._line(overall_text))
+        else:
+            # Single stage - just one progress bar
+            progress_pct = (self.iteration / self.max_iter) * 100
+            progress_bar = self._make_progress_bar(progress_pct)
+            prog_text = f"Progress: {progress_bar} {self.iteration}/{self.max_iter} iterations"
+            lines.append(self._line(prog_text))
         
-        # Altitude line
+        lines.append(self._blank_line())
+        lines.append(self._line("Current Best Estimate:"))
+        
+        # Parameters - use _line_indent for indented content
+        radius_text = f"Radius:       {radius_km:>7,.0f} km"
+        lines.append(self._line_indent(radius_text))
+        
         altitude_text = f"Altitude:     {altitude_km:>7.2f} km"
-        lines.append(f"│   {altitude_text:<57} │")
+        lines.append(self._line_indent(altitude_text))
         
-        # Always show all parameters (for fixed height)
         focal_text = f"Focal length: {focal_mm:>7.1f} mm"
-        lines.append(f"│   {focal_text:<57} │")
+        lines.append(self._line_indent(focal_text))
         
-        sensor_text = f"Sensor width: {sensor_mm:>7.2f} mm"
-        lines.append(f"│   {sensor_text:<57} │")
+        sensor_text = f"Sensor width: {sensor_mm:>7.2e} mm"
+        lines.append(self._line_indent(sensor_text))
         
-        lines.append("│                                                             │")
-        lines.append("│ Fit Quality:                                                │")
+        lines.append(self._blank_line())
+        lines.append(self._line("Fit Quality:"))
         
-        # Loss line
         loss_text = f"Loss:         {current_loss:>7,.0f} (↓{loss_reduction:>4.0f}% from start)"
-        lines.append(f"│   {loss_text:<57} │")
+        lines.append(self._line_indent(loss_text))
         
-        # Convergence line
         conv_text = f"Convergence:  {convergence_status}"
-        lines.append(f"│   {conv_text:<57} │")
+        lines.append(self._line_indent(conv_text))
         
-        lines.append("│                                                             │")
+        lines.append(self._blank_line())
         
-        # Time line
-        time_text = f"Time: {self._format_time(elapsed)} | ~{self._format_time(estimated_remaining)} remaining"
-        lines.append(f"│ {time_text:<59} │")
+        # Time line with optional refresh rate info
+        if self._enable_adaptive_refresh and len(self.loss_history) >= self._loss_velocity_window:
+            refresh_hz = 1.0 / self._adaptive_delay if self._adaptive_delay > 0 else 0
+            time_text = f"Time: {self._format_time(elapsed)} | ~{self._format_time(estimated_remaining)} left | {refresh_hz:.0f}Hz"
+        else:
+            time_text = f"Time: {self._format_time(elapsed)} | ~{self._format_time(estimated_remaining)} remaining"
+        lines.append(self._line(time_text))
         
-        # Always reserve exactly 2 slots for warnings (fixed height)
-        lines.append("│                                                             │")
-        lines.append("│ ⚠ Warnings:                                                 │")
+        # Warnings section
+        lines.append(self._blank_line())
+        # lines.append(self._line("⚠ Warnings:"))
+        lines.append(self._line("Warnings:"))
         
-        # Always add exactly 2 warning lines
-        for i in range(2):
+        for i in range(self.max_warnings):
             if i < len(warnings_list):
                 warning = warnings_list[i]
-                # Truncate to fit (56 chars for content after bullet)
-                if len(warning) > 56:
-                    warning = warning[:53] + "..."
-                lines.append(f"│   • {warning:<56}│")
+                if len(warning) > self.bullet_content_width:
+                    warning = warning[:self.bullet_content_width-3] + "..."
+                lines.append(self._line_bullet(warning))
             else:
-                # Empty slot
-                lines.append("│                                                             │")
+                lines.append(self._blank_line())
         
-        # Always reserve exactly 2 slots for hints (fixed height)
-        lines.append("│                                                             │")
-        lines.append("│ ℹ Hints:                                                    │")
+        # Hints section
+        lines.append(self._blank_line())
+        # lines.append(self._line("ℹ Hints:"))
+        lines.append(self._line("Hints:"))
         
-        # Always add exactly 2 hint lines
-        for i in range(2):
+        for i in range(self.max_hints):
             if i < len(hints_list):
                 hint = hints_list[i]
-                # Truncate to fit (56 chars for content after bullet)
-                if len(hint) > 56:
-                    hint = hint[:53] + "..."
-                lines.append(f"│   • {hint:<56}│")
+                if len(hint) > self.bullet_content_width:
+                    hint = hint[:self.bullet_content_width-3] + "..."
+                lines.append(self._line_bullet(hint))
             else:
-                # Empty slot
-                lines.append("│                                                             │")
+                lines.append(self._blank_line())
         
-        lines.append("└─────────────────────────────────────────────────────────────┘")
+        # Output section (if enabled)
+        if self.show_output:
+            lines.append(self._blank_line())
+            lines.append(self._line("Recent Output:"))
+            
+            output_lines = self.output_capture.get_lines() if self.output_capture else []
+            
+            for i in range(self.max_output_lines):
+                if i < len(output_lines):
+                    output_text = output_lines[-(self.max_output_lines - i)]
+                    if len(output_text) > self.output_content_width:
+                        output_text = output_text[:self.output_content_width-3] + "..."
+                    lines.append(self._line_indent(output_text))
+                else:
+                    lines.append(self._blank_line())
         
-        # Verify all lines are exactly 63 chars (for perfect alignment)
+        lines.append(self._border_bottom())
+        
+        # Verify all lines are exactly self.width chars (for perfect alignment)
         for i, line in enumerate(lines):
-            if len(line) != 63:
+            if len(line) != self.width:
                 # Debug info if alignment is off
                 import sys
-                print(f"\nDEBUG: Line {i} has {len(line)} chars (expected 63)", file=sys.stderr)
+                print(f"\nDEBUG: Line {i} has {len(line)} chars (expected {self.width})", file=sys.stderr)
                 print(f"Line: '{line}'", file=sys.stderr)
         
         # Verify we have exactly the right number of lines
@@ -342,6 +719,7 @@ class FitDashboard:
     
     def _make_progress_bar(self, percent: float, width: int = 20) -> str:
         """Create ASCII progress bar."""
+        percent = min(100, max(0, percent))  # Clamp to 0-100
         filled = int(width * percent / 100)
         bar = '█' * filled + '░' * (width - filled)
         return f"{bar} {percent:>3.0f}%"
@@ -358,6 +736,49 @@ class FitDashboard:
             hours = int(seconds // 3600)
             mins = int((seconds % 3600) // 60)
             return f"{hours}h {mins:02d}m"
+    
+    def _filter_messages_by_time(
+        self, 
+        messages: List[str], 
+        tracking: Dict[str, float], 
+        current_time: float
+    ) -> List[str]:
+        """
+        Filter messages based on time visible.
+        
+        Keeps messages that have been visible for at least min_message_display_time,
+        then uses FIFO to limit to available slots.
+        """
+        # Update tracking: add new messages, track their first appearance
+        for msg in messages:
+            if msg not in tracking:
+                tracking[msg] = current_time
+        
+        # Remove messages no longer in current list
+        tracking_keys = list(tracking.keys())
+        for msg in tracking_keys:
+            if msg not in messages:
+                del tracking[msg]
+        
+        # Filter: keep messages visible for min time + fill remaining with newest
+        time_threshold = current_time - self.min_message_display_time
+        
+        # Messages that have been visible long enough (must keep)
+        persistent = [msg for msg in messages if tracking.get(msg, current_time) <= time_threshold]
+        
+        # If persistent messages exceed max slots, use FIFO (oldest first)
+        max_slots = self.max_warnings if tracking is self._warnings_tracking else self.max_hints
+        if len(persistent) >= max_slots:
+            # Sort by first appearance time (oldest first), take the max_slots oldest
+            persistent.sort(key=lambda msg: tracking[msg])
+            return persistent[:max_slots]
+        
+        # Fill remaining slots with newest messages
+        remaining_slots = max_slots - len(persistent)
+        new_messages = [msg for msg in messages if msg not in persistent]
+        
+        # Combine persistent + newest
+        return persistent + new_messages[:remaining_slots]
     
     def _assess_convergence(self) -> str:
         """Assess convergence status."""
@@ -392,13 +813,9 @@ class FitDashboard:
         
         # Check altitude units (common error)
         altitude_m = params.get('h', 0)
-        if altitude_m > 50000:  # > 50 km
+        if altitude_m < 1000:  # < 1 km
             warnings_list.append(
-                "Altitude very high (>50km). Check units (meters vs feet)?"
-            )
-        elif altitude_m < 1000:  # < 1 km
-            warnings_list.append(
-                "Altitude very low (<1km). Ground photos won't show curvature"
+                "Altitude very low (<1km). Ground photos may not show curvature"
             )
         
         # Check radius is reasonable
@@ -410,11 +827,6 @@ class FitDashboard:
         elif radius_km > 100000:
             warnings_list.append(
                 f"Radius very large ({radius_km:.0f} km). Check altitude/camera"
-            )
-        elif radius_km < 3000 or radius_km > 70000:
-            # Outside typical planet range
-            warnings_list.append(
-                f"Radius ({radius_km:.0f} km) outside typical planet range"
             )
         
         # Check for parameter drift (if enough history)
@@ -468,6 +880,13 @@ class FitDashboard:
                 hints.append(
                     f"Approaching {self.target_planet.title()}'s size ({target_km:,.0f} km)"
                 )
+        
+        # Adaptive refresh hint
+        if self._enable_adaptive_refresh and self._adaptive_delay > 0.2:
+            # Only show when refresh has slowed to 5 Hz or less
+            hints.append(
+                f"Updates slowed to save CPU (loss changing slowly)"
+            )
         
         # Iteration hints
         if self.iteration > self.max_iter * 0.8:
