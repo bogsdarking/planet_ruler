@@ -196,9 +196,7 @@ class TestLimbObservation:
         """Test load_fit_config with invalid initial values"""
         # Create config with initial value outside bounds
         invalid_config = sample_fit_config.copy()
-        invalid_config["init_parameter_values"][
-            "r"
-        ] = 5000000.0  # Below lower bound
+        invalid_config["init_parameter_values"]["r"] = 5000000.0  # Below lower bound
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
             yaml.dump(invalid_config, f)
@@ -884,7 +882,9 @@ class TestObservationPropertyMethods:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+            obs = LimbObservation(
+                image_filepath=tmp_file.name, fit_config=sample_fit_config
+            )
 
             # Test properties return 0 when no fit performed
             assert obs.radius_km == 0.0
@@ -902,13 +902,15 @@ class TestObservationPropertyMethods:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
-            
+            obs = LimbObservation(
+                image_filepath=tmp_file.name, fit_config=sample_fit_config
+            )
+
             # Mock fit results
             obs.best_parameters = {
                 "r": 6371000.0,  # meters
-                "h": 50000.0,    # meters
-                "f": 0.024,      # meters
+                "h": 50000.0,  # meters
+                "f": 0.024,  # meters
             }
 
             # Test conversions
@@ -918,7 +920,9 @@ class TestObservationPropertyMethods:
 
             os.unlink(tmp_file.name)
 
-    def test_parameter_uncertainty_without_fit(self, sample_horizon_image, sample_fit_config):
+    def test_parameter_uncertainty_without_fit(
+        self, sample_horizon_image, sample_fit_config
+    ):
         """Test parameter_uncertainty when no fit results exist"""
         image_data = sample_horizon_image()
 
@@ -926,10 +930,12 @@ class TestObservationPropertyMethods:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+            obs = LimbObservation(
+                image_filepath=tmp_file.name, fit_config=sample_fit_config
+            )
 
             result = obs.parameter_uncertainty("r")
-            
+
             assert result["uncertainty"] == 0.0
             assert result["method"] == "none"
             assert result["additional_info"] == "No fit performed"
@@ -947,14 +953,16 @@ class TestObservationPropertyMethods:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+            obs = LimbObservation(
+                image_filepath=tmp_file.name, fit_config=sample_fit_config
+            )
             obs.fit_results = Mock()  # Mock fit results exist
 
             # Mock exception
             mock_calc_uncertainty.side_effect = ValueError("Test error")
 
             result = obs.parameter_uncertainty("r")
-            
+
             assert result["uncertainty"] == 0.0
             assert result["method"] == "error"
             assert "Test error" in result["additional_info"]
@@ -962,7 +970,9 @@ class TestObservationPropertyMethods:
             os.unlink(tmp_file.name)
 
     @patch("planet_ruler.plot.plot_3d_solution")
-    def test_plot_3d_without_fit(self, mock_plot_3d, sample_horizon_image, sample_fit_config):
+    def test_plot_3d_without_fit(
+        self, mock_plot_3d, sample_horizon_image, sample_fit_config
+    ):
         """Test plot_3d raises error when no fit performed"""
         image_data = sample_horizon_image()
 
@@ -970,7 +980,9 @@ class TestObservationPropertyMethods:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+            obs = LimbObservation(
+                image_filepath=tmp_file.name, fit_config=sample_fit_config
+            )
 
             with pytest.raises(ValueError, match="Must fit limb before plotting"):
                 obs.plot_3d()
@@ -978,7 +990,9 @@ class TestObservationPropertyMethods:
             os.unlink(tmp_file.name)
 
     @patch("planet_ruler.plot.plot_3d_solution")
-    def test_plot_3d_with_fit(self, mock_plot_3d, sample_horizon_image, sample_fit_config):
+    def test_plot_3d_with_fit(
+        self, mock_plot_3d, sample_horizon_image, sample_fit_config
+    ):
         """Test plot_3d works when fit results exist"""
         image_data = sample_horizon_image()
 
@@ -986,7 +1000,9 @@ class TestObservationPropertyMethods:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+            obs = LimbObservation(
+                image_filepath=tmp_file.name, fit_config=sample_fit_config
+            )
             obs.best_parameters = {
                 "r": 6371000.0,
                 "h": 50000.0,
@@ -995,7 +1011,9 @@ class TestObservationPropertyMethods:
 
             obs.plot_3d(some_param="test")
 
-            mock_plot_3d.assert_called_once_with(r=6371000.0, h=50000.0, f=0.024, some_param="test")
+            mock_plot_3d.assert_called_once_with(
+                r=6371000.0, h=50000.0, f=0.024, some_param="test"
+            )
 
             os.unlink(tmp_file.name)
 
@@ -1007,15 +1025,17 @@ class TestObservationPropertyMethods:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+            obs = LimbObservation(
+                image_filepath=tmp_file.name, fit_config=sample_fit_config
+            )
 
-            with patch.object(obs, 'detect_limb') as mock_detect:
-                with patch.object(obs, 'fit_limb') as mock_fit:
+            with patch.object(obs, "detect_limb") as mock_detect:
+                with patch.object(obs, "fit_limb") as mock_fit:
                     result = obs.analyze()
-                    
+
                     # Should return self for chaining
                     assert result is obs
-                    
+
                     # Should call both methods
                     mock_detect.assert_called_once_with()
                     mock_fit.assert_called_once_with()
@@ -1030,18 +1050,19 @@ class TestObservationPropertyMethods:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+            obs = LimbObservation(
+                image_filepath=tmp_file.name, fit_config=sample_fit_config
+            )
 
-            with patch.object(obs, 'detect_limb') as mock_detect:
-                with patch.object(obs, 'fit_limb') as mock_fit:
+            with patch.object(obs, "detect_limb") as mock_detect:
+                with patch.object(obs, "fit_limb") as mock_fit:
                     detect_kwargs = {"log": True, "y_min": 10}
                     fit_kwargs = {"loss_function": "l1", "max_iter": 500}
-                    
+
                     obs.analyze(
-                        detect_limb_kwargs=detect_kwargs,
-                        fit_limb_kwargs=fit_kwargs
+                        detect_limb_kwargs=detect_kwargs, fit_limb_kwargs=fit_kwargs
                     )
-                    
+
                     mock_detect.assert_called_once_with(**detect_kwargs)
                     mock_fit.assert_called_once_with(**fit_kwargs)
 

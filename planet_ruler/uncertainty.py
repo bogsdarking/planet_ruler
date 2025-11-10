@@ -56,15 +56,15 @@ def calculate_parameter_uncertainty(
     """
 
     if not hasattr(observation, "fit_results") or observation.fit_results is None:
-            logging.warning("No fit results available")
-            return {
-                "value": 0.0,
-                "uncertainty": 0.0,
-                "parameter": parameter,
-                "method": "none",
-                "confidence_level": confidence_level,
-                "additional_info": "No fit performed",
-            }
+        logging.warning("No fit results available")
+        return {
+            "value": 0.0,
+            "uncertainty": 0.0,
+            "parameter": parameter,
+            "method": "none",
+            "confidence_level": confidence_level,
+            "additional_info": "No fit performed",
+        }
 
     if parameter not in observation.free_parameters:
         logging.warning(f"Parameter '{parameter}' was not a free parameter in fit")
@@ -109,11 +109,11 @@ def calculate_parameter_uncertainty(
         )
     else:
         raise ValueError(f"Unknown uncertainty method: {method}")
-    
+
     # Add missing keys
-    result['value'] = fitted_value
-    result['parameter'] = parameter
-    
+    result["value"] = fitted_value
+    result["parameter"] = parameter
+
     return result
 
 

@@ -399,12 +399,14 @@ class CostFunction:
         # Maximize |flux| = prefer coherent gradients in either direction
         # Penalize weak/canceling flux = incoherent features
         if self.prefer_direction is not None:
-            if self.prefer_direction == 'up':
+            if self.prefer_direction == "up":
                 normalized_flux *= -1
-            elif self.prefer_direction == 'down':
+            elif self.prefer_direction == "down":
                 normalized_flux *= 1
             else:
-                raise ValueError(f"Unrecognized prefer_direction ({self.prefer_direction}) -- use 'up', 'down', or None")
+                raise ValueError(
+                    f"Unrecognized prefer_direction ({self.prefer_direction}) -- use 'up', 'down', or None"
+                )
         else:
             normalized_flux = np.abs(normalized_flux)
 

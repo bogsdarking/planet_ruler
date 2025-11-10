@@ -48,7 +48,7 @@ __all__ = [
     "LimbObservation",
     "PlanetObservation",
     "TkLimbAnnotator",
-    "OutputCapture"
+    "OutputCapture",
 ]
 
 # Version information
