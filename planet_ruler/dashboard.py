@@ -693,9 +693,12 @@ class FitDashboard:
             
             output_lines = self.output_capture.get_lines() if self.output_capture else []
             
+            # Get the last N lines (most recent output)
+            recent_output = output_lines[-self.max_output_lines:] if len(output_lines) > self.max_output_lines else output_lines
+
             for i in range(self.max_output_lines):
-                if i < len(output_lines):
-                    output_text = output_lines[-(self.max_output_lines - i)]
+                if i < len(recent_output):
+                    output_text = recent_output[i]
                     if len(output_text) > self.output_content_width:
                         output_text = output_text[:self.output_content_width-3] + "..."
                     lines.append(self._line_indent(output_text))

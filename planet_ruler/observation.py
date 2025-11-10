@@ -557,6 +557,8 @@ class LimbObservation(PlanetObservation):
         gradient_smoothing: float = 5.0,
         streak_length: int = 50,
         decay_rate: float = 0.10,
+        prefer_direction: Optional[str] = None,
+        minimizer: str = None,
         minimizer_preset: str = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         warm_start: bool = False,
@@ -592,6 +594,11 @@ class LimbObservation(PlanetObservation):
                 estimation. Makes the gradient field smoother for directional sampling.
             streak_length: For gradient_field - sampling distance along gradients
             decay_rate: For gradient_field - exponential decay for samples
+            prefer_direction: For gradient_field - prefer 'up' or 'down' gradients
+                where 'up' means dark-sky/bright-planet and v.v.
+                (None = no preference, choose best gradient regardless of direction)
+            minimizer (str): Choice of minimizer. Supports 'differential-evolution',
+                'dual-annealing', and 'basinhopping'.
             minimizer_preset: Optimization strategy
                 - 'fast': Quick convergence, may miss global minimum
                 - 'balanced': Good trade-off (default)
@@ -660,6 +667,10 @@ class LimbObservation(PlanetObservation):
             obs.fit_limb(loss_function='gradient_field', warm_start=True,
                          minimizer_preset='robust')  # Refine with more thorough search
         """
+
+        if minimizer is not None:
+            self.minimizer = minimizer
+        print(f"Using minimizer: {self.minimizer}")
 
         # ====================================================================
         # STEP 0: Warm start handling - protect original values
@@ -734,6 +745,7 @@ class LimbObservation(PlanetObservation):
                     gradient_smoothing=gradient_smoothing,
                     streak_length=streak_length,
                     decay_rate=decay_rate,
+                    prefer_direction=prefer_direction,
                     minimizer_preset=minimizer_preset,
                     minimizer_kwargs=minimizer_kwargs,
                     dashboard=dashboard,
@@ -752,6 +764,7 @@ class LimbObservation(PlanetObservation):
                     gradient_smoothing=gradient_smoothing,
                     streak_length=streak_length,
                     decay_rate=decay_rate,
+                    prefer_direction=prefer_direction,
                     minimizer_preset=minimizer_preset,
                     minimizer_kwargs=minimizer_kwargs,
                     dashboard=dashboard,
@@ -781,6 +794,7 @@ class LimbObservation(PlanetObservation):
         gradient_smoothing: float,
         streak_length: int,
         decay_rate: float,
+        prefer_direction: Optional[str],
         minimizer_preset: str,
         minimizer_kwargs: Optional[Dict],
         dashboard: bool,
@@ -864,6 +878,7 @@ class LimbObservation(PlanetObservation):
             gradient_smoothing=gradient_smoothing,
             streak_length=streak_length,
             decay_rate=decay_rate,
+            prefer_direction=prefer_direction,
         )
 
         # Initialize dashboard for multi-stage if requested
@@ -975,6 +990,7 @@ class LimbObservation(PlanetObservation):
                 gradient_smoothing=scaled_gradient_smoothing,
                 streak_length=scaled_streak_length,
                 decay_rate=decay_rate,
+                prefer_direction=prefer_direction,
                 minimizer_preset=minimizer_preset,
                 minimizer_kwargs=minimizer_kwargs,
                 dashboard=dashboard,  # Boolean flag
@@ -1035,6 +1051,7 @@ class LimbObservation(PlanetObservation):
                 gradient_smoothing=gradient_smoothing,
                 streak_length=streak_length,
                 decay_rate=decay_rate,
+                prefer_direction=prefer_direction,
             )
             self.features["fitted_limb"] = self.cost_function.evaluate(
                 self.best_parameters
@@ -1061,6 +1078,7 @@ class LimbObservation(PlanetObservation):
         gradient_smoothing: float,
         streak_length: int,
         decay_rate: float,
+        prefer_direction: Optional[str],
         minimizer_preset: str,
         minimizer_kwargs: Optional[Dict],
         dashboard: bool,
@@ -1111,6 +1129,7 @@ class LimbObservation(PlanetObservation):
             gradient_smoothing=gradient_smoothing,
             streak_length=streak_length,
             decay_rate=decay_rate,
+            prefer_direction=prefer_direction,
         )
 
         # Initialize dashboard if requested
