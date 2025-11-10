@@ -612,8 +612,10 @@ def create_config_from_image(
         init_values["theta_y"] = 0.0
         init_values["theta_z"] = 0.0
 
-    # Note: theta limits are handled elsewhere (default: -pi to pi)
-    # No need to specify them here
+    # Be very generous with directional limits by default
+    param_limits["theta_x"] = [-3.14, 3.14]
+    param_limits["theta_y"] = [-3.14, 3.14]
+    param_limits["theta_z"] = [-3.14, 3.14]
 
     # Build config
     config = {
