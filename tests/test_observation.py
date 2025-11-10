@@ -118,28 +118,6 @@ class TestLimbObservation:
     """Test the LimbObservation class"""
 
     @pytest.fixture
-    def sample_fit_config(self):
-        """Create a sample fit configuration"""
-        config = {
-            "free_parameters": ["planet_radius", "altitude"],
-            "init_parameter_values": {
-                "planet_radius": 6371000.0,  # Earth radius in meters
-                "altitude": 10000.0,  # 10km altitude
-                "focal_length": 0.024,  # 24mm lens
-                "detector_width": 0.036,  # Full frame sensor
-                "detector_height": 0.024,
-            },
-            "parameter_limits": {
-                "planet_radius": [6000000.0, 7000000.0],
-                "altitude": [100.0, 100000.0],
-                "focal_length": [0.01, 0.1],
-                "detector_width": [0.01, 0.1],
-                "detector_height": [0.01, 0.1],
-            },
-        }
-        return config
-
-    @pytest.fixture
     def config_file(self, sample_fit_config):
         """Create a temporary config file"""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
@@ -170,8 +148,8 @@ class TestLimbObservation:
             assert obs.limb_detection == "segmentation"
             assert obs.minimizer == "differential-evolution"
             assert obs._segmenter is None
-            assert obs.free_parameters == ["planet_radius", "altitude"]
-            assert obs.init_parameter_values["planet_radius"] == 6371000.0
+            assert obs.free_parameters == ["r", "h"]
+            assert obs.init_parameter_values["r"] == 6371000.0
 
             os.unlink(tmp_file.name)
 
@@ -219,7 +197,7 @@ class TestLimbObservation:
         # Create config with initial value outside bounds
         invalid_config = sample_fit_config.copy()
         invalid_config["init_parameter_values"][
-            "planet_radius"
+            "r"
         ] = 5000000.0  # Below lower bound
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
@@ -517,7 +495,7 @@ class TestLimbObservation:
             mock_cost_function_class.assert_called_once()
             call_args = mock_cost_function_class.call_args
             assert np.array_equal(call_args[1]["target"], limb_data)
-            assert call_args[1]["free_parameters"] == ["planet_radius", "altitude"]
+            assert call_args[1]["free_parameters"] == ["r", "h"]
             assert call_args[1]["loss_function"] == "l2"
 
             # Verify differential evolution call
@@ -530,8 +508,8 @@ class TestLimbObservation:
             assert obs.fit_results == mock_result
             assert np.array_equal(obs.features["fitted_limb"], fitted_limb)
             assert obs.best_parameters is not None
-            assert obs.best_parameters["planet_radius"] is not None
-            assert obs.best_parameters["altitude"] is not None
+            assert obs.best_parameters["r"] is not None
+            assert obs.best_parameters["h"] is not None
 
             os.unlink(tmp_file.name)
 
@@ -596,8 +574,8 @@ class TestLimbObservation:
 
             # Test 2: Simulate a previous fit by setting best_parameters
             obs.best_parameters = {
-                "planet_radius": 6500000.0,  # Different from original 6371000.0
-                "altitude": 15000.0,  # Different from original 10000.0
+                "r": 6500000.0,  # Different from original 6371000.0
+                "h": 15000.0,  # Different from original 10000.0
             }
 
             # Test 3: Test warm_start=True behavior (manual simulation of fit_limb logic)
@@ -651,8 +629,8 @@ class TestLimbObservation:
 
             # First fit cycle
             obs.best_parameters = {
-                "planet_radius": 6500000.0,
-                "altitude": 15000.0,
+                "r": 6500000.0,
+                "h": 15000.0,
             }
 
             # Apply warm start
@@ -662,8 +640,8 @@ class TestLimbObservation:
 
             # Second fit cycle with different results
             obs.best_parameters = {
-                "planet_radius": 6200000.0,
-                "altitude": 8000.0,
+                "r": 6200000.0,
+                "h": 8000.0,
             }
 
             # Apply second warm start
@@ -738,7 +716,7 @@ class TestLimbObservation:
             original_stored = obs._original_init_parameter_values.copy()
 
             # Modify init_parameter_values
-            obs.init_parameter_values["planet_radius"] = 9999999.0
+            obs.init_parameter_values["r"] = 9999999.0
 
             # Verify _original_init_parameter_values is unchanged
             for param in obs.free_parameters:
@@ -888,11 +866,186 @@ class TestUtilityFunctions:
             assert "initial value" in result.columns
             assert "parameter" in result.index.names
 
-            # Check values by extracting scalar values
-            assert result.loc["param1", "fit value"] == 1.5
-            assert result.loc["param1", "initial value"] == 1.0
-            assert result.loc["param2", "fit value"] == 2.5
-            assert result.loc["param2", "initial value"] == 2.0
+            # Check values by extracting scalar values properly
+            assert result.at["param1", "fit value"] == 1.5
+            assert result.at["param1", "initial value"] == 1.0
+            assert result.at["param2", "fit value"] == 2.5
+            assert result.at["param2", "initial value"] == 2.0
+
+
+class TestObservationPropertyMethods:
+    """Test observation property methods and edge cases"""
+
+    def test_properties_without_fit(self, sample_horizon_image, sample_fit_config):
+        """Test property methods when no fit has been performed"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+
+            # Test properties return 0 when no fit performed
+            assert obs.radius_km == 0.0
+            assert obs.altitude_km == 0.0
+            assert obs.focal_length_mm == 0.0
+            assert obs.radius_uncertainty == 0.0
+
+            os.unlink(tmp_file.name)
+
+    def test_properties_with_fit_results(self, sample_horizon_image, sample_fit_config):
+        """Test property methods when fit results exist"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+            
+            # Mock fit results
+            obs.best_parameters = {
+                "r": 6371000.0,  # meters
+                "h": 50000.0,    # meters
+                "f": 0.024,      # meters
+            }
+
+            # Test conversions
+            assert abs(obs.radius_km - 6371.0) < 0.1  # km
+            assert abs(obs.altitude_km - 50.0) < 0.1  # km
+            assert abs(obs.focal_length_mm - 24.0) < 0.1  # mm
+
+            os.unlink(tmp_file.name)
+
+    def test_parameter_uncertainty_without_fit(self, sample_horizon_image, sample_fit_config):
+        """Test parameter_uncertainty when no fit results exist"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+
+            result = obs.parameter_uncertainty("r")
+            
+            assert result["uncertainty"] == 0.0
+            assert result["method"] == "none"
+            assert result["additional_info"] == "No fit performed"
+
+            os.unlink(tmp_file.name)
+
+    @patch("planet_ruler.uncertainty.calculate_parameter_uncertainty")
+    def test_parameter_uncertainty_with_exception(
+        self, mock_calc_uncertainty, sample_horizon_image, sample_fit_config
+    ):
+        """Test parameter_uncertainty when calculation raises exception"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+            obs.fit_results = Mock()  # Mock fit results exist
+
+            # Mock exception
+            mock_calc_uncertainty.side_effect = ValueError("Test error")
+
+            result = obs.parameter_uncertainty("r")
+            
+            assert result["uncertainty"] == 0.0
+            assert result["method"] == "error"
+            assert "Test error" in result["additional_info"]
+
+            os.unlink(tmp_file.name)
+
+    @patch("planet_ruler.plot.plot_3d_solution")
+    def test_plot_3d_without_fit(self, mock_plot_3d, sample_horizon_image, sample_fit_config):
+        """Test plot_3d raises error when no fit performed"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+
+            with pytest.raises(ValueError, match="Must fit limb before plotting"):
+                obs.plot_3d()
+
+            os.unlink(tmp_file.name)
+
+    @patch("planet_ruler.plot.plot_3d_solution")
+    def test_plot_3d_with_fit(self, mock_plot_3d, sample_horizon_image, sample_fit_config):
+        """Test plot_3d works when fit results exist"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+            obs.best_parameters = {
+                "r": 6371000.0,
+                "h": 50000.0,
+                "f": 0.024,
+            }
+
+            obs.plot_3d(some_param="test")
+
+            mock_plot_3d.assert_called_once_with(r=6371000.0, h=50000.0, f=0.024, some_param="test")
+
+            os.unlink(tmp_file.name)
+
+    def test_analyze_method_chaining(self, sample_horizon_image, sample_fit_config):
+        """Test analyze method with method chaining"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+
+            with patch.object(obs, 'detect_limb') as mock_detect:
+                with patch.object(obs, 'fit_limb') as mock_fit:
+                    result = obs.analyze()
+                    
+                    # Should return self for chaining
+                    assert result is obs
+                    
+                    # Should call both methods
+                    mock_detect.assert_called_once_with()
+                    mock_fit.assert_called_once_with()
+
+            os.unlink(tmp_file.name)
+
+    def test_analyze_with_kwargs(self, sample_horizon_image, sample_fit_config):
+        """Test analyze method passes kwargs correctly"""
+        image_data = sample_horizon_image()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            plt.imsave(tmp_file.name, image_data, cmap="gray")
+            tmp_file.flush()
+
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=sample_fit_config)
+
+            with patch.object(obs, 'detect_limb') as mock_detect:
+                with patch.object(obs, 'fit_limb') as mock_fit:
+                    detect_kwargs = {"log": True, "y_min": 10}
+                    fit_kwargs = {"loss_function": "l1", "max_iter": 500}
+                    
+                    obs.analyze(
+                        detect_limb_kwargs=detect_kwargs,
+                        fit_limb_kwargs=fit_kwargs
+                    )
+                    
+                    mock_detect.assert_called_once_with(**detect_kwargs)
+                    mock_fit.assert_called_once_with(**fit_kwargs)
+
+            os.unlink(tmp_file.name)
 
 
 # Integration tests using real fixtures
@@ -904,20 +1057,18 @@ class TestObservationIntegration:
         """Test a complete observation workflow with mocked components"""
         # Create inline sample fit config
         sample_fit_config = {
-            "free_parameters": ["planet_radius", "altitude"],
+            "free_parameters": ["r", "h"],
             "init_parameter_values": {
-                "planet_radius": 6371000.0,
-                "altitude": 10000.0,
-                "focal_length": 0.024,
-                "detector_width": 0.036,
-                "detector_height": 0.024,
+                "r": 6371000.0,
+                "h": 10000.0,
+                "f": 0.024,
+                "w": 0.036,
             },
             "parameter_limits": {
-                "planet_radius": [6000000.0, 7000000.0],
-                "altitude": [100.0, 100000.0],
-                "focal_length": [0.01, 0.1],
-                "detector_width": [0.01, 0.1],
-                "detector_height": [0.01, 0.1],
+                "r": [6000000.0, 7000000.0],
+                "h": [100.0, 100000.0],
+                "f": [0.01, 0.1],
+                "w": [0.01, 0.1],
             },
         }
 
@@ -972,20 +1123,18 @@ class TestObservationIntegration:
         """Test different limb detection methods"""
         # Create a sample fit config inline
         sample_fit_config = {
-            "free_parameters": ["planet_radius", "altitude"],
+            "free_parameters": ["r", "h"],
             "init_parameter_values": {
-                "planet_radius": 6371000.0,
-                "altitude": 10000.0,
-                "focal_length": 0.024,
-                "detector_width": 0.036,
-                "detector_height": 0.024,
+                "r": 6371000.0,
+                "h": 10000.0,
+                "f": 0.024,
+                "w": 0.036,
             },
             "parameter_limits": {
-                "planet_radius": [6000000.0, 7000000.0],
-                "altitude": [100.0, 100000.0],
-                "focal_length": [0.01, 0.1],
-                "detector_width": [0.01, 0.1],
-                "detector_height": [0.01, 0.1],
+                "r": [6000000.0, 7000000.0],
+                "h": [100.0, 100000.0],
+                "f": [0.01, 0.1],
+                "w": [0.01, 0.1],
             },
         }
 
