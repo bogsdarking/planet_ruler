@@ -199,9 +199,9 @@ def sample_fit_config():
         "free_parameters": ["r", "h"],
         "init_parameter_values": {
             "r": 6371000.0,  # Earth radius in meters
-            "h": 10000.0,    # 10km altitude
-            "f": 0.024,      # 24mm lens
-            "w": 0.036,      # Full frame sensor
+            "h": 10000.0,  # 10km altitude
+            "f": 0.024,  # 24mm lens
+            "w": 0.036,  # Full frame sensor
         },
         "parameter_limits": {
             "r": [6000000.0, 7000000.0],

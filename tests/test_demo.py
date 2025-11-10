@@ -180,7 +180,8 @@ class TestLoadDemoParameters:
         assert result["target"] == "Saturn"
         assert result["true_radius"] == 58232
         assert (
-            result["image_filepath"] == "../../demo/images/saturn_ciclops_5769_13427_1.jpg"
+            result["image_filepath"]
+            == "../../demo/images/saturn_ciclops_5769_13427_1.jpg"
         )
         assert result["fit_config"] == "../../config/saturn-cassini-2.yaml"
         assert result["limb_config"] == expected_limb_config
@@ -208,7 +209,9 @@ class TestLoadDemoParameters:
 
         assert result["target"] == "Earth"
         assert result["true_radius"] == 6371
-        assert result["image_filepath"] == "../../demo/images/50644513538_56228a2027_o.jpg"
+        assert (
+            result["image_filepath"] == "../../demo/images/50644513538_56228a2027_o.jpg"
+        )
         assert result["fit_config"] == "../../config/earth_iss_1.yaml"
         assert result["limb_config"] == expected_limb_config
         assert result["limb_save"] == "earth_limb_1.npy"

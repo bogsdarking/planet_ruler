@@ -170,7 +170,7 @@ Examples:
         action="store_true",
         help="Show detailed fitting progress",
     )
-    
+
     # Dashboard options
     measure_parser.add_argument(
         "--dashboard",
@@ -380,7 +380,7 @@ def measure_command(args):
             "gradient_smoothing": args.gradient_smoothing,
             "dashboard": args.dashboard,
         }
-        
+
         # Dashboard configuration
         if args.dashboard:
             fit_kwargs["dashboard_kwargs"] = {
