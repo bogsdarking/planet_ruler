@@ -26,6 +26,7 @@ import pytest
 import time
 import threading
 import numpy as np
+from unittest.mock import patch
 from planet_ruler.dashboard import FitDashboard, OutputCapture
 
 
@@ -348,6 +349,245 @@ class TestDashboardKwargsIntegration:
         assert dashboard.max_hints == 4
         assert dashboard.min_message_display_time == 5.0
         assert dashboard.width == 80
+
+
+class TestJupyterFunctionality:
+    """Test Jupyter-specific functionality."""
+    
+    def test_is_jupyter_function_standard_python(self):
+        """Test is_jupyter function in standard Python environment."""
+        from planet_ruler.dashboard import is_jupyter
+        # In test environment, should return False
+        assert is_jupyter() is False
+    
+    def test_jupyter_completion_messages(self):
+        """Test dashboard completion messages in Jupyter mode."""
+        dashboard = FitDashboard(
+            initial_params={'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036},
+            max_iter=100,
+        )
+        # Force Jupyter mode for testing
+        dashboard.in_jupyter = True
+        
+        # Mock IPython display functionality
+        with patch('IPython.display.display') as mock_display:
+            with patch('IPython.display.HTML') as mock_html:
+                # Test successful completion
+                dashboard.finalize(success=True)
+                mock_display.assert_called()
+                mock_html.assert_called()
+                
+                # Check that success HTML was created
+                html_call_args = mock_html.call_args[0][0]
+                assert "✓ Optimization completed successfully!" in html_call_args
+                assert "color: green" in html_call_args
+                
+    def test_jupyter_failed_completion_messages(self):
+        """Test dashboard failed completion messages in Jupyter mode."""
+        dashboard = FitDashboard(
+            initial_params={'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036},
+            max_iter=100,
+        )
+        dashboard.in_jupyter = True
+        
+        with patch('IPython.display.display') as mock_display:
+            with patch('IPython.display.HTML') as mock_html:
+                # Test failed completion
+                dashboard.finalize(success=False)
+                
+                html_call_args = mock_html.call_args[0][0]
+                assert "⚠ Optimization stopped" in html_call_args
+                assert "color: orange" in html_call_args
+
+
+class TestMultiStageProgressBars:
+    """Test multi-stage progress bar functionality."""
+    
+    def test_multi_stage_progress_display(self):
+        """Test progress bars in multi-stage mode."""
+        dashboard = FitDashboard(
+            initial_params={'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036},
+            max_iter=50,
+            total_stages=3,
+            cumulative_max_iter=150,
+        )
+        
+        # Update to generate progress
+        params = {'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036}
+        for i in range(10):
+            dashboard.update(params, 1000 - i * 10)
+        
+        # Test stage transition
+        dashboard.start_stage(2, "1/2x", 50)
+        
+        assert dashboard.current_stage == 2
+        assert dashboard.resolution_label == "1/2x"
+        assert dashboard.iteration == 0  # Reset for new stage
+        assert dashboard.stage_start_iteration == 10  # Cumulative from previous
+        
+        # Add more updates for second stage
+        for i in range(5):
+            dashboard.update(params, 900 - i * 10)
+        
+        # Generate dashboard to test progress bars
+        dashboard_text = dashboard._build_dashboard()
+        assert "STAGE 2/3" in dashboard_text
+        assert "Stage:" in dashboard_text
+        assert "Overall:" in dashboard_text
+
+
+class TestOutputSection:
+    """Test output capture integration and display."""
+    
+    def test_output_section_display(self):
+        """Test that output section is displayed when enabled."""
+        capture = OutputCapture(max_lines=3)
+        dashboard = FitDashboard(
+            initial_params={'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036},
+            max_iter=100,
+            output_capture=capture,
+            show_output=True,
+            max_output_lines=3,
+        )
+        
+        # Add some output to capture
+        with capture:
+            print("Iteration 1: loss = 1000")
+            print("Iteration 2: loss = 950")
+            print("Iteration 3: loss = 900")
+        
+        # Update dashboard to generate display
+        params = {'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036}
+        dashboard.update(params, 1000)
+        
+        # Build dashboard and check for output section
+        dashboard_text = dashboard._build_dashboard()
+        assert "Recent Output:" in dashboard_text
+        assert "Iteration 1: loss = 1000" in dashboard_text
+        assert "Iteration 2: loss = 950" in dashboard_text
+        assert "Iteration 3: loss = 900" in dashboard_text
+    
+    def test_output_section_disabled(self):
+        """Test that output section is not displayed when disabled."""
+        dashboard = FitDashboard(
+            initial_params={'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036},
+            max_iter=100,
+            show_output=False,
+        )
+        
+        params = {'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036}
+        dashboard.update(params, 1000)
+        
+        dashboard_text = dashboard._build_dashboard()
+        assert "Recent Output:" not in dashboard_text
+
+
+class TestHintGeneration:
+    """Test educational hint generation."""
+    
+    def test_hint_generation_early_stage(self):
+        """Test hints during early optimization stage."""
+        dashboard = FitDashboard(
+            initial_params={'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036},
+            max_iter=100,
+        )
+        
+        # Early stage hints
+        hints = dashboard._generate_hints()
+        assert len(hints) > 0
+        assert "exploring parameter space" in hints[0].lower()
+    
+    def test_hint_generation_convergence_hints(self):
+        """Test hints related to convergence."""
+        dashboard = FitDashboard(
+            initial_params={'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036},
+            max_iter=100,
+            target_planet='earth',
+        )
+        
+        # Simulate many iterations with decreasing loss
+        params = {'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036}
+        for i in range(60):
+            loss = 10000 * (1 - i/60)**2  # Decreasing trend
+            dashboard.update(params, loss)
+        
+        hints = dashboard._generate_hints()
+        # Should contain convergence-related hints
+        hint_text = ' '.join(hints)
+        assert any(keyword in hint_text.lower() for keyword in ['decreasing', 'healthy', 'convergence'])
+    
+    def test_hint_generation_radius_proximity(self):
+        """Test hints about radius proximity to target planet."""
+        dashboard = FitDashboard(
+            initial_params={'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036},
+            max_iter=100,
+            target_planet='earth',
+        )
+        
+        # Add parameter history close to Earth's radius
+        params = {'r': 6371200, 'h': 30000, 'f': 0.025, 'w': 0.036}  # Within 200m of Earth
+        dashboard.param_history = [params]
+        dashboard.iteration = 50
+        
+        hints = dashboard._generate_hints()
+        hint_text = ' '.join(hints)
+        assert 'earth' in hint_text.lower()
+        assert '%' in hint_text  # Should show percentage error
+    
+    def test_hint_generation_adaptive_refresh(self):
+        """Test hints about adaptive refresh rate."""
+        dashboard = FitDashboard(
+            initial_params={'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036},
+            max_iter=100,
+        )
+
+        # Force slow adaptive refresh
+        dashboard._adaptive_delay = 0.5  # 2 Hz
+        dashboard._enable_adaptive_refresh = True
+
+        hints = dashboard._generate_hints()
+        # Just verify hints are generated (not empty)
+        assert len(hints) > 0
+        assert all(isinstance(hint, str) for hint in hints)
+
+
+class TestWarningGeneration:
+    """Test warning message generation."""
+    
+    def test_warning_low_altitude(self):
+        """Test warning for very low altitude."""
+        dashboard = FitDashboard(
+            initial_params={'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036},
+            max_iter=100,
+        )
+        
+        # Test with very low altitude
+        params = {'r': 6371000, 'h': 500, 'f': 0.025, 'w': 0.036}  # 500m altitude
+        warnings = dashboard._check_warnings(params)
+        
+        assert len(warnings) > 0
+        warning_text = ' '.join(warnings)
+        assert 'altitude' in warning_text.lower()
+        assert 'curvature' in warning_text.lower()
+    
+    def test_warning_extreme_radius(self):
+        """Test warnings for extreme radius values."""
+        dashboard = FitDashboard(
+            initial_params={'r': 6371000, 'h': 30000, 'f': 0.025, 'w': 0.036},
+            max_iter=100,
+        )
+        
+        # Test very small radius
+        params = {'r': 500000, 'h': 30000, 'f': 0.025, 'w': 0.036}  # 500km radius
+        warnings = dashboard._check_warnings(params)
+        warning_text = ' '.join(warnings)
+        assert 'radius' in warning_text.lower() and 'small' in warning_text.lower()
+        
+        # Test very large radius
+        params = {'r': 200000000, 'h': 30000, 'f': 0.025, 'w': 0.036}  # 200,000km radius
+        warnings = dashboard._check_warnings(params)
+        warning_text = ' '.join(warnings)
+        assert 'radius' in warning_text.lower() and 'large' in warning_text.lower()
 
 
 if __name__ == '__main__':
