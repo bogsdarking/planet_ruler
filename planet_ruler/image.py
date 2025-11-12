@@ -503,9 +503,9 @@ def fill_nans(limb: np.ndarray) -> np.ndarray:
 
 def gradient_field(
     image: np.ndarray,
-    gradient_smoothing: float = 5.0,
-    streak_length: int = 30,
-    decay_rate: float = 0.15,
+    kernel_smoothing: float = 5.0,
+    directional_smoothing: int = 30,
+    directional_decay_rate: float = 0.15,
 ) -> dict:
     """
     Pre-compute gradient field AND its derivatives for fast sub-pixel interpolation.
@@ -513,9 +513,10 @@ def gradient_field(
 
     Args:
         image: Input image
-        gradient_smoothing: Sigma for initial gradient direction estimation
-        streak_length: Distance to sample in each direction (±pixels)
-        decay_rate: Exponential decay rate for directional blur
+        kernel_smoothing: Sigma for initial gradient direction estimation
+        directional_smoothing: Distance to sample in each direction (±pixels).
+                              Set to 0 to bypass directional smoothing entirely.
+        directional_decay_rate: Exponential decay rate for directional blur
 
     Returns:
         dict: Dictionary containing gradient field components:
@@ -536,8 +537,8 @@ def gradient_field(
 
     # Use directional blur for enhanced edge detection
     # First compute initial gradients for direction
-    if gradient_smoothing > 0:
-        gray_smooth = cv2.GaussianBlur(gray, (0, 0), min(gradient_smoothing, 2.0))
+    if kernel_smoothing > 0:
+        gray_smooth = cv2.GaussianBlur(gray, (0, 0), min(kernel_smoothing, 2.0))
     else:
         gray_smooth = gray
 
@@ -545,38 +546,45 @@ def gradient_field(
     grad_mag_init = np.sqrt(grad_x_init**2 + grad_y_init**2)
     grad_angle = np.arctan2(grad_y_init, grad_x_init)
 
-    # Normalize to unit vectors for sampling
-    grad_mag_safe = np.copy(grad_mag_init)
-    grad_mag_safe[grad_mag_safe < 1e-6] = 1.0
-    grad_x_unit = grad_x_init / grad_mag_safe
-    grad_y_unit = grad_y_init / grad_mag_safe
+    # Apply directional smoothing if enabled (directional_smoothing > 0)
+    if directional_smoothing > 0:
+        # Normalize to unit vectors for sampling
+        grad_mag_safe = np.copy(grad_mag_init)
+        grad_mag_safe[grad_mag_safe < 1e-6] = 1.0
+        grad_x_unit = grad_x_init / grad_mag_safe
+        grad_y_unit = grad_y_init / grad_mag_safe
 
-    # Bidirectional blur along gradient
-    height, width = gray.shape
-    blurred_mag = np.zeros_like(grad_mag_init)
-    y_coords, x_coords = np.meshgrid(np.arange(height), np.arange(width), indexing="ij")
+        # Bidirectional blur along gradient
+        height, width = gray.shape
+        blurred_mag = np.zeros_like(grad_mag_init)
+        y_coords, x_coords = np.meshgrid(np.arange(height), np.arange(width), indexing="ij")
 
-    total_weight = 0.0
-    for step in range(-streak_length, streak_length + 1):
-        weight = np.exp(-decay_rate * abs(step))
-        total_weight += weight
+        total_weight = 0.0
+        for step in range(-directional_smoothing, directional_smoothing + 1):
+            weight = np.exp(-directional_decay_rate * abs(step))
+            total_weight += weight
 
-        offset_x = grad_x_unit * step
-        offset_y = grad_y_unit * step
+            offset_x = grad_x_unit * step
+            offset_y = grad_y_unit * step
 
-        sample_x = x_coords + offset_x
-        sample_y = y_coords + offset_y
+            sample_x = x_coords + offset_x
+            sample_y = y_coords + offset_y
 
-        # Bilinear interpolation
-        sample_mag = bilinear_interpolate(grad_mag_init, sample_y, sample_x)
-        blurred_mag += weight * sample_mag
+            # Bilinear interpolation
+            sample_mag = bilinear_interpolate(grad_mag_init, sample_y, sample_x)
+            blurred_mag += weight * sample_mag
 
-    blurred_mag /= total_weight
+        blurred_mag /= total_weight
 
-    # Use blurred magnitude with original angles
-    grad_mag = blurred_mag
-    grad_x = blurred_mag * np.cos(grad_angle)
-    grad_y = blurred_mag * np.sin(grad_angle)
+        # Use blurred magnitude with original angles
+        grad_mag = blurred_mag
+        grad_x = blurred_mag * np.cos(grad_angle)
+        grad_y = blurred_mag * np.sin(grad_angle)
+    else:
+        # Bypass directional smoothing - use original gradients
+        grad_mag = grad_mag_init
+        grad_x = grad_x_init
+        grad_y = grad_y_init
 
     # Convert to sin/cos for angle interpolation (handles wraparound)
     grad_sin = np.sin(grad_angle)
@@ -588,7 +596,7 @@ def gradient_field(
     grad_cos_dy, grad_cos_dx = np.gradient(grad_cos)
 
     # Store dimensions
-    image_height, image_width = blurred_mag.shape
+    image_height, image_width = grad_mag.shape
 
     return {
         "grad_mag": grad_mag,

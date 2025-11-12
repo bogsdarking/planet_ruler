@@ -838,9 +838,9 @@ class TestGradientFieldCostFunction:
             free_parameters=["y_center"],
             init_parameter_values={"y_center": 50.0},
             loss_function="gradient_field",
-            gradient_smoothing=3.0,
-            streak_length=10,
-            decay_rate=0.2,
+            kernel_smoothing=3.0,
+            directional_smoothing=10,
+            directional_decay_rate=0.2,
         )
 
         # Should have gradient field data

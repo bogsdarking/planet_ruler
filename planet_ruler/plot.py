@@ -246,9 +246,9 @@ def plot_gradient_field_at_limb(
     y_pixels,
     image,
     image_smoothing=None,
-    gradient_smoothing=5.0,
-    streak_length=30,
-    decay_rate=0.15,
+    kernel_smoothing=5.0,
+    directional_smoothing=30,
+    directional_decay_rate=0.15,
     sample_spacing=50,
     arrow_scale=20,
 ):
@@ -260,10 +260,10 @@ def plot_gradient_field_at_limb(
         image (np.ndarray): Input image (H x W x 3 or H x W)
         image_smoothing (int): For gradient_field - Gaussian blur sigma applied to image
             before gradient computation. Removes high-frequency artifacts (crater rims,
-            striations) that could mislead optimization. Different from gradient_smoothing.
-        gradient_smoothing (float): Initial smoothing for gradient direction estimation
-        streak_length (int): How far to sample along gradients
-        decay_rate (float): Exponential decay rate for sampling
+            striations) that could mislead optimization. Different from kernel_smoothing.
+        kernel_smoothing (float): Initial smoothing for gradient direction estimation
+        directional_smoothing (int): How far to sample along gradients
+        directional_decay_rate (float): Exponential decay rate for sampling
         sample_spacing (int): Sample every N pixels along x-axis
         arrow_scale (float): Scale factor for arrow lengths
 
@@ -286,14 +286,14 @@ def plot_gradient_field_at_limb(
     # Compute gradients using directional blur (now the default method)
     grad_data = gradient_field(
         working_image,
-        gradient_smoothing=gradient_smoothing,
-        streak_length=streak_length,
-        decay_rate=decay_rate,
+        kernel_smoothing=kernel_smoothing,
+        directional_smoothing=directional_smoothing,
+        directional_decay_rate=directional_decay_rate,
     )
 
     grad_mag = grad_data["grad_mag"]
     grad_angle = grad_data["grad_angle"]
-    title = f"Gradient Field with Directional Blur (streak={streak_length}, decay={decay_rate})"
+    title = f"Gradient Field with Directional Blur (streak={directional_smoothing}, decay={directional_decay_rate})"
 
     # Compute curve tangent and normal at each point
     # Tangent direction: (1, dy/dx) in direction of increasing x
@@ -507,7 +507,7 @@ def compare_blur_methods(image, y_pixels=None):
     from planet_ruler.image import gradient_field
 
     grad_data = gradient_field(
-        image, streak_length=30, decay_rate=0.15, gradient_smoothing=2.0
+        image, directional_smoothing=30, directional_decay_rate=0.15, kernel_smoothing=2.0
     )
     mag_directional = grad_data["grad_mag"]
     angle_dir = grad_data["grad_angle"]
@@ -562,9 +562,9 @@ def compare_gradient_fields(
     labels,
     image,
     image_smoothing=None,
-    gradient_smoothing=5.0,
-    streak_length=30,
-    decay_rate=0.15,
+    kernel_smoothing=5.0,
+    directional_smoothing=30,
+    directional_decay_rate=0.15,
 ):
     """
     Compare gradient alignment for multiple proposed limbs.
@@ -573,9 +573,9 @@ def compare_gradient_fields(
         y_pixels_list (list): List of y-coordinate arrays (different limb proposals)
         labels (list): Labels for each limb
         image (np.ndarray): Input image
-        gradient_smoothing (float): Initial smoothing for gradient direction estimation
-        streak_length (int): How far to sample along gradients
-        decay_rate (float): Exponential decay rate for sampling
+        kernel_smoothing (float): Initial smoothing for gradient direction estimation
+        directional_smoothing (int): How far to sample along gradients
+        directional_decay_rate (float): Exponential decay rate for sampling
     """
     # Import here to avoid circular import issues
     from planet_ruler.image import gradient_field
@@ -593,9 +593,9 @@ def compare_gradient_fields(
     # Compute gradients using directional blur (now the default method)
     grad_data = gradient_field(
         working_image,
-        gradient_smoothing=gradient_smoothing,
-        streak_length=streak_length,
-        decay_rate=decay_rate,
+        kernel_smoothing=kernel_smoothing,
+        directional_smoothing=directional_smoothing,
+        directional_decay_rate=directional_decay_rate,
     )
 
     grad_mag = grad_data["grad_mag"]
