@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from __future__ import annotations
+from typing import Optional
 import numpy as np
 import pandas as pd
 import math
@@ -64,6 +65,13 @@ class CostFunction:
         init_parameter_values (dict): Initial values for named parameters.
         loss_function (str): Type of loss function, must be one of
                             ['l2', 'l1', 'log-l1', 'gradient_field'].
+        kernel_smoothing: For gradient_field - initial blur for gradient direction
+            estimation. Makes the gradient field smoother for directional sampling.
+        directional_smoothing: For gradient_field - sampling distance along gradients
+        directional_decay_rate: For gradient_field - exponential decay for samples
+        prefer_direction: For gradient_field - prefer 'up' or 'down' gradients
+            where 'up' means dark-sky/bright-planet and v.v.
+            (None = no preference, choose best gradient regardless of direction)
     """
 
     def __init__(
@@ -73,14 +81,16 @@ class CostFunction:
         free_parameters: list,
         init_parameter_values,
         loss_function="l2",
-        gradient_smoothing=5.0,
-        streak_length=30,
-        decay_rate=0.15,
+        kernel_smoothing=5.0,
+        directional_smoothing=30,
+        directional_decay_rate=0.15,
+        prefer_direction: Optional[str] = None,
     ):
         self.function = function
         self.free_parameters = free_parameters
         self.init_parameter_values = init_parameter_values
         self.loss_function = loss_function
+        self.prefer_direction = prefer_direction
 
         # For traditional loss functions, target is the detected limb
         if loss_function in ["l2", "l1", "log-l1"]:
@@ -98,9 +108,9 @@ class CostFunction:
             # Use the new standalone gradient_field function
             grad_data = gradient_field(
                 target,
-                gradient_smoothing=gradient_smoothing,
-                streak_length=streak_length,
-                decay_rate=decay_rate,
+                kernel_smoothing=kernel_smoothing,
+                directional_smoothing=directional_smoothing,
+                directional_decay_rate=directional_decay_rate,
             )
 
             # Store the gradient field components as instance variables
@@ -385,10 +395,22 @@ class CostFunction:
         typical_mag = np.mean(self.grad_mag)
         normalized_flux = flux_density / (typical_mag + 1e-10)
 
-        # Cost = negative absolute flux
+        # Cost = negative absolute flux (unless direction preferred)
         # Maximize |flux| = prefer coherent gradients in either direction
         # Penalize weak/canceling flux = incoherent features
-        cost = 1.0 - np.abs(normalized_flux)
+        if self.prefer_direction is not None:
+            if self.prefer_direction == "up":
+                normalized_flux *= -1
+            elif self.prefer_direction == "down":
+                normalized_flux *= 1
+            else:
+                raise ValueError(
+                    f"Unrecognized prefer_direction ({self.prefer_direction}) -- use 'up', 'down', or None"
+                )
+        else:
+            normalized_flux = np.abs(normalized_flux)
+
+        cost = 1.0 - normalized_flux
 
         return cost
 
@@ -556,14 +578,14 @@ def format_parameter_result(uncertainty_result: dict, units: str = "") -> str:
     uncertainty = uncertainty_result["uncertainty"]
     param = uncertainty_result["parameter"]
 
-    if uncertainty_result["type"] == "ci":
+    if uncertainty_result.get("type") == "ci":
         return (
             f"{param} = {value:.1f} {units} "
             f"(95% CI: {uncertainty['lower']:.1f}-{uncertainty['upper']:.1f} {units})"
         )
     else:
         uncertainty_type_name = {"std": "±", "ptp": "range ±", "iqr": "IQR ±"}.get(
-            uncertainty_result["type"], "±"
+            uncertainty_result.get("type", "std"), "±"
         )
 
         return f"{param} = {value:.1f} {uncertainty_type_name}{uncertainty:.1f} {units}"

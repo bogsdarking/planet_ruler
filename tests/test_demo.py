@@ -119,12 +119,12 @@ class TestLoadDemoParameters:
         expected_params = {
             "target": "Pluto",
             "true_radius": 1188,
-            "image_filepath": "../demo/images/PIA19948.tif",
-            "fit_config": "../config/pluto-new-horizons.yaml",
+            "image_filepath": "../../demo/images/PIA19948.tif",
+            "fit_config": "../../config/pluto-new-horizons.yaml",
             "limb_config": expected_limb_config,
             "limb_save": "pluto_limb.npy",
-            "parameter_walkthrough": "../demo/pluto_init.md",
-            "preamble": "../demo/pluto_preamble.md",
+            "parameter_walkthrough": "../../demo/pluto_init.md",
+            "preamble": "../../demo/pluto_preamble.md",
         }
 
         assert result == expected_params
@@ -152,12 +152,12 @@ class TestLoadDemoParameters:
 
         assert result["target"] == "Saturn"
         assert result["true_radius"] == 58232
-        assert result["image_filepath"] == "../demo/images/PIA21341.jpg"
-        assert result["fit_config"] == "../config/saturn-cassini-1.yaml"
+        assert result["image_filepath"] == "../../demo/images/PIA21341.jpg"
+        assert result["fit_config"] == "../../config/saturn-cassini-1.yaml"
         assert result["limb_config"] == expected_limb_config
         assert result["limb_save"] == "saturn_limb_1.npy"
-        assert result["parameter_walkthrough"] == "../demo/saturn_init_1.md"
-        assert result["preamble"] == "../demo/saturn_preamble_1.md"
+        assert result["parameter_walkthrough"] == "../../demo/saturn_init_1.md"
+        assert result["preamble"] == "../../demo/saturn_preamble_1.md"
 
     def test_load_demo_parameters_saturn_2(self):
         """Test loading Saturn-2 demo parameters."""
@@ -180,13 +180,14 @@ class TestLoadDemoParameters:
         assert result["target"] == "Saturn"
         assert result["true_radius"] == 58232
         assert (
-            result["image_filepath"] == "../demo/images/saturn_ciclops_5769_13427_1.jpg"
+            result["image_filepath"]
+            == "../../demo/images/saturn_ciclops_5769_13427_1.jpg"
         )
-        assert result["fit_config"] == "../config/saturn-cassini-2.yaml"
+        assert result["fit_config"] == "../../config/saturn-cassini-2.yaml"
         assert result["limb_config"] == expected_limb_config
         assert result["limb_save"] == "saturn_limb_2.npy"
-        assert result["parameter_walkthrough"] == "../demo/saturn_init_2.md"
-        assert result["preamble"] == "../demo/saturn_preamble_2.md"
+        assert result["parameter_walkthrough"] == "../../demo/saturn_init_2.md"
+        assert result["preamble"] == "../../demo/saturn_preamble_2.md"
 
     def test_load_demo_parameters_earth(self):
         """Test loading Earth demo parameters."""
@@ -208,12 +209,14 @@ class TestLoadDemoParameters:
 
         assert result["target"] == "Earth"
         assert result["true_radius"] == 6371
-        assert result["image_filepath"] == "../demo/images/50644513538_56228a2027_o.jpg"
-        assert result["fit_config"] == "../config/earth_iss_1.yaml"
+        assert (
+            result["image_filepath"] == "../../demo/images/50644513538_56228a2027_o.jpg"
+        )
+        assert result["fit_config"] == "../../config/earth_iss_1.yaml"
         assert result["limb_config"] == expected_limb_config
         assert result["limb_save"] == "earth_limb_1.npy"
-        assert result["parameter_walkthrough"] == "../demo/earth_init_1.md"
-        assert result["preamble"] == "../demo/earth_preamble_1.md"
+        assert result["parameter_walkthrough"] == "../../demo/earth_init_1.md"
+        assert result["preamble"] == "../../demo/earth_preamble_1.md"
 
     def test_load_demo_parameters_invalid_value(self):
         """Test loading parameters with invalid demo value."""

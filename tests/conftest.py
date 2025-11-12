@@ -190,3 +190,24 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "numerical: marks tests that focus on numerical precision"
     )
+
+
+@pytest.fixture
+def sample_fit_config():
+    """Create a sample fit configuration"""
+    config = {
+        "free_parameters": ["r", "h"],
+        "init_parameter_values": {
+            "r": 6371000.0,  # Earth radius in meters
+            "h": 10000.0,  # 10km altitude
+            "f": 0.024,  # 24mm lens
+            "w": 0.036,  # Full frame sensor
+        },
+        "parameter_limits": {
+            "r": [6000000.0, 7000000.0],
+            "h": [100.0, 100000.0],
+            "f": [0.01, 0.1],
+            "w": [0.01, 0.1],
+        },
+    }
+    return config

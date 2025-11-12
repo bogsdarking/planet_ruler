@@ -59,6 +59,7 @@ class TestCalculateParameterUncertainty:
         obs = Mock()
         obs.fit_results = Mock()
         obs.free_parameters = ["h", "f"]  # 'r' is not in free parameters
+        obs.best_parameters = {"r": 6371000.0}  # Provide actual value
 
         result = calculate_parameter_uncertainty(obs, "r", confidence_level=0.95)
 
@@ -74,6 +75,7 @@ class TestCalculateParameterUncertainty:
         obs.fit_results.population = np.array([[1.0, 2.0], [1.1, 2.1], [1.2, 2.2]])
         obs.free_parameters = ["r", "h"]
         obs.minimizer = "differential-evolution"
+        obs.best_parameters = {"r": 6371000.0, "h": 10000.0}  # Provide actual values
 
         with patch("planet_ruler.uncertainty._uncertainty_from_population") as mock_pop:
             mock_pop.return_value = {"uncertainty": 100.0, "method": "population"}
@@ -89,6 +91,7 @@ class TestCalculateParameterUncertainty:
         obs.fit_results = Mock()
         obs.free_parameters = ["r", "h"]
         obs.minimizer = "L-BFGS-B"
+        obs.best_parameters = {"r": 6371000.0, "h": 10000.0}  # Provide actual values
 
         with patch(
             "planet_ruler.uncertainty._uncertainty_from_hessian"
@@ -107,6 +110,7 @@ class TestCalculateParameterUncertainty:
         obs.fit_results.population = np.array([[1.0, 2.0], [1.1, 2.1]])
         obs.free_parameters = ["r", "h"]
         obs.minimizer = "differential-evolution"
+        obs.best_parameters = {"r": 6371000.0, "h": 10000.0}  # Provide actual values
 
         with patch("planet_ruler.uncertainty._uncertainty_from_population") as mock_pop:
             mock_pop.return_value = {"uncertainty": 100.0, "method": "population"}
@@ -123,6 +127,7 @@ class TestCalculateParameterUncertainty:
         obs = Mock()
         obs.fit_results = Mock()
         obs.free_parameters = ["r", "h"]
+        obs.best_parameters = {"r": 6371000.0, "h": 10000.0}  # Provide actual values
 
         with patch(
             "planet_ruler.uncertainty._uncertainty_from_hessian"
@@ -140,6 +145,7 @@ class TestCalculateParameterUncertainty:
         obs = Mock()
         obs.fit_results = Mock()
         obs.free_parameters = ["r", "h"]
+        obs.best_parameters = {"r": 6371000.0, "h": 10000.0}  # Provide actual values
 
         with patch(
             "planet_ruler.uncertainty._uncertainty_from_profile"
@@ -157,6 +163,7 @@ class TestCalculateParameterUncertainty:
         obs = Mock()
         obs.fit_results = Mock()
         obs.free_parameters = ["r", "h"]
+        obs.best_parameters = {"r": 6371000.0, "h": 10000.0}  # Provide actual values
 
         with patch(
             "planet_ruler.uncertainty._uncertainty_from_bootstrap"
@@ -504,6 +511,7 @@ class TestUncertaintyIntegration:
         )
         obs.free_parameters = ["r", "h"]
         obs.minimizer = "differential-evolution"
+        obs.best_parameters = {"r": 6371000.0, "h": 10000.0}  # Provide actual values
 
         # Test different confidence levels
         for conf_level in [0.68, 0.95, 0.99]:
@@ -526,6 +534,7 @@ class TestUncertaintyIntegration:
         )
         obs.free_parameters = ["r", "h"]
         obs.minimizer = "differential-evolution"
+        obs.best_parameters = {"r": 6371000.0, "h": 10000.0}  # Provide actual values
 
         # Test different scale factors
         scale_factors = [1.0, 1000.0, 0.001]  # m, mm, km
@@ -556,6 +565,7 @@ class TestUncertaintyIntegration:
         obs.cost_function = Mock()
         obs.cost_function.cost = Mock(return_value=1.0)
         obs.parameter_limits = {"r": [6000000.0, 7000000.0], "h": [100.0, 100000.0]}
+        obs.best_parameters = {"r": 6371000.0, "h": 10000.0}  # Provide actual values
 
         # Mock various scipy functions that might be called
         with patch("scipy.stats.norm.ppf", return_value=1.0):
