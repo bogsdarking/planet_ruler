@@ -26,10 +26,12 @@ from . import annotate
 from . import camera
 from . import validation
 from . import uncertainty
+from . import dashboard
 
 # Main classes for user-facing API
 from .observation import LimbObservation, PlanetObservation
 from .annotate import TkLimbAnnotator
+from .dashboard import OutputCapture
 
 __all__ = [
     # Modules
@@ -41,11 +43,13 @@ __all__ = [
     "plot",
     "annotate",
     "uncertainty",
+    "dashboard",
     # Main classes
     "LimbObservation",
     "PlanetObservation",
     "TkLimbAnnotator",
+    "OutputCapture",
 ]
 
 # Version information
-__version__ = "1.4.0"
+__version__ = "1.5.0"

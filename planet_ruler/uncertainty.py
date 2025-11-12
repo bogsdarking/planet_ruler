@@ -58,7 +58,9 @@ def calculate_parameter_uncertainty(
     if not hasattr(observation, "fit_results") or observation.fit_results is None:
         logging.warning("No fit results available")
         return {
+            "value": 0.0,
             "uncertainty": 0.0,
+            "parameter": parameter,
             "method": "none",
             "confidence_level": confidence_level,
             "additional_info": "No fit performed",
@@ -66,48 +68,53 @@ def calculate_parameter_uncertainty(
 
     if parameter not in observation.free_parameters:
         logging.warning(f"Parameter '{parameter}' was not a free parameter in fit")
+        fitted_value = observation.best_parameters.get(parameter, 0.0) / scale_factor
         return {
+            "value": fitted_value,
             "uncertainty": 0.0,
+            "parameter": parameter,
             "method": "none",
             "confidence_level": confidence_level,
             "additional_info": f"{parameter} was fixed",
         }
 
-    # Auto-select method based on minimizer
+    # Auto-select method
     if method == "auto":
         if observation.minimizer == "differential-evolution" and hasattr(
             observation.fit_results, "population"
         ):
             method = "population"
         else:
-            method = "hessian"  # Fast default for other minimizers
+            method = "hessian"
 
-    # Population-based (differential evolution)
+    # Get fitted value
+    fitted_value = observation.best_parameters[parameter] / scale_factor
+
+    # Call method
     if method == "population":
-        return _uncertainty_from_population(
+        result = _uncertainty_from_population(
             observation, parameter, scale_factor, confidence_level
         )
-
-    # Hessian-based (all minimizers)
     elif method == "hessian":
-        return _uncertainty_from_hessian(
+        result = _uncertainty_from_hessian(
             observation, parameter, scale_factor, confidence_level
         )
-
-    # Profile likelihood (all minimizers)
     elif method == "profile":
-        return _uncertainty_from_profile(
+        result = _uncertainty_from_profile(
             observation, parameter, scale_factor, confidence_level, **kwargs
         )
-
-    # Bootstrap (all minimizers)
     elif method == "bootstrap":
-        return _uncertainty_from_bootstrap(
+        result = _uncertainty_from_bootstrap(
             observation, parameter, scale_factor, confidence_level, n_bootstrap
         )
-
     else:
-        raise ValueError(f"Unknown method: {method}")
+        raise ValueError(f"Unknown uncertainty method: {method}")
+
+    # Add missing keys
+    result["value"] = fitted_value
+    result["parameter"] = parameter
+
+    return result
 
 
 def _uncertainty_from_population(
