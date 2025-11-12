@@ -557,7 +557,9 @@ def gradient_field(
         # Bidirectional blur along gradient
         height, width = gray.shape
         blurred_mag = np.zeros_like(grad_mag_init)
-        y_coords, x_coords = np.meshgrid(np.arange(height), np.arange(width), indexing="ij")
+        y_coords, x_coords = np.meshgrid(
+            np.arange(height), np.arange(width), indexing="ij"
+        )
 
         total_weight = 0.0
         for step in range(-directional_smoothing, directional_smoothing + 1):

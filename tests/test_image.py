@@ -816,7 +816,10 @@ class TestGradientField:
         image[:, 25:, :] = 255  # Vertical edge at x=25
 
         field = gradient_field(
-            image, kernel_smoothing=1.0, directional_smoothing=10, directional_decay_rate=0.1
+            image,
+            kernel_smoothing=1.0,
+            directional_smoothing=10,
+            directional_decay_rate=0.1,
         )
 
         # Check all required keys are present
@@ -871,7 +874,10 @@ class TestGradientField:
         image[15:, :] = 200  # Horizontal edge at y=15
 
         field = gradient_field(
-            image, kernel_smoothing=2.0, directional_smoothing=15, directional_decay_rate=0.2
+            image,
+            kernel_smoothing=2.0,
+            directional_smoothing=15,
+            directional_decay_rate=0.2,
         )
 
         # Should work with grayscale input
@@ -887,7 +893,10 @@ class TestGradientField:
         image = np.random.rand(40, 40, 3) * 255
 
         field = gradient_field(
-            image, kernel_smoothing=0.0, directional_smoothing=5, directional_decay_rate=0.3
+            image,
+            kernel_smoothing=0.0,
+            directional_smoothing=5,
+            directional_decay_rate=0.3,
         )
 
         assert field["grad_mag"].shape == (40, 40)
@@ -944,7 +953,10 @@ class TestGradientField:
         image[:, 30:50, :] = 150  # Vertical stripe (overlapping)
 
         field = gradient_field(
-            image, kernel_smoothing=1.0, directional_smoothing=12, directional_decay_rate=0.15
+            image,
+            kernel_smoothing=1.0,
+            directional_smoothing=12,
+            directional_decay_rate=0.15,
         )
 
         # Should have strong gradients at edges
