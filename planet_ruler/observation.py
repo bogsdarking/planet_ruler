@@ -204,13 +204,22 @@ class LimbObservation(PlanetObservation):
         self,
         image_filepath: str,
         fit_config,
-        limb_detection: Literal["manual", "gradient-break", "gradient-field", "segmentation"] = "manual",
-        minimizer: Literal["differential-evolution", "dual-annealing", "basinhopping"] = "differential-evolution",
+        limb_detection: Literal[
+            "manual", "gradient-break", "gradient-field", "segmentation"
+        ] = "manual",
+        minimizer: Literal[
+            "differential-evolution", "dual-annealing", "basinhopping"
+        ] = "differential-evolution",
     ):
         super().__init__(image_filepath)
 
         # Runtime validation (Literal type hints alone don't enforce at runtime)
-        valid_limb_methods = ["manual", "gradient-break", "gradient-field", "segmentation"]
+        valid_limb_methods = [
+            "manual",
+            "gradient-break",
+            "gradient-field",
+            "segmentation",
+        ]
         assert limb_detection in valid_limb_methods, (
             f"Invalid limb_detection method '{limb_detection}'. "
             f"Must be one of: {valid_limb_methods}"
@@ -218,8 +227,7 @@ class LimbObservation(PlanetObservation):
 
         valid_minimizers = ["differential-evolution", "dual-annealing", "basinhopping"]
         assert minimizer in valid_minimizers, (
-            f"Invalid minimizer '{minimizer}'. "
-            f"Must be one of: {valid_minimizers}"
+            f"Invalid minimizer '{minimizer}'. " f"Must be one of: {valid_minimizers}"
         )
 
         self.free_parameters = None
@@ -480,7 +488,9 @@ class LimbObservation(PlanetObservation):
 
     def detect_limb(
         self,
-        detection_method: Optional[Literal["manual", "gradient-break", "gradient-field", "segmentation"]] = None,
+        detection_method: Optional[
+            Literal["manual", "gradient-break", "gradient-field", "segmentation"]
+        ] = None,
         log: bool = False,
         y_min: int = 0,
         y_max: int = -1,
@@ -496,7 +506,7 @@ class LimbObservation(PlanetObservation):
 
         Args:
             detection_method (literal):
-                Detection method. Must be one of 
+                Detection method. Must be one of
                     - manual
                     - gradient-break
                     - gradient-field
@@ -550,7 +560,7 @@ class LimbObservation(PlanetObservation):
                 # No limb was annotated/insufficient points
                 logging.warning("No limb detected from manual annotation")
             return self
-        
+
         elif self.limb_detection == "gradient-field":
             print("Skipping detection step (not needed for gradient-field method)")
 
@@ -583,7 +593,9 @@ class LimbObservation(PlanetObservation):
         directional_smoothing: int = 50,
         directional_decay_rate: float = 0.10,
         prefer_direction: Optional[Literal["up", "down"]] = None,
-        minimizer: Literal["differential-evolution", "dual-annealing", "basinhopping"] = "differential-evolution",
+        minimizer: Literal[
+            "differential-evolution", "dual-annealing", "basinhopping"
+        ] = "differential-evolution",
         minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         warm_start: bool = False,
@@ -820,7 +832,9 @@ class LimbObservation(PlanetObservation):
         directional_smoothing: int,
         directional_decay_rate: float,
         prefer_direction: Optional[Literal["up", "down"]] = None,
-        minimizer: Optional[Literal["differential-evolution", "dual-annealing", "basinhopping"]] = None,
+        minimizer: Optional[
+            Literal["differential-evolution", "dual-annealing", "basinhopping"]
+        ] = None,
         minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         dashboard: bool = False,
@@ -993,7 +1007,9 @@ class LimbObservation(PlanetObservation):
 
             # Scale gradient parameters
             scaled_kernel_smoothing = max(0.5, kernel_smoothing / downsample)
-            scaled_directional_smoothing = max(5, int(directional_smoothing / downsample))
+            scaled_directional_smoothing = max(
+                5, int(directional_smoothing / downsample)
+            )
 
             if verbose:
                 print(f"Gradient params:")
@@ -1001,7 +1017,9 @@ class LimbObservation(PlanetObservation):
                     print(
                         f"  kernel_smoothing: {kernel_smoothing:.1f} → {scaled_kernel_smoothing:.1f}"
                     )
-                    print(f"  directional_smoothing: {directional_smoothing} → {scaled_directional_smoothing}")
+                    print(
+                        f"  directional_smoothing: {directional_smoothing} → {scaled_directional_smoothing}"
+                    )
                 else:
                     print(f"  kernel_smoothing: {scaled_kernel_smoothing:.1f}")
                     print(f"  directional_smoothing: {scaled_directional_smoothing}")
@@ -1113,7 +1131,9 @@ class LimbObservation(PlanetObservation):
         directional_smoothing: int,
         directional_decay_rate: float,
         prefer_direction: Optional[Literal["up", "down"]] = None,
-        minimizer: Literal["differential-evolution", "dual-annealing", "basinhopping"] = "differential-evolution",
+        minimizer: Literal[
+            "differential-evolution", "dual-annealing", "basinhopping"
+        ] = "differential-evolution",
         minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         dashboard: bool = False,

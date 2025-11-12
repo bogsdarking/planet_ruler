@@ -507,7 +507,10 @@ def compare_blur_methods(image, y_pixels=None):
     from planet_ruler.image import gradient_field
 
     grad_data = gradient_field(
-        image, directional_smoothing=30, directional_decay_rate=0.15, kernel_smoothing=2.0
+        image,
+        directional_smoothing=30,
+        directional_decay_rate=0.15,
+        kernel_smoothing=2.0,
     )
     mag_directional = grad_data["grad_mag"]
     angle_dir = grad_data["grad_angle"]
