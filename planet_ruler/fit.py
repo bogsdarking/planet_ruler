@@ -65,10 +65,10 @@ class CostFunction:
         init_parameter_values (dict): Initial values for named parameters.
         loss_function (str): Type of loss function, must be one of
                             ['l2', 'l1', 'log-l1', 'gradient_field'].
-        gradient_smoothing: For gradient_field - initial blur for gradient direction
+        kernel_smoothing: For gradient_field - initial blur for gradient direction
             estimation. Makes the gradient field smoother for directional sampling.
-        streak_length: For gradient_field - sampling distance along gradients
-        decay_rate: For gradient_field - exponential decay for samples
+        directional_smoothing: For gradient_field - sampling distance along gradients
+        directional_decay_rate: For gradient_field - exponential decay for samples
         prefer_direction: For gradient_field - prefer 'up' or 'down' gradients
             where 'up' means dark-sky/bright-planet and v.v.
             (None = no preference, choose best gradient regardless of direction)
@@ -81,9 +81,9 @@ class CostFunction:
         free_parameters: list,
         init_parameter_values,
         loss_function="l2",
-        gradient_smoothing=5.0,
-        streak_length=30,
-        decay_rate=0.15,
+        kernel_smoothing=5.0,
+        directional_smoothing=30,
+        directional_decay_rate=0.15,
         prefer_direction: Optional[str] = None,
     ):
         self.function = function
@@ -108,9 +108,9 @@ class CostFunction:
             # Use the new standalone gradient_field function
             grad_data = gradient_field(
                 target,
-                gradient_smoothing=gradient_smoothing,
-                streak_length=streak_length,
-                decay_rate=decay_rate,
+                kernel_smoothing=kernel_smoothing,
+                directional_smoothing=directional_smoothing,
+                directional_decay_rate=directional_decay_rate,
             )
 
             # Store the gradient field components as instance variables

@@ -816,7 +816,7 @@ class TestGradientField:
         image[:, 25:, :] = 255  # Vertical edge at x=25
 
         field = gradient_field(
-            image, gradient_smoothing=1.0, streak_length=10, decay_rate=0.1
+            image, kernel_smoothing=1.0, directional_smoothing=10, directional_decay_rate=0.1
         )
 
         # Check all required keys are present
@@ -871,7 +871,7 @@ class TestGradientField:
         image[15:, :] = 200  # Horizontal edge at y=15
 
         field = gradient_field(
-            image, gradient_smoothing=2.0, streak_length=15, decay_rate=0.2
+            image, kernel_smoothing=2.0, directional_smoothing=15, directional_decay_rate=0.2
         )
 
         # Should work with grayscale input
@@ -887,7 +887,7 @@ class TestGradientField:
         image = np.random.rand(40, 40, 3) * 255
 
         field = gradient_field(
-            image, gradient_smoothing=0.0, streak_length=5, decay_rate=0.3
+            image, kernel_smoothing=0.0, directional_smoothing=5, directional_decay_rate=0.3
         )
 
         assert field["grad_mag"].shape == (40, 40)
@@ -900,13 +900,13 @@ class TestGradientField:
 
         # Test different streak lengths
         for streak_length in [1, 10, 25]:
-            field = gradient_field(image, streak_length=streak_length)
+            field = gradient_field(image, directional_smoothing=streak_length)
             assert field["grad_mag"].shape == (35, 35)
             assert np.all(np.isfinite(field["grad_mag"]))
 
         # Test different decay rates
         for decay_rate in [0.05, 0.2, 0.5]:
-            field = gradient_field(image, decay_rate=decay_rate)
+            field = gradient_field(image, directional_decay_rate=decay_rate)
             assert field["grad_mag"].shape == (35, 35)
             assert np.all(np.isfinite(field["grad_mag"]))
 
@@ -917,7 +917,7 @@ class TestGradientField:
         for i in range(20):
             image[i, :, :] = i * 10  # Linear vertical gradient
 
-        field = gradient_field(image, gradient_smoothing=0.5, streak_length=5)
+        field = gradient_field(image, kernel_smoothing=0.5, directional_smoothing=5)
 
         # Sin^2 + Cos^2 should be close to 1 (within numerical precision)
         sin_cos_sum = field["grad_sin"] ** 2 + field["grad_cos"] ** 2
@@ -944,7 +944,7 @@ class TestGradientField:
         image[:, 30:50, :] = 150  # Vertical stripe (overlapping)
 
         field = gradient_field(
-            image, gradient_smoothing=1.0, streak_length=12, decay_rate=0.15
+            image, kernel_smoothing=1.0, directional_smoothing=12, directional_decay_rate=0.15
         )
 
         # Should have strong gradients at edges
