@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Fit Dashboard -- an easy-to-read interface that shows status, warnings, hints and recent output
+- New tutorial notebook for measuring your own photos: see notebooks/tutorials/measure_your_planet.ipynb
+
+### Changed
+
+- Renamed gradient smoothing parameters to be more distinct
+- Reworked tutorials to move sequentially through demo, pre-configured, auto-configured, then advanced fits.
 
 ## [1.4.0] - 2024-11-03
 
