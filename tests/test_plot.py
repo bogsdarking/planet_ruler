@@ -601,7 +601,10 @@ class TestPlotGradientFieldAtLimb:
 
         # Verify gradient field computation
         mock_gradient_field.assert_called_once_with(
-            ANY, gradient_smoothing=5.0, streak_length=30, decay_rate=0.15
+            ANY,
+            kernel_smoothing=5.0,
+            directional_smoothing=30,
+            directional_decay_rate=0.15,
         )
 
         # Verify matplotlib calls
@@ -635,16 +638,19 @@ class TestPlotGradientFieldAtLimb:
         plot_gradient_field_at_limb(
             y_pixels,
             image,
-            gradient_smoothing=3.0,
-            streak_length=20,
-            decay_rate=0.1,
+            kernel_smoothing=3.0,
+            directional_smoothing=20,
+            directional_decay_rate=0.1,
             sample_spacing=25,
             arrow_scale=10,
         )
 
         # Verify custom parameters passed to gradient_field
         mock_gradient_field.assert_called_once_with(
-            ANY, gradient_smoothing=3.0, streak_length=20, decay_rate=0.1
+            ANY,
+            kernel_smoothing=3.0,
+            directional_smoothing=20,
+            directional_decay_rate=0.1,
         )
 
     @patch("planet_ruler.image.gradient_field")
@@ -709,7 +715,10 @@ class TestCompareBlurMethods:
 
         # Verify gradient field call
         mock_gradient_field.assert_called_once_with(
-            ANY, streak_length=30, decay_rate=0.15, gradient_smoothing=2.0
+            ANY,
+            directional_smoothing=30,
+            directional_decay_rate=0.15,
+            kernel_smoothing=2.0,
         )
 
         # Verify all subplots were used
@@ -809,7 +818,10 @@ class TestCompareGradientFields:
 
         # Verify gradient field computation
         mock_gradient_field.assert_called_once_with(
-            ANY, gradient_smoothing=5.0, streak_length=30, decay_rate=0.15
+            ANY,
+            kernel_smoothing=5.0,
+            directional_smoothing=30,
+            directional_decay_rate=0.15,
         )
 
         # Verify matplotlib setup
@@ -858,14 +870,17 @@ class TestCompareGradientFields:
             y_pixels_list,
             labels,
             image,
-            gradient_smoothing=3.0,
-            streak_length=25,
-            decay_rate=0.2,
+            kernel_smoothing=3.0,
+            directional_smoothing=25,
+            directional_decay_rate=0.2,
         )
 
         # Verify custom parameters
         mock_gradient_field.assert_called_once_with(
-            ANY, gradient_smoothing=3.0, streak_length=25, decay_rate=0.2
+            ANY,
+            kernel_smoothing=3.0,
+            directional_smoothing=25,
+            directional_decay_rate=0.2,
         )
 
         # Single limb should create single subplot
