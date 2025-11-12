@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from __future__ import annotations
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Literal
 from scipy.optimize import differential_evolution
 import yaml
 import numpy as np
@@ -41,6 +41,7 @@ from planet_ruler.annotate import TkLimbAnnotator
 from planet_ruler.validation import validate_limb_config
 from planet_ruler.fit import CostFunction, unpack_parameters
 from planet_ruler.geometry import limb_arc
+from planet_ruler.dashboard import FitDashboard
 
 
 # ============================================================================
@@ -201,12 +202,33 @@ class LimbObservation(PlanetObservation):
 
     def __init__(
         self,
-        image_filepath,
+        image_filepath: str,
         fit_config,
-        limb_detection="manual",
-        minimizer="differential-evolution",
+        limb_detection: Literal[
+            "manual", "gradient-break", "gradient-field", "segmentation"
+        ] = "manual",
+        minimizer: Literal[
+            "differential-evolution", "dual-annealing", "basinhopping"
+        ] = "differential-evolution",
     ):
         super().__init__(image_filepath)
+
+        # Runtime validation (Literal type hints alone don't enforce at runtime)
+        valid_limb_methods = [
+            "manual",
+            "gradient-break",
+            "gradient-field",
+            "segmentation",
+        ]
+        assert limb_detection in valid_limb_methods, (
+            f"Invalid limb_detection method '{limb_detection}'. "
+            f"Must be one of: {valid_limb_methods}"
+        )
+
+        valid_minimizers = ["differential-evolution", "dual-annealing", "basinhopping"]
+        assert minimizer in valid_minimizers, (
+            f"Invalid minimizer '{minimizer}'. " f"Must be one of: {valid_minimizers}"
+        )
 
         self.free_parameters = None
         self.init_parameter_values = None
@@ -215,10 +237,8 @@ class LimbObservation(PlanetObservation):
         )
         self.parameter_limits = None
         self.load_fit_config(fit_config)
-        assert limb_detection in ["gradient-break", "segmentation", "manual"]
         self.limb_detection = limb_detection
         self._segmenter = None
-        assert minimizer in ["differential-evolution", "dual-annealing", "basinhopping"]
         self.minimizer = minimizer
 
         self._raw_limb = None
@@ -321,7 +341,7 @@ class LimbObservation(PlanetObservation):
     def parameter_uncertainty(
         self,
         parameter: str,
-        method: str = "auto",
+        method: Literal["auto", "hessian", "profile", "bootstrap"] = "auto",
         scale_factor: float = 1.0,
         confidence_level: float = 0.68,
         **kwargs,
@@ -468,6 +488,9 @@ class LimbObservation(PlanetObservation):
 
     def detect_limb(
         self,
+        detection_method: Optional[
+            Literal["manual", "gradient-break", "gradient-field", "segmentation"]
+        ] = None,
         log: bool = False,
         y_min: int = 0,
         y_max: int = -1,
@@ -482,8 +505,15 @@ class LimbObservation(PlanetObservation):
         Kwargs are passed to the method.
 
         Args:
+            detection_method (literal):
+                Detection method. Must be one of
+                    - manual
+                    - gradient-break
+                    - gradient-field
+                    - segmentation
+                Default (None) uses the class attribute self.limb_detection.
             log (bool): Use the log(gradient). Sometimes good for
-            smoothing.
+                smoothing.
             y_min (int): Minimum y-position to consider.
             y_max (int): Maximum y-position to consider.
             window_length (int): Width of window to apply smoothing
@@ -496,6 +526,9 @@ class LimbObservation(PlanetObservation):
                 of ['segment-anything'].
 
         """
+        if detection_method is not None:
+            self.limb_detection = detection_method
+
         if self.limb_detection == "gradient-break":
             limb = gradient_break(
                 self.image,
@@ -528,6 +561,9 @@ class LimbObservation(PlanetObservation):
                 logging.warning("No limb detected from manual annotation")
             return self
 
+        elif self.limb_detection == "gradient-field":
+            print("Skipping detection step (not needed for gradient-field method)")
+
         # For non-manual methods, register the limb
         self.register_limb(limb)
         return self
@@ -546,19 +582,26 @@ class LimbObservation(PlanetObservation):
 
     def fit_limb(
         self,
-        loss_function: str = "l2",
+        loss_function: Literal["l2", "l1", "log-l1", "gradient_field"] = "l2",
         max_iter: int = 15000,
-        resolution_stages: Optional[List[int] | str] = None,
+        resolution_stages: Optional[List[int] | Literal["auto"]] = None,
         max_iter_per_stage: Optional[List[int]] = None,
         n_jobs: int = 1,
         seed: int = 0,
         image_smoothing: Optional[float] = None,
-        gradient_smoothing: float = 5.0,
-        streak_length: int = 50,
-        decay_rate: float = 0.10,
-        minimizer_preset: str = "balanced",
+        kernel_smoothing: float = 5.0,
+        directional_smoothing: int = 50,
+        directional_decay_rate: float = 0.10,
+        prefer_direction: Optional[Literal["up", "down"]] = None,
+        minimizer: Literal[
+            "differential-evolution", "dual-annealing", "basinhopping"
+        ] = "differential-evolution",
+        minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         warm_start: bool = False,
+        dashboard: bool = False,
+        dashboard_kwargs: Optional[Dict] = None,
+        target_planet: str = "earth",
         verbose: bool = False,
     ) -> "LimbObservation":
         """
@@ -583,11 +626,16 @@ class LimbObservation(PlanetObservation):
             seed: Random seed for reproducibility
             image_smoothing: For gradient_field - Gaussian blur sigma applied to image
                 before gradient computation. Removes high-frequency artifacts (crater rims,
-                striations) that could mislead optimization. Different from gradient_smoothing.
-            gradient_smoothing: For gradient_field - initial blur for gradient direction
+                striations) that could mislead optimization. Different from kernel_smoothing.
+            kernel_smoothing: For gradient_field - initial blur for gradient direction
                 estimation. Makes the gradient field smoother for directional sampling.
-            streak_length: For gradient_field - sampling distance along gradients
-            decay_rate: For gradient_field - exponential decay for samples
+            directional_smoothing: For gradient_field - sampling distance along gradients
+            directional_decay_rate: For gradient_field - exponential decay for samples
+            prefer_direction: For gradient_field - prefer 'up' or 'down' gradients
+                where 'up' means dark-sky/bright-planet and v.v.
+                (None = no preference, choose best gradient regardless of direction)
+            minimizer (str): Choice of minimizer. Supports 'differential-evolution',
+                'dual-annealing', and 'basinhopping'.
             minimizer_preset: Optimization strategy
                 - 'fast': Quick convergence, may miss global minimum
                 - 'balanced': Good trade-off (default)
@@ -599,6 +647,15 @@ class LimbObservation(PlanetObservation):
                 Note: Multi-resolution stages always warm-start from previous
                 stages automatically. This parameter is for warm-starting across
                 separate fit_limb() calls.
+            dashboard: Show live progress dashboard during optimization
+            dashboard_kwargs: Additional kwargs for FitDashboard
+                - output_capture: OutputCapture instance for print/log display
+                - show_output: Show output section (default True if capture provided)
+                - max_output_lines: Number of output lines to show (default 3)
+                - min_refresh_delay: Fixed refresh delay (0.0 for adaptive, default)
+                - refresh_frequency: Refresh every N iterations (default 1)
+            target_planet: Reference planet for dashboard comparisons
+                ('earth', 'mars', 'jupiter', 'saturn', 'moon', 'pluto')
             verbose: Print detailed progress
 
         Returns:
@@ -606,7 +663,7 @@ class LimbObservation(PlanetObservation):
 
         Examples:
             # Simple single-resolution fit
-            obs.fit_limb(loss_function='l1')
+            obs.fit_limb()
 
             # Auto multi-resolution for gradient field
             obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
@@ -616,7 +673,7 @@ class LimbObservation(PlanetObservation):
                 loss_function='gradient_field',
                 resolution_stages='auto',
                 image_smoothing=2.0,  # Remove crater rims, striations
-                gradient_smoothing=5.0  # Smooth gradient field
+                kernel_smoothing=5.0  # Smooth gradient field
             )
 
             # Custom stages with robust optimization
@@ -632,11 +689,25 @@ class LimbObservation(PlanetObservation):
                 minimizer_kwargs={'popsize': 25, 'atol': 0.5}
             )
 
+            # Dashboard with output capture
+            from planet_ruler.dashboard import OutputCapture
+            capture = OutputCapture()
+            with capture:
+                obs.fit_limb(
+                    loss_function='gradient_field',
+                    dashboard=True,
+                    dashboard_kwargs={'output_capture': capture}
+                )
+
             # Iterative refinement with warm start
             obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
             obs.fit_limb(loss_function='gradient_field', warm_start=True,
                          minimizer_preset='robust')  # Refine with more thorough search
         """
+
+        if minimizer is not None:
+            self.minimizer = minimizer
+        print(f"Using minimizer: {self.minimizer}")
 
         # ====================================================================
         # STEP 0: Warm start handling - protect original values
@@ -708,11 +779,15 @@ class LimbObservation(PlanetObservation):
                     max_iter=max_iter,
                     n_jobs=n_jobs,
                     seed=seed,
-                    gradient_smoothing=gradient_smoothing,
-                    streak_length=streak_length,
-                    decay_rate=decay_rate,
+                    kernel_smoothing=kernel_smoothing,
+                    directional_smoothing=directional_smoothing,
+                    directional_decay_rate=directional_decay_rate,
+                    prefer_direction=prefer_direction,
                     minimizer_preset=minimizer_preset,
                     minimizer_kwargs=minimizer_kwargs,
+                    dashboard=dashboard,
+                    dashboard_kwargs=dashboard_kwargs,
+                    target_planet=target_planet,
                     verbose=verbose,
                 )
             else:
@@ -723,11 +798,15 @@ class LimbObservation(PlanetObservation):
                     max_iter_per_stage=max_iter_per_stage,
                     n_jobs=n_jobs,
                     seed=seed,
-                    gradient_smoothing=gradient_smoothing,
-                    streak_length=streak_length,
-                    decay_rate=decay_rate,
+                    kernel_smoothing=kernel_smoothing,
+                    directional_smoothing=directional_smoothing,
+                    directional_decay_rate=directional_decay_rate,
+                    prefer_direction=prefer_direction,
                     minimizer_preset=minimizer_preset,
                     minimizer_kwargs=minimizer_kwargs,
+                    dashboard=dashboard,
+                    dashboard_kwargs=dashboard_kwargs,
+                    target_planet=target_planet,
                     verbose=verbose,
                 )
         finally:
@@ -749,18 +828,29 @@ class LimbObservation(PlanetObservation):
         max_iter_per_stage: Optional[List[int]],
         n_jobs: int,
         seed: int,
-        gradient_smoothing: float,
-        streak_length: int,
-        decay_rate: float,
-        minimizer_preset: str,
-        minimizer_kwargs: Optional[Dict],
-        verbose: bool,
+        kernel_smoothing: float,
+        directional_smoothing: int,
+        directional_decay_rate: float,
+        prefer_direction: Optional[Literal["up", "down"]] = None,
+        minimizer: Optional[
+            Literal["differential-evolution", "dual-annealing", "basinhopping"]
+        ] = None,
+        minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
+        minimizer_kwargs: Optional[Dict] = None,
+        dashboard: bool = False,
+        dashboard_kwargs: Optional[Dict] = None,
+        target_planet: str = "earth",
+        verbose: bool = False,
     ) -> "LimbObservation":
         """
         Multi-resolution optimization (internal method).
 
         Note: self.image may be the smoothed version if image_smoothing was applied.
         """
+        if minimizer is not None:
+            self.minimizer = minimizer
+            print(f"Using minimizer: {self.minimizer}")
+
         # Auto-generate stages
         if resolution_stages == "auto":
             min_dim = min(self.image.shape[:2])
@@ -829,20 +919,55 @@ class LimbObservation(PlanetObservation):
             free_parameters=self.free_parameters,
             init_parameter_values=target_res_params,
             loss_function=loss_function,
-            gradient_smoothing=gradient_smoothing,
-            streak_length=streak_length,
-            decay_rate=decay_rate,
+            kernel_smoothing=kernel_smoothing,
+            directional_smoothing=directional_smoothing,
+            directional_decay_rate=directional_decay_rate,
+            prefer_direction=prefer_direction,
         )
+
+        # Initialize dashboard for multi-stage if requested
+        dash = None
+        if dashboard:
+            # Create dashboard with multi-stage awareness
+            total_iters = sum(max_iter_per_stage)
+            # Determine initial resolution label
+            first_downsample = resolution_stages[0]
+            if first_downsample == 1:
+                initial_resolution_label = "full"
+            else:
+                initial_resolution_label = f"1/{first_downsample}x"
+
+            dash = FitDashboard(
+                initial_params=original_params,
+                target_planet=target_planet,
+                max_iter=max_iter_per_stage[0],  # First stage iterations
+                free_params=self.free_parameters,
+                total_stages=len(resolution_stages),
+                cumulative_max_iter=total_iters,
+                **(dashboard_kwargs or {}),
+            )
+            # Set initial resolution label
+            dash.resolution_label = initial_resolution_label
 
         # Loop through resolution stages
         for stage_idx, (downsample, stage_iter) in enumerate(
             zip(resolution_stages, max_iter_per_stage)
         ):
+            # Create resolution label for dashboard
+            if downsample == 1:
+                resolution_label = "full"
+            else:
+                resolution_label = f"1/{downsample}x"
+
+            # Start new stage in dashboard (except first stage which starts automatically)
+            if dash is not None and stage_idx > 0:
+                dash.start_stage(stage_idx + 1, resolution_label, stage_iter)
+
             if verbose:
                 print(f"\n{'─'*60}")
                 print(
                     f"Stage {stage_idx + 1}/{len(resolution_stages)}: "
-                    f"1/{downsample}x ({stage_iter} iter)"
+                    f"{resolution_label} ({stage_iter} iter)"
                 )
                 print(f"{'─'*60}")
 
@@ -881,19 +1006,23 @@ class LimbObservation(PlanetObservation):
                         self.init_parameter_values[param] = self.best_parameters[param]
 
             # Scale gradient parameters
-            scaled_gradient_smoothing = max(0.5, gradient_smoothing / downsample)
-            scaled_streak_length = max(5, int(streak_length / downsample))
+            scaled_kernel_smoothing = max(0.5, kernel_smoothing / downsample)
+            scaled_directional_smoothing = max(
+                5, int(directional_smoothing / downsample)
+            )
 
             if verbose:
                 print(f"Gradient params:")
                 if downsample > 1:
                     print(
-                        f"  smoothing: {gradient_smoothing:.1f} → {scaled_gradient_smoothing:.1f}"
+                        f"  kernel_smoothing: {kernel_smoothing:.1f} → {scaled_kernel_smoothing:.1f}"
                     )
-                    print(f"  streak_length: {streak_length} → {scaled_streak_length}")
+                    print(
+                        f"  directional_smoothing: {directional_smoothing} → {scaled_directional_smoothing}"
+                    )
                 else:
-                    print(f"  smoothing: {scaled_gradient_smoothing:.1f}")
-                    print(f"  streak_length: {scaled_streak_length}")
+                    print(f"  kernel_smoothing: {scaled_kernel_smoothing:.1f}")
+                    print(f"  directional_smoothing: {scaled_directional_smoothing}")
 
             # Fit at this resolution
             if verbose:
@@ -906,12 +1035,17 @@ class LimbObservation(PlanetObservation):
                 max_iter=stage_iter,
                 n_jobs=n_jobs,
                 seed=seed,
-                gradient_smoothing=scaled_gradient_smoothing,
-                streak_length=scaled_streak_length,
-                decay_rate=decay_rate,
+                kernel_smoothing=scaled_kernel_smoothing,
+                directional_smoothing=scaled_directional_smoothing,
+                directional_decay_rate=directional_decay_rate,
+                prefer_direction=prefer_direction,
                 minimizer_preset=minimizer_preset,
                 minimizer_kwargs=minimizer_kwargs,
+                dashboard=dashboard,  # Boolean flag
+                dashboard_kwargs=dashboard_kwargs,
+                target_planet=target_planet,
                 verbose=verbose,
+                dashboard_obj=dash,  # Pass dashboard object for multi-stage
             )
 
             if verbose and hasattr(self, "best_parameters"):
@@ -962,9 +1096,10 @@ class LimbObservation(PlanetObservation):
                 free_parameters=self.free_parameters,
                 init_parameter_values=full_res_params,
                 loss_function=loss_function,
-                gradient_smoothing=gradient_smoothing,
-                streak_length=streak_length,
-                decay_rate=decay_rate,
+                kernel_smoothing=kernel_smoothing,
+                directional_smoothing=directional_smoothing,
+                directional_decay_rate=directional_decay_rate,
+                prefer_direction=prefer_direction,
             )
             self.features["fitted_limb"] = self.cost_function.evaluate(
                 self.best_parameters
@@ -975,6 +1110,15 @@ class LimbObservation(PlanetObservation):
             print("Optimization Complete!")
             print(f"{'='*60}\n")
 
+        # Finalize dashboard after all stages complete
+        if dash is not None:
+            success = (
+                self.fit_results.success
+                if hasattr(self.fit_results, "success")
+                else True
+            )
+            dash.finalize(success=success)
+
         return self
 
     def _fit_single_resolution(
@@ -983,18 +1127,29 @@ class LimbObservation(PlanetObservation):
         max_iter: int,
         n_jobs: int,
         seed: int,
-        gradient_smoothing: float,
-        streak_length: int,
-        decay_rate: float,
-        minimizer_preset: str,
-        minimizer_kwargs: Optional[Dict],
-        verbose: bool,
+        kernel_smoothing: float,
+        directional_smoothing: int,
+        directional_decay_rate: float,
+        prefer_direction: Optional[Literal["up", "down"]] = None,
+        minimizer: Literal[
+            "differential-evolution", "dual-annealing", "basinhopping"
+        ] = "differential-evolution",
+        minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
+        minimizer_kwargs: Optional[Dict] = None,
+        dashboard: bool = False,
+        dashboard_kwargs: Optional[Dict] = None,
+        target_planet: str = "earth",
+        verbose: bool = False,
+        dashboard_obj: Optional["FitDashboard"] = None,
     ) -> "LimbObservation":
         """
         Internal method: single-resolution optimization.
 
         Note: self.image may be the smoothed version if image_smoothing was applied.
         """
+        if minimizer is not None:
+            self.minimizer = minimizer
+
         # Setup parameters
         # x0, y0 always inferred from image center (not free parameters)
         inferred_parameters = {
@@ -1011,8 +1166,8 @@ class LimbObservation(PlanetObservation):
             target = self.image
             if verbose:
                 print(
-                    f"Gradient field: smoothing={gradient_smoothing}, "
-                    f"streak={streak_length}, decay={decay_rate}"
+                    f"Gradient field: kernel_smoothing={kernel_smoothing}, "
+                    f"directional_smoothing={directional_smoothing}, decay={directional_decay_rate}"
                 )
         else:
             if "limb" not in self.features:
@@ -1029,10 +1184,50 @@ class LimbObservation(PlanetObservation):
             free_parameters=self.free_parameters,
             init_parameter_values=working_parameters,
             loss_function=loss_function,
-            gradient_smoothing=gradient_smoothing,
-            streak_length=streak_length,
-            decay_rate=decay_rate,
+            kernel_smoothing=kernel_smoothing,
+            directional_smoothing=directional_smoothing,
+            directional_decay_rate=directional_decay_rate,
+            prefer_direction=prefer_direction,
         )
+
+        # Initialize dashboard if requested
+        dash = dashboard_obj  # Use passed dashboard if provided (multi-stage)
+        if dash is None and dashboard:
+            # Create new dashboard for single-stage optimization
+            dash = FitDashboard(
+                initial_params=working_parameters,
+                target_planet=target_planet,
+                max_iter=max_iter,
+                free_params=self.free_parameters,
+                **(dashboard_kwargs or {}),
+            )
+
+        # Create callback for dashboard updates
+        def dashboard_callback(xk, *args, **kwargs):
+            """
+            Universal callback for all minimizers.
+
+            Signatures vary by minimizer:
+            - differential_evolution: callback(xk, convergence=None)
+            - dual_annealing: callback(x, f, context)
+            - basinhopping: callback(x, f, accept)
+            """
+            if dash is not None:
+                # Unpack parameters
+                current_params = unpack_parameters(xk, self.free_parameters)
+                full_params = working_parameters.copy()
+                full_params.update(current_params)
+
+                # Calculate current loss
+                # For dual_annealing and basinhopping, loss is passed as second arg
+                if len(args) > 0 and isinstance(args[0], (int, float)):
+                    loss = args[0]
+                else:
+                    loss = self.cost_function.cost(xk)
+
+                # Update dashboard
+                dash.update(full_params, loss)
+            return False  # Don't stop optimization
 
         # Get minimizer configuration
         if self.minimizer not in MINIMIZER_PRESETS:
@@ -1064,6 +1259,7 @@ class LimbObservation(PlanetObservation):
                 workers=n_jobs,
                 maxiter=max_iter,
                 updating=updating,
+                callback=dashboard_callback if dashboard else None,
                 disp=verbose,
                 seed=seed,
                 **config,  # Apply preset + overrides
@@ -1077,6 +1273,7 @@ class LimbObservation(PlanetObservation):
                 bounds=bounds,
                 x0=x0,
                 maxiter=max_iter,
+                callback=dashboard_callback if dashboard else None,
                 seed=seed,
                 **config,
             )
@@ -1104,6 +1301,7 @@ class LimbObservation(PlanetObservation):
                 x0,
                 minimizer_kwargs=minimizer_kwargs_local,
                 accept_test=BoundsChecker(bounds),
+                callback=dashboard_callback if dashboard else None,
                 interval=20,
                 disp=verbose,
                 seed=seed,
@@ -1116,6 +1314,16 @@ class LimbObservation(PlanetObservation):
         self.best_parameters = working_parameters
         self.features["fitted_limb"] = self.cost_function.evaluate(self.best_parameters)
         self._plot_functions["fitted_limb"] = plot_limb
+
+        # Finalize dashboard only if we created it (single-stage)
+        # Multi-stage will finalize after all stages complete
+        if dash is not None and dashboard_obj is None:
+            success = (
+                self.fit_results.success
+                if hasattr(self.fit_results, "success")
+                else True
+            )
+            dash.finalize(success=success)
 
         return self
 

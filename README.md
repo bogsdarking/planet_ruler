@@ -183,6 +183,11 @@ planet-ruler demo --planet earth
 - Advanced uncertainty estimation (population spread, Hessian, profile likelihood)
 - Mathematical validation with property tests
 
+**Live Progress Dashboard**
+- Real-time optimization monitoring
+- Adaptive refresh rate (fast during descent, slow at convergence)
+- Configurable warnings, hints, and output display
+
 **Rich Visualizations**
 - Interactive plots
 - 3D planetary geometry views
