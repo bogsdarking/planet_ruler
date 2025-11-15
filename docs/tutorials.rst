@@ -13,6 +13,11 @@ Tutorial 1: Auto-Configured Earth Radius Measurement
 
 .. include:: tutorial_autoconfig.rst
 
+Tutorial 1.5: Measure Earth from an Airplane Window
+--------------------------------------------------
+
+.. include:: tutorial_airplane.rst
+
 Tutorial 2: Advanced Manual Annotation Techniques
 -------------------------------------------------
 
