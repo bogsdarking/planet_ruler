@@ -5,7 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.0] - 2024-11-11
+## [1.5.X] - XXXX-XX-XX
+
+- Expanded test benchmark suite including end-to-end detection and measurement methods
+- New tutorial 1.5 specifically for taking limb measurements from an airplane.
+
+## [1.5.0] - 2025-11-11
 
 ### Added
 
@@ -15,9 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Renamed gradient smoothing parameters to be more distinct
-- Reworked tutorials to move sequentially through demo, pre-configured, auto-configured, then advanced fits.
+- Reworked tutorials to move sequentially through demo, pre-configured, auto-configured, then advanced fits
 
-## [1.4.0] - 2024-11-03
+## [1.4.0] - 2025-11-03
 
 ### Added
 
@@ -29,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Profile likelihood was not set up correctly
 
-## [1.3.0] - 2024-10-19
+## [1.3.0] - 2025-10-19
 
 ### Added
 
@@ -39,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Ignoring 'main' actions when computing code coverage
 
-## [1.2.0] - 2024-10-11
+## [1.2.0] - 2025-10-11
 
 ### Added
 
