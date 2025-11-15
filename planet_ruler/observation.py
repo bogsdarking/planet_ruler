@@ -593,9 +593,9 @@ class LimbObservation(PlanetObservation):
         directional_smoothing: int = 50,
         directional_decay_rate: float = 0.10,
         prefer_direction: Optional[Literal["up", "down"]] = None,
-        minimizer: Literal[
-            "differential-evolution", "dual-annealing", "basinhopping"
-        ] = "differential-evolution",
+        minimizer: Optional[
+            Literal["differential-evolution", "dual-annealing", "basinhopping"]
+        ] = None,
         minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         warm_start: bool = False,
@@ -776,6 +776,7 @@ class LimbObservation(PlanetObservation):
             if not use_multires:
                 result = self._fit_single_resolution(
                     loss_function=loss_function,
+                    minimizer=minimizer,
                     max_iter=max_iter,
                     n_jobs=n_jobs,
                     seed=seed,
@@ -793,6 +794,7 @@ class LimbObservation(PlanetObservation):
             else:
                 result = self._fit_multi_resolution(
                     loss_function=loss_function,
+                    minimizer=minimizer,
                     resolution_stages=resolution_stages,
                     max_iter=max_iter,
                     max_iter_per_stage=max_iter_per_stage,
@@ -1039,6 +1041,7 @@ class LimbObservation(PlanetObservation):
                 directional_smoothing=scaled_directional_smoothing,
                 directional_decay_rate=directional_decay_rate,
                 prefer_direction=prefer_direction,
+                minimizer=minimizer,
                 minimizer_preset=minimizer_preset,
                 minimizer_kwargs=minimizer_kwargs,
                 dashboard=dashboard,  # Boolean flag
@@ -1131,9 +1134,9 @@ class LimbObservation(PlanetObservation):
         directional_smoothing: int,
         directional_decay_rate: float,
         prefer_direction: Optional[Literal["up", "down"]] = None,
-        minimizer: Literal[
-            "differential-evolution", "dual-annealing", "basinhopping"
-        ] = "differential-evolution",
+        minimizer: Optional[
+            Literal["differential-evolution", "dual-annealing", "basinhopping"]
+        ] = None,
         minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         dashboard: bool = False,

@@ -66,8 +66,7 @@ class TestCameraDatabase:
         for model, specs in CAMERA_DB.items():
             if model == "default":
                 continue
-            assert "sensor_width" in specs
-            assert "sensor_height" in specs
+            assert ("sensor_width" in specs or "sensor_height" in specs)
             assert "type" in specs
             assert specs["type"] in [
                 "phone",
@@ -86,8 +85,8 @@ class TestCameraDatabase:
     def test_sensor_dimensions_positive(self):
         """Test that all sensor dimensions are positive."""
         for model, specs in CAMERA_DB.items():
-            assert specs["sensor_width"] > 0
-            assert specs["sensor_height"] > 0
+            assert specs.get("sensor_width", 1) > 0
+            assert specs.get("sensor_height", 1) > 0
 
 
 class TestPlanetDatabase:

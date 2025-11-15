@@ -91,6 +91,7 @@ CAMERA_DB = {
     # Nikon cameras
     "NIKON D850": {"sensor_width": 35.9, "sensor_height": 23.9, "type": "dslr"},
     "NIKON D750": {"sensor_width": 35.9, "sensor_height": 24.0, "type": "dslr"},
+    "NIKON D4": {"sensor_width": 36.0, "type": "dslr"},
     # Sony cameras
     "ILCE-7RM3": {
         "sensor_width": 35.9,
@@ -360,12 +361,23 @@ def extract_camera_parameters(image_path: str) -> Dict:
     # Strategy 1: Known camera model (highest confidence)
     if camera_model and camera_model in CAMERA_DB:
         camera_data = CAMERA_DB[camera_model]
-        params["sensor_width_mm"] = camera_data["sensor_width"]
-        params["sensor_height_mm"] = camera_data["sensor_height"]
-        params["camera_type"] = camera_data["type"]
-        params["confidence"] = "high"
-        logger.info(f"Detected known camera: {camera_model} ({camera_data['type']})")
-        return params
+
+        params["sensor_width_mm"] = camera_data.get("sensor_width", None)
+        params["sensor_height_mm"] = camera_data.get("sensor_height", None)
+
+        if (params["sensor_width_mm"]) is None and (params["sensor_height_mm"] is None):
+            logger.warning(f"Known camera missing critical parameter -- supply sensor_width and/or sensor_height for {camera_model}")
+        else:
+            if params["sensor_height_mm"] is None and params["sensor_width_mm"] is not None:
+                params["sensor_height_mm"] = params["sensor_width_mm"] * params["image_height_px"] / params["image_width_px"]
+
+            if params["sensor_width_mm"] is None and params["sensor_height_mm"] is not None:
+                params["sensor_width_mm"] = params["sensor_height_mm"] / params["image_height_px"] * params["image_width_px"]
+
+            params["camera_type"] = camera_data["type"]
+            params["confidence"] = "high"
+            logger.info(f"Detected known camera: {camera_model} ({camera_data['type']})")
+            return params
 
     # Strategy 2: Calculate from focal length ratio (medium-high confidence)
     if focal_length_mm and focal_length_35mm:
