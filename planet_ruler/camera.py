@@ -366,17 +366,35 @@ def extract_camera_parameters(image_path: str) -> Dict:
         params["sensor_height_mm"] = camera_data.get("sensor_height", None)
 
         if (params["sensor_width_mm"]) is None and (params["sensor_height_mm"] is None):
-            logger.warning(f"Known camera missing critical parameter -- supply sensor_width and/or sensor_height for {camera_model}")
+            logger.warning(
+                f"Known camera missing critical parameter -- supply sensor_width and/or sensor_height for {camera_model}"
+            )
         else:
-            if params["sensor_height_mm"] is None and params["sensor_width_mm"] is not None:
-                params["sensor_height_mm"] = params["sensor_width_mm"] * params["image_height_px"] / params["image_width_px"]
+            if (
+                params["sensor_height_mm"] is None
+                and params["sensor_width_mm"] is not None
+            ):
+                params["sensor_height_mm"] = (
+                    params["sensor_width_mm"]
+                    * params["image_height_px"]
+                    / params["image_width_px"]
+                )
 
-            if params["sensor_width_mm"] is None and params["sensor_height_mm"] is not None:
-                params["sensor_width_mm"] = params["sensor_height_mm"] / params["image_height_px"] * params["image_width_px"]
+            if (
+                params["sensor_width_mm"] is None
+                and params["sensor_height_mm"] is not None
+            ):
+                params["sensor_width_mm"] = (
+                    params["sensor_height_mm"]
+                    / params["image_height_px"]
+                    * params["image_width_px"]
+                )
 
             params["camera_type"] = camera_data["type"]
             params["confidence"] = "high"
-            logger.info(f"Detected known camera: {camera_model} ({camera_data['type']})")
+            logger.info(
+                f"Detected known camera: {camera_model} ({camera_data['type']})"
+            )
             return params
 
     # Strategy 2: Calculate from focal length ratio (medium-high confidence)

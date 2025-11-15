@@ -66,7 +66,7 @@ class TestCameraDatabase:
         for model, specs in CAMERA_DB.items():
             if model == "default":
                 continue
-            assert ("sensor_width" in specs or "sensor_height" in specs)
+            assert "sensor_width" in specs or "sensor_height" in specs
             assert "type" in specs
             assert specs["type"] in [
                 "phone",

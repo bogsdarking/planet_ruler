@@ -529,53 +529,53 @@ class TestCameraParameterBenchmarks:
         """Benchmark EXIF data extraction from image files."""
         # Use a test image from the demo directory
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
-        
+
         def extract_exif_data():
             return extract_exif(image_path)
-            
+
         result = benchmark(extract_exif_data)
         assert result is not None
 
     def test_extract_camera_parameters_benchmark(self, benchmark):
         """Benchmark complete camera parameter extraction workflow."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
-        
+
         def extract_params():
             return extract_camera_parameters(image_path)
-            
+
         result = benchmark(extract_params)
         assert result is not None
-        assert 'image_width_px' in result
-        assert 'image_height_px' in result
+        assert "image_width_px" in result
+        assert "image_height_px" in result
 
     def test_camera_model_detection_benchmark(self, benchmark):
         """Benchmark camera model detection from EXIF."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
-        
+
         def detect_camera_model():
             exif = extract_exif(image_path)
             return get_camera_model(exif)
-            
+
         result = benchmark(detect_camera_model)
         # Result may be None for test images without camera info
 
     def test_focal_length_extraction_benchmark(self, benchmark):
         """Benchmark focal length extraction from EXIF."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
-        
+
         def extract_focal_length():
             exif = extract_exif(image_path)
             return get_focal_length_mm(exif)
-            
+
         benchmark(extract_focal_length)
 
     def test_gps_altitude_extraction_benchmark(self, benchmark):
         """Benchmark GPS altitude extraction from EXIF."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
-        
+
         def extract_gps_altitude():
             return get_gps_altitude(image_path)
-            
+
         benchmark(extract_gps_altitude)
 
 
@@ -585,32 +585,30 @@ class TestConfigurationBenchmarks:
     def test_create_config_from_image_benchmark(self, benchmark):
         """Benchmark automatic configuration generation from image."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
-        
+
         def create_config():
             return create_config_from_image(
                 image_path=image_path,
                 altitude_m=10000,
                 planet="earth",
-                perturbation_factor=0.5
+                perturbation_factor=0.5,
             )
-            
+
         result = benchmark(create_config)
         assert result is not None
-        assert 'init_parameter_values' in result
-        assert 'parameter_limits' in result
+        assert "init_parameter_values" in result
+        assert "parameter_limits" in result
 
     def test_config_validation_benchmark(self, benchmark):
         """Benchmark configuration validation workflow."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
         config = create_config_from_image(
-            image_path=image_path,
-            altitude_m=10000,
-            planet="earth"
+            image_path=image_path, altitude_m=10000, planet="earth"
         )
-        
+
         def validate_config():
             return validate_limb_config(config, strict=False)
-            
+
         benchmark(validate_config)
 
 
@@ -623,22 +621,24 @@ class TestLimbDetectionBenchmarks:
         # Use real Pluto image and configuration for realistic benchmark
         image_path = "demo/images/PIA19948.tif"
         config_path = "config/pluto-new-horizons.yaml"
-        
+
         obs = LimbObservation(image_filepath=image_path, fit_config=config_path)
-        
+
         return obs
 
     @pytest.mark.slow
-    def test_gradient_field_detection_benchmark(self, benchmark, test_observation_for_detection):
+    def test_gradient_field_detection_benchmark(
+        self, benchmark, test_observation_for_detection
+    ):
         """Benchmark gradient-field limb detection/optimization with real Pluto image."""
         obs = test_observation_for_detection
         obs.limb_detection = "gradient_field"
-        
+
         def run_gradient_field():
             # Use a minimal fitting to benchmark the gradient field approach
             obs.fit_limb(
                 loss_function="gradient_field",
-                minimizer='dual-annealing',
+                minimizer="dual-annealing",
                 max_iter=150,  # More iterations for robust analysis
                 verbose=False,
                 resolution_stages=[2, 1],  # Quick multi-resolution
@@ -646,25 +646,29 @@ class TestLimbDetectionBenchmarks:
                 kernel_smoothing=8.0,
             )
             return obs.best_parameters
-            
+
         result = benchmark(run_gradient_field)
         assert result is not None
-        
+
         # Validate that we got a reasonable Pluto radius (true value ~1188 km)
-        fitted_radius_km = result.get('r', 0) / 1000.0
+        fitted_radius_km = result.get("r", 0) / 1000.0
         print(f"\nFitted Pluto radius: {fitted_radius_km:.1f} km (true: ~1188 km)")
-        
+
         # Check that result is within reasonable bounds for Pluto
-        assert 600 < fitted_radius_km < 1900, f"Fitted radius {fitted_radius_km:.1f} km outside expected range [600, 1900] km"
-        
+        assert (
+            600 < fitted_radius_km < 1900
+        ), f"Fitted radius {fitted_radius_km:.1f} km outside expected range [600, 1900] km"
+
         # Ideally should be close to true value, but allow some tolerance for benchmark speed
         # (using fewer iterations than a real analysis would)
-    
+
     @pytest.mark.slow
-    def test_manual_limb_detection_benchmark(self, benchmark, test_observation_for_detection):
+    def test_manual_limb_detection_benchmark(
+        self, benchmark, test_observation_for_detection
+    ):
         """Benchmark manual limb detection workflow using stored annotations."""
         obs = test_observation_for_detection
-        
+
         # Manually annotated Pluto limb points (embedded for test safety)
         # These are 19 points tracing Pluto's limb in the PIA19948.tif image
         pluto_limb_points = [
@@ -686,43 +690,47 @@ class TestLimbDetectionBenchmarks:
             [2800.4549147034927, 472.2989439480097],
             [2983.8180341186026, 525.0852965069049],
             [3181.0722989439478, 588.9845653939885],
-            [3356.100731112916, 666.7749796913079]
+            [3356.100731112916, 666.7749796913079],
         ]
         image_width = 3420  # PIA19948.tif width
-        
+
         def run_manual_detection():
             # Create sparse target array following annotate.py pattern
             limb_target = np.full(image_width, np.nan)
-            
+
             # Fill in the manually annotated points
             for x, y in pluto_limb_points:
                 x_idx = int(round(x))
                 if 0 <= x_idx < image_width:
                     limb_target[x_idx] = y
-            
+
             # Register the limb with observation
             obs.register_limb(limb_target)
-            
+
             # Fit using L1 loss (standard for manual detection)
             obs.fit_limb(
                 loss_function="l1",
-                minimizer='differential-evolution',
+                minimizer="differential-evolution",
                 max_iter=300,
                 verbose=False,
-                seed=42
+                seed=42,
             )
-            
+
             return obs.best_parameters
-            
+
         result = benchmark(run_manual_detection)
         assert result is not None
-        
+
         # Validate that we got a reasonable Pluto radius (true value ~1188 km)
-        fitted_radius_km = result.get('r', 0) / 1000.0
-        print(f"\nManual detection - Fitted Pluto radius: {fitted_radius_km:.1f} km (true: ~1188 km)")
-        
+        fitted_radius_km = result.get("r", 0) / 1000.0
+        print(
+            f"\nManual detection - Fitted Pluto radius: {fitted_radius_km:.1f} km (true: ~1188 km)"
+        )
+
         # Check that result is within reasonable bounds for Pluto
-        assert 600 < fitted_radius_km < 1900, f"Fitted radius {fitted_radius_km:.1f} km outside expected range [600, 1900] km"
+        assert (
+            600 < fitted_radius_km < 1900
+        ), f"Fitted radius {fitted_radius_km:.1f} km outside expected range [600, 1900] km"
 
 
 class TestUncertaintyBenchmarks:
@@ -734,75 +742,96 @@ class TestUncertaintyBenchmarks:
         # Create minimal test setup
         height, width = 200, 300
         image = np.random.randint(0, 255, (height, width, 3), dtype=np.uint8)
-        
+
         # Save image to temporary file for LimbObservation
         import tempfile
         import os
         from PIL import Image as PILImage
-        
-        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
             # Convert numpy array to PIL Image and save
             pil_image = PILImage.fromarray(image)
             pil_image.save(tmp.name)
             temp_path = tmp.name
-        
+
         config = {
-            'free_parameters': ['r', 'h', 'f', 'w', 'theta_x', 'theta_y', 'theta_z'],
-            'init_parameter_values': {
-                'r': 6371000, 'h': 10000, 'f': 0.024, 'w': 0.036,
-                'theta_x': 0.0, 'theta_y': 0.0, 'theta_z': 0.0
+            "free_parameters": ["r", "h", "f", "w", "theta_x", "theta_y", "theta_z"],
+            "init_parameter_values": {
+                "r": 6371000,
+                "h": 10000,
+                "f": 0.024,
+                "w": 0.036,
+                "theta_x": 0.0,
+                "theta_y": 0.0,
+                "theta_z": 0.0,
             },
-            'parameter_limits': {
-                'r': [6000000, 7000000], 'h': [5000, 15000],
-                'f': [0.01, 0.1], 'w': [0.02, 0.05],
-                'theta_x': [-3.14, 3.14], 'theta_y': [-3.14, 3.14], 'theta_z': [-3.14, 3.14]
+            "parameter_limits": {
+                "r": [6000000, 7000000],
+                "h": [5000, 15000],
+                "f": [0.01, 0.1],
+                "w": [0.02, 0.05],
+                "theta_x": [-3.14, 3.14],
+                "theta_y": [-3.14, 3.14],
+                "theta_z": [-3.14, 3.14],
             },
-            'loss_function': 'L1',
-            'minimizer': 'differential-evolution'
+            "loss_function": "L1",
+            "minimizer": "differential-evolution",
         }
-        
+
         obs = LimbObservation(image_filepath=temp_path, fit_config=config)
-        
+
         # Mock fitted results
-        obs.best_parameters = config['init_parameter_values'].copy()
-        obs.fit_results = type('MockResult', (), {
-            'x': np.array([6371000, 10000, 0.024, 0.036, 0.0, 0.0, 0.0]),
-            'success': True,
-            'population': np.random.normal([6371000, 10000, 0.024, 0.036, 0.0, 0.0, 0.0], [50000, 1000, 0.001, 0.001, 0.1, 0.1, 0.1], (20, 7))
-        })()
-        
+        obs.best_parameters = config["init_parameter_values"].copy()
+        obs.fit_results = type(
+            "MockResult",
+            (),
+            {
+                "x": np.array([6371000, 10000, 0.024, 0.036, 0.0, 0.0, 0.0]),
+                "success": True,
+                "population": np.random.normal(
+                    [6371000, 10000, 0.024, 0.036, 0.0, 0.0, 0.0],
+                    [50000, 1000, 0.001, 0.001, 0.1, 0.1, 0.1],
+                    (20, 7),
+                ),
+            },
+        )()
+
         # Clean up temp file
         os.unlink(temp_path)
-        
+
         return obs
 
-    def test_parameter_uncertainty_calculation_benchmark(self, benchmark, fitted_observation):
+    def test_parameter_uncertainty_calculation_benchmark(
+        self, benchmark, fitted_observation
+    ):
         """Benchmark parameter uncertainty calculation."""
         obs = fitted_observation
-        
+
         def calculate_uncertainty():
             return calculate_parameter_uncertainty(
-                obs, parameter='r', scale_factor=1000, method='auto'
+                obs, parameter="r", scale_factor=1000, method="auto"
             )
-            
+
         result = benchmark(calculate_uncertainty)
         assert result is not None
-        assert 'value' in result
-        assert 'uncertainty' in result
+        assert "value" in result
+        assert "uncertainty" in result
 
-    def test_multiple_parameter_uncertainties_benchmark(self, benchmark, fitted_observation):
+    def test_multiple_parameter_uncertainties_benchmark(
+        self, benchmark, fitted_observation
+    ):
         """Benchmark calculating uncertainties for multiple parameters."""
         obs = fitted_observation
-        
+
         def calculate_multiple_uncertainties():
             results = {}
-            for param in ['r', 'h', 'theta_x']:
-                scale = 1000 if param in ['r', 'h'] else 1
+            for param in ["r", "h", "theta_x"]:
+                scale = 1000 if param in ["r", "h"] else 1
                 results[param] = calculate_parameter_uncertainty(
-                    obs, parameter=param, scale_factor=scale, method='auto'
+                    obs, parameter=param, scale_factor=scale, method="auto"
                 )
             return results
-            
+
         result = benchmark(calculate_multiple_uncertainties)
         assert len(result) == 3
 
@@ -814,24 +843,24 @@ class TestFullPipelineBenchmarks:
     def test_full_pipeline_earth_benchmark(self, benchmark):
         """Benchmark complete Earth measurement pipeline."""
         image_path = "demo/images/50644513538_56228a2027_o.jpg"
-        
+
         def run_complete_pipeline():
             # Step 1: Extract camera parameters
             camera_info = extract_camera_parameters(image_path)
-            
+
             # Step 2: Create configuration
             config = create_config_from_image(
                 image_path=image_path,
                 altitude_m=418_000,
                 planet="earth",
             )
-            
+
             # Step 3: Validate configuration
             validate_limb_config(config, strict=False)
-            
+
             # Step 4: Create observation
             obs = LimbObservation(image_filepath=image_path, fit_config=config)
-            
+
             # Step 5: Quick gradient-field fit (for speed)
             obs.fit_limb(
                 loss_function="gradient_field",
@@ -844,74 +873,72 @@ class TestFullPipelineBenchmarks:
                 kernel_smoothing=8.0,  # Smooth gradient field for stability
                 seed=25,
             )
-            
+
             # Step 6: Calculate uncertainty
             radius_uncertainty = calculate_parameter_uncertainty(
-                obs, parameter='r', scale_factor=1000, method='auto'
+                obs, parameter="r", scale_factor=1000, method="auto"
             )
-            
+
             return {
-                'radius_km': obs.radius_km,
-                'altitude_km': obs.altitude_km,
-                'uncertainty': radius_uncertainty
+                "radius_km": obs.radius_km,
+                "altitude_km": obs.altitude_km,
+                "uncertainty": radius_uncertainty,
             }
-            
+
         result = benchmark(run_complete_pipeline)
         assert result is not None
-        assert 'radius_km' in result
+        assert "radius_km" in result
         fitted_radius_km = result["radius_km"]
         print(f"\nFitted Earth radius: {fitted_radius_km:.1f} km (true: ~6357 km)")
-        assert 4000 < fitted_radius_km < 10000, f"Fitted radius {fitted_radius_km:.1f} km outside expected range [4000, 10000] km"
+        assert (
+            4000 < fitted_radius_km < 10000
+        ), f"Fitted radius {fitted_radius_km:.1f} km outside expected range [4000, 10000] km"
 
     def test_configuration_generation_workflow_benchmark(self, benchmark):
         """Benchmark the workflow from image to ready-to-fit configuration."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
-        
+
         def config_workflow():
             # Extract camera parameters
             camera_info = extract_camera_parameters(image_path)
-            
+
             # Generate configuration
             config = create_config_from_image(
-                image_path=image_path,
-                altitude_m=10000,
-                planet="earth"
+                image_path=image_path, altitude_m=10000, planet="earth"
             )
-            
+
             # Validate configuration
             validate_limb_config(config, strict=False)
-            
+
             return config
-            
+
         result = benchmark(config_workflow)
         assert result is not None
-        assert 'init_parameter_values' in result
+        assert "init_parameter_values" in result
 
     def test_observation_creation_and_setup_benchmark(self, benchmark):
         """Benchmark observation setup workflow."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
-        
+
         config = create_config_from_image(
-            image_path=image_path,
-            altitude_m=10000,
-            planet="earth"
+            image_path=image_path, altitude_m=10000, planet="earth"
         )
-        
+
         def obs_setup_workflow():
             # Create observation
             obs = LimbObservation(image_filepath=image_path, fit_config=config)
-            
+
             # For benchmarking, use gradient-field which doesn't require explicit detection
             obs.limb_detection = "gradient_field"
-            
+
             return obs
-            
+
         result = benchmark(obs_setup_workflow)
         assert result is not None
-        assert hasattr(result, 'image')
-        assert hasattr(result, 'free_parameters')
-        assert hasattr(result, 'init_parameter_values')
-        assert hasattr(result, 'parameter_limits')
+        assert hasattr(result, "image")
+        assert hasattr(result, "free_parameters")
+        assert hasattr(result, "init_parameter_values")
+        assert hasattr(result, "parameter_limits")
 
 
 # Performance test markers
