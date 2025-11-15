@@ -707,7 +707,7 @@ class TestLimbDetectionBenchmarks:
             obs.fit_limb(
                 loss_function="l1",
                 minimizer='differential-evolution',
-                max_iter=150,
+                max_iter=300,
                 verbose=False,
                 seed=42
             )
