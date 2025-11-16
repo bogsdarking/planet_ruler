@@ -29,6 +29,7 @@ from planet_ruler.plot import (
     plot_diff_evol_posteriors,
     plot_full_limb,
     plot_segmentation_masks,
+    plot_residuals,
 )
 from planet_ruler.image import (
     load_image,

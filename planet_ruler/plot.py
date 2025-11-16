@@ -779,3 +779,152 @@ def plot_segmentation_masks(observation) -> None:
         plt.imshow(mask)
         plt.title(f"Mask {i}")
         plt.show()
+
+
+def plot_residuals(
+    observation,
+    show_sparse_markers: bool = True,
+    marker_size: int = 10,
+    alpha: float = 0.6,
+    figsize: tuple = (16, 6),
+    show_image: bool = False,
+    image_alpha: float = 0.4,
+    band_size: int = 30,
+) -> None:
+    """
+    Plot residuals between the fitted limb and the detected target limb.
+
+    Args:
+        observation: Instance of LimbObservation that has been fitted.
+        show_sparse_markers: Use larger markers for sparse data.
+        marker_size: Size of markers for sparse data.
+        alpha: Transparency of residual markers/line.
+        figsize: Figure size (width, height).
+        show_image: Show straightened image strip as background.
+        image_alpha: Transparency of background image.
+        band_size: Size of band around residuals to plot (in pixels) 
+    """
+    # Check if gradient-field method was used
+    if observation.limb_detection == "gradient-field":
+        raise ValueError(
+            "Cannot plot residuals for gradient-field detection method. "
+            "Gradient-field optimization has no target limb to compare against. "
+            "This function only works with 'manual', 'gradient-break', or "
+            "'segmentation' detection methods."
+        )
+
+    # Check if the observation has been fitted
+    if observation.best_parameters is None:
+        raise AttributeError(
+            "Observation has not been fitted yet. "
+            "Call obs.fit_limb() or obs.analyze() before plotting residuals."
+        )
+
+    # Get the target limb (detected limb)
+    target_limb = observation.features["limb"].copy()
+
+    # Get image dimensions
+    n_pix_y, n_pix_x = observation.image.shape[:2]
+
+    # Extract fitted parameters and generate predicted limb
+    params = observation.best_parameters.copy()
+    r = params.pop("r")
+    params.pop("n_pix_x", None)
+    params.pop("n_pix_y", None)
+    predicted_limb = limb_arc(r, n_pix_x, n_pix_y, **params)
+
+    # Calculate residuals (target - predicted)
+    residuals = target_limb - predicted_limb
+
+    # Determine if data is sparse
+    valid_mask = ~np.isnan(residuals)
+    n_valid = np.sum(valid_mask)
+    n_total = len(residuals)
+    sparsity_fraction = n_valid / n_total
+    is_sparse = sparsity_fraction < 0.1
+
+    # Create figure
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    x_coords = np.arange(n_pix_x)
+
+    # Optionally show straightened image in background
+    if show_image:
+        residual_range = np.nanmax(np.abs(residuals))
+        y_extent = int(max(band_size, residual_range * 1.5))
+        
+        # Create straightened image strip
+        if len(observation.image.shape) == 3:
+            straightened = np.zeros((2 * y_extent, n_pix_x, 3))
+        else:
+            straightened = np.zeros((2 * y_extent, n_pix_x))
+        
+        for x in range(n_pix_x):
+            y_pred = predicted_limb[x]
+            if np.isnan(y_pred):
+                continue
+            for dy in range(-y_extent, y_extent):
+                y_img = int(y_pred) + dy
+                if 0 <= y_img < n_pix_y:
+                    straightened[y_extent + dy, x] = observation.image[y_img, x]
+        
+        # Explicit cast or things don't appear
+        straightened = straightened.astype(int)
+
+        ax.imshow(
+            straightened,
+            extent=[0, n_pix_x, -y_extent, y_extent],
+            aspect='auto',
+            alpha=image_alpha,
+            zorder=0,
+        )
+
+    # Plot residuals
+    if is_sparse and show_sparse_markers:
+        valid_x = x_coords[valid_mask]
+        valid_residuals = residuals[valid_mask]
+        ax.scatter(
+            valid_x,
+            valid_residuals,
+            c="blue",
+            s=marker_size * 2,
+            alpha=alpha,
+            label=f"Residuals (n={n_valid})",
+            zorder=2
+        )
+    else:
+        ax.plot(x_coords, residuals, "b-", linewidth=1.5, alpha=alpha, label="Residuals", zorder=2)
+
+    # Add zero reference line
+    ax.axhline(y=0, color="k", linestyle="--", linewidth=1, alpha=0.5, zorder=1)
+
+    # Add statistics
+    residual_std = np.nanstd(residuals)
+    residual_mean = np.nanmean(residuals)
+    residual_rms = np.sqrt(np.nanmean(residuals**2))
+
+    stats_text = (
+        f"Mean: {residual_mean:.2f} px\n"
+        f"Std: {residual_std:.2f} px\n"
+        f"RMS: {residual_rms:.2f} px"
+    )
+
+    ax.text(
+        0.98,
+        0.97,
+        stats_text,
+        transform=ax.transAxes,
+        verticalalignment="top",
+        horizontalalignment="right",
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+        fontsize=10,
+    )
+
+    ax.set_xlabel("X (pixels)")
+    ax.set_ylabel("Residual (pixels)")
+    ax.set_title("Residuals: Target - Fitted")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+
