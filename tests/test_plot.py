@@ -40,6 +40,7 @@ from planet_ruler.plot import (
     plot_diff_evol_posteriors,
     plot_full_limb,
     plot_segmentation_masks,
+    plot_residuals,
 )
 
 
@@ -1134,6 +1135,292 @@ class TestPlotSegmentationMasks:
         mock_plt.imshow.assert_not_called()
         mock_plt.title.assert_not_called()
         mock_plt.show.assert_not_called()
+
+
+class TestPlotResiduals:
+    """Test residual plotting between fitted and target limbs."""
+
+    @patch("planet_ruler.plot.limb_arc")
+    @patch("planet_ruler.plot.plt")
+    def test_plot_residuals_basic(self, mock_plt, mock_limb_arc):
+        """Test basic residual plotting functionality."""
+        # Mock observation object
+        mock_obs = Mock()
+        mock_obs.limb_detection = "manual"
+        mock_obs.best_parameters = {"r": 6371000, "h": 400000, "cx": 500, "cy": 300}
+        mock_obs.features = {"limb": np.array([100.0, 101.0, 102.0, 103.0, 104.0])}
+        mock_obs.image = np.random.random((200, 5, 3))
+        
+        # Mock predicted limb from limb_arc (returns 1D array of y-coordinates)
+        mock_limb_arc.return_value = np.array([99.0, 100.0, 101.0, 102.0, 103.0])
+        
+        # Mock matplotlib components
+        mock_fig = Mock()
+        mock_ax = Mock()
+        mock_plt.subplots.return_value = (mock_fig, mock_ax)
+        
+        plot_residuals(mock_obs)
+        
+        # Verify limb_arc call structure
+        mock_limb_arc.assert_called_once()
+        call_args, call_kwargs = mock_limb_arc.call_args
+        assert call_args[0] == 6371000  # r (radius)
+        assert call_args[1] == 5        # n_pix_x
+        assert call_args[2] == 200      # n_pix_y
+        assert "cx" in call_kwargs      # Other parameters passed as kwargs
+        assert "cy" in call_kwargs
+        assert "h" in call_kwargs
+        # Verify n_pix_x and n_pix_y are NOT in kwargs (removed by function)
+        assert "n_pix_x" not in call_kwargs
+        assert "n_pix_y" not in call_kwargs
+        
+        # Verify plotting calls
+        mock_plt.subplots.assert_called_once_with(1, 1, figsize=(16, 6))
+        mock_ax.plot.assert_called_once()  # Dense data uses line plot
+        mock_ax.axhline.assert_called_once_with(y=0, color="k", linestyle="--", linewidth=1, alpha=0.5, zorder=1)
+        
+        # Verify statistics text box
+        mock_ax.text.assert_called_once()
+        text_call = mock_ax.text.call_args
+        stats_text = text_call[0][2]  # Third positional argument
+        assert "Mean:" in stats_text
+        assert "Std:" in stats_text
+        assert "RMS:" in stats_text
+        
+        # Verify labels and formatting
+        mock_ax.set_xlabel.assert_called_once_with("X (pixels)")
+        mock_ax.set_ylabel.assert_called_once_with("Residual (pixels)")
+        mock_ax.set_title.assert_called_once_with("Residuals: Target - Fitted")
+        mock_ax.legend.assert_called_once()
+        mock_ax.grid.assert_called_once_with(True, alpha=0.3)
+        
+        mock_plt.tight_layout.assert_called_once()
+        mock_plt.show.assert_called_once()
+
+    @patch("planet_ruler.plot.limb_arc")
+    @patch("planet_ruler.plot.plt")
+    def test_plot_residuals_sparse_data(self, mock_plt, mock_limb_arc):
+        """Test residual plotting with sparse data (uses scatter instead of line)."""
+        mock_obs = Mock()
+        mock_obs.limb_detection = "gradient-break"
+        mock_obs.best_parameters = {"r": 6371000, "h": 400000}
+        
+        # Create sparse data with many NaNs (< 10% valid data)
+        target_limb = np.full(1000, np.nan)
+        target_limb[::100] = np.array([50, 51, 52, 53, 54, 55, 56, 57, 58, 59])
+        mock_obs.features = {"limb": target_limb}
+        mock_obs.image = np.random.random((100, 1000, 3))
+        
+        # Mock predicted limb (same shape as target)
+        predicted_limb = np.full(1000, np.nan)
+        predicted_limb[::100] = np.array([49, 50, 51, 52, 53, 54, 55, 56, 57, 58])
+        mock_limb_arc.return_value = predicted_limb
+        
+        mock_fig = Mock()
+        mock_ax = Mock()
+        mock_plt.subplots.return_value = (mock_fig, mock_ax)
+        
+        plot_residuals(mock_obs, show_sparse_markers=True, marker_size=15)
+        
+        # Should use scatter plot for sparse data (< 10% valid points)
+        mock_ax.scatter.assert_called_once()
+        mock_ax.plot.assert_not_called()  # Should not use line plot
+        
+        # Verify scatter call parameters
+        scatter_call = mock_ax.scatter.call_args
+        assert scatter_call[1]["c"] == "blue"
+        assert scatter_call[1]["s"] == 30  # marker_size * 2
+        assert "Residuals (n=" in scatter_call[1]["label"]
+
+    @patch("planet_ruler.plot.limb_arc")
+    @patch("planet_ruler.plot.plt")
+    def test_plot_residuals_with_background_image(self, mock_plt, mock_limb_arc):
+        """Test residual plotting with background straightened image."""
+        mock_obs = Mock()
+        mock_obs.limb_detection = "segmentation"
+        mock_obs.best_parameters = {"r": 6371000, "h": 400000}
+        mock_obs.features = {"limb": np.array([50.0, 51.0, 52.0, 53.0, 54.0])}
+        mock_obs.image = np.random.randint(0, 255, (100, 5, 3), dtype=np.uint8)
+        
+        mock_limb_arc.return_value = np.array([49.0, 50.0, 51.0, 52.0, 53.0])
+        
+        mock_fig = Mock()
+        mock_ax = Mock()
+        mock_plt.subplots.return_value = (mock_fig, mock_ax)
+        
+        plot_residuals(mock_obs, show_image=True, image_alpha=0.3)
+        
+        # Should call imshow for background image
+        mock_ax.imshow.assert_called_once()
+        imshow_call = mock_ax.imshow.call_args
+        assert imshow_call[1]["alpha"] == 0.3
+        assert imshow_call[1]["zorder"] == 0
+        assert imshow_call[1]["aspect"] == "auto"
+        assert "extent" in imshow_call[1]
+
+    @patch("planet_ruler.plot.limb_arc")
+    @patch("planet_ruler.plot.plt")
+    def test_plot_residuals_grayscale_image(self, mock_plt, mock_limb_arc):
+        """Test residual plotting with grayscale (2D) image."""
+        mock_obs = Mock()
+        mock_obs.limb_detection = "segmentation"
+        mock_obs.best_parameters = {"r": 6371000, "h": 400000}
+        mock_obs.features = {"limb": np.array([30.0, 31.0, 32.0])}
+        mock_obs.image = np.random.randint(0, 255, (60, 3), dtype=np.uint8)  # Grayscale
+        
+        mock_limb_arc.return_value = np.array([29.0, 30.0, 31.0])
+        
+        mock_fig = Mock()
+        mock_ax = Mock()
+        mock_plt.subplots.return_value = (mock_fig, mock_ax)
+        
+        plot_residuals(mock_obs, show_image=True)
+        
+        # Should handle grayscale image for background
+        mock_ax.imshow.assert_called_once()
+        mock_plt.subplots.assert_called_once_with(1, 1, figsize=(16, 6))
+
+    def test_plot_residuals_gradient_field_error(self):
+        """Test that gradient-field detection method raises appropriate error."""
+        mock_obs = Mock()
+        mock_obs.limb_detection = "gradient-field"
+        
+        with pytest.raises(ValueError, match="Cannot plot residuals for gradient-field detection method"):
+            plot_residuals(mock_obs)
+
+    def test_plot_residuals_unfitted_observation_error(self):
+        """Test that unfitted observation raises appropriate error."""
+        mock_obs = Mock()
+        mock_obs.limb_detection = "manual"
+        mock_obs.best_parameters = None
+        
+        with pytest.raises(AttributeError, match="Observation has not been fitted yet"):
+            plot_residuals(mock_obs)
+
+    @patch("planet_ruler.plot.limb_arc")
+    @patch("planet_ruler.plot.plt")
+    def test_plot_residuals_custom_parameters(self, mock_plt, mock_limb_arc):
+        """Test residual plotting with custom display parameters."""
+        mock_obs = Mock()
+        mock_obs.limb_detection = "manual"
+        mock_obs.best_parameters = {"r": 3390000, "h": 200000, "extra_param": "kept"}
+        mock_obs.features = {"limb": np.array([25.0, 26.0, 27.0, 28.0])}
+        mock_obs.image = np.random.random((50, 4, 3))
+        
+        mock_limb_arc.return_value = np.array([24.0, 25.0, 26.0, 27.0])
+        
+        mock_fig = Mock()
+        mock_ax = Mock()
+        mock_plt.subplots.return_value = (mock_fig, mock_ax)
+        
+        plot_residuals(
+            mock_obs,
+            show_sparse_markers=False,
+            marker_size=20,
+            alpha=0.8,
+            figsize=(12, 8),
+            show_image=False
+        )
+        
+        # Verify custom figsize
+        mock_plt.subplots.assert_called_once_with(1, 1, figsize=(12, 8))
+        
+        # Should use line plot regardless of sparsity when show_sparse_markers=False
+        mock_ax.plot.assert_called_once()
+        plot_call = mock_ax.plot.call_args
+        assert plot_call[1]["alpha"] == 0.8
+        assert plot_call[1]["label"] == "Residuals"
+
+    @patch("planet_ruler.plot.limb_arc")
+    @patch("planet_ruler.plot.plt")
+    def test_plot_residuals_parameter_filtering(self, mock_plt, mock_limb_arc):
+        """Test that n_pix_x and n_pix_y are filtered from parameters."""
+        mock_obs = Mock()
+        mock_obs.limb_detection = "manual"
+        mock_obs.best_parameters = {
+            "r": 6371000,
+            "h": 400000,
+            "n_pix_x": 100,  # Should be removed
+            "n_pix_y": 200,  # Should be removed
+            "cx": 50,
+            "cy": 100
+        }
+        mock_obs.features = {"limb": np.array([30.0, 31.0, 32.0])}
+        mock_obs.image = np.random.random((200, 3, 3))
+        
+        mock_limb_arc.return_value = np.array([29.0, 30.0, 31.0])
+        
+        mock_fig = Mock()
+        mock_ax = Mock()
+        mock_plt.subplots.return_value = (mock_fig, mock_ax)
+        
+        plot_residuals(mock_obs)
+        
+        # Verify limb_arc was called with correct structure
+        call_args, call_kwargs = mock_limb_arc.call_args
+        assert call_args[0] == 6371000  # radius
+        assert call_args[1] == 3        # n_pix_x (from image.shape[1])
+        assert call_args[2] == 200      # n_pix_y (from image.shape[0])
+        # Verify filtered parameters
+        assert "cx" in call_kwargs
+        assert "cy" in call_kwargs
+        assert "h" in call_kwargs
+        assert "n_pix_x" not in call_kwargs  # Should be filtered out
+        assert "n_pix_y" not in call_kwargs  # Should be filtered out
+
+    @patch("planet_ruler.plot.limb_arc")
+    @patch("planet_ruler.plot.plt")
+    def test_plot_residuals_nan_handling(self, mock_plt, mock_limb_arc):
+        """Test residual plotting with NaN values in data."""
+        mock_obs = Mock()
+        mock_obs.limb_detection = "manual"
+        mock_obs.best_parameters = {"r": 6371000, "h": 400000}
+        
+        # Target limb with some NaN values
+        target_limb = np.array([10.0, np.nan, 12.0, 11.0, np.nan])
+        predicted_limb = np.array([9.0, 10.0, 11.0, 12.0, 13.0])
+        
+        mock_obs.features = {"limb": target_limb}
+        mock_obs.image = np.random.random((20, 5, 3))
+        mock_limb_arc.return_value = predicted_limb
+        
+        mock_fig = Mock()
+        mock_ax = Mock()
+        mock_plt.subplots.return_value = (mock_fig, mock_ax)
+        
+        plot_residuals(mock_obs)
+        
+        # Should handle NaN values in statistics calculation
+        mock_ax.text.assert_called_once()
+        text_call = mock_ax.text.call_args
+        stats_text = text_call[0][2]
+        # Should contain statistics (numpy nan functions handle NaNs)
+        assert "Mean:" in stats_text
+        assert "Std:" in stats_text
+        assert "RMS:" in stats_text
+
+    @patch("planet_ruler.plot.limb_arc")
+    @patch("planet_ruler.plot.plt")
+    def test_plot_residuals_background_image_bounds(self, mock_plt, mock_limb_arc):
+        """Test background image creation stays within image bounds."""
+        mock_obs = Mock()
+        mock_obs.limb_detection = "manual"
+        mock_obs.best_parameters = {"r": 6371000, "h": 400000}
+        mock_obs.features = {"limb": np.array([5.0, 10.0, 15.0])}  # Near image edge
+        mock_obs.image = np.random.randint(0, 255, (20, 3, 3), dtype=np.uint8)
+        
+        # Predicted limb near edge
+        mock_limb_arc.return_value = np.array([4.0, 9.0, 14.0])
+        
+        mock_fig = Mock()
+        mock_ax = Mock()
+        mock_plt.subplots.return_value = (mock_fig, mock_ax)
+        
+        # Should not raise index errors when creating background image
+        plot_residuals(mock_obs, show_image=True)
+        
+        # Verify background image was attempted
+        mock_ax.imshow.assert_called_once()
 
 
 # Import pandas for DataFrame creation
