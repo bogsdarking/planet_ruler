@@ -36,7 +36,7 @@ from planet_ruler.image import (
     gradient_break,
     smooth_limb,
     fill_nans,
-    MaskSegmenter
+    MaskSegmenter,
 )
 from planet_ruler.annotate import TkLimbAnnotator
 from planet_ruler.validation import validate_limb_config
@@ -502,7 +502,7 @@ class LimbObservation(PlanetObservation):
         segmentation_method: str = "sam",
         downsample_factor: int = 1,
         interactive: bool = True,
-        **segmentation_kwargs
+        **segmentation_kwargs,
     ) -> "LimbObservation":
         """
         Use the instance-defined method to find the limb in our observation.
@@ -553,7 +553,7 @@ class LimbObservation(PlanetObservation):
                 method=segmentation_method,
                 downsample_factor=downsample_factor,
                 interactive=interactive,
-                **segmentation_kwargs
+                **segmentation_kwargs,
             )
             limb = self._segmenter.segment()
 
@@ -609,7 +609,9 @@ class LimbObservation(PlanetObservation):
         minimizer: Optional[
             Literal["differential-evolution", "dual-annealing", "basinhopping"]
         ] = None,
-        minimizer_preset: Literal["fast", "balanced", "robust", "scipy-default"] = "balanced",
+        minimizer_preset: Literal[
+            "fast", "balanced", "robust", "scipy-default"
+        ] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         warm_start: bool = False,
         dashboard: bool = False,

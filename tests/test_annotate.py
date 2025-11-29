@@ -25,7 +25,12 @@ from pathlib import Path
 import logging
 from typing import Optional
 
-from planet_ruler.annotate import TkLimbAnnotator, ToolTip, create_tooltip, TkMaskSelector
+from planet_ruler.annotate import (
+    TkLimbAnnotator,
+    ToolTip,
+    create_tooltip,
+    TkMaskSelector,
+)
 
 
 class TestTkLimbAnnotatorCore:
@@ -1312,105 +1317,117 @@ class TestTkMaskSelectorInitialization:
     def test_init_with_numpy_masks(self):
         """Test initialization with numpy array masks"""
         # Create test image and masks
-        image = np.random.randint(0, 255, (100, 100, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (100, 100, 3), dtype="uint8")
         mask1 = np.random.random((100, 100)) > 0.5
         mask2 = np.random.random((100, 100)) > 0.7
         masks = [mask1, mask2]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks, initial_zoom=0.5)
-            
+
             assert selector.height == 100
             assert selector.width == 100
             assert selector.zoom_level == 0.5
             assert len(selector.masks) == 2
-            assert selector.masks[0]['area'] == int(np.sum(mask1))
-            assert selector.masks[1]['area'] == int(np.sum(mask2))
+            assert selector.masks[0]["area"] == int(np.sum(mask1))
+            assert selector.masks[1]["area"] == int(np.sum(mask2))
             assert selector.selected_mask == 0
 
     def test_init_with_dict_masks(self):
         """Test initialization with dictionary format masks"""
-        image = np.random.randint(0, 255, (50, 80, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 80, 3), dtype="uint8")
         mask_data = np.random.random((50, 80)) > 0.6
         masks = [
-            {'mask': mask_data, 'area': 1000},
-            {'segmentation': mask_data, 'area': 500}
+            {"mask": mask_data, "area": 1000},
+            {"segmentation": mask_data, "area": 500},
         ]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
-            
+
             assert len(selector.masks) == 2
-            assert selector.masks[0]['area'] == 1000
-            assert selector.masks[1]['area'] == 500
+            assert selector.masks[0]["area"] == 1000
+            assert selector.masks[1]["area"] == 500
 
     def test_init_auto_zoom_calculation(self):
         """Test automatic zoom calculation"""
-        image = np.random.randint(0, 255, (200, 300, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (200, 300, 3), dtype="uint8")
         masks = [np.random.random((200, 300)) > 0.5]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks, initial_zoom=None)  # type: ignore
-            
+
             # Should auto-calculate zoom based on target canvas size
             assert selector.zoom_level > 0
             assert selector.zoom_level <= 1.0  # Should zoom out for large images
 
     def test_init_default_classifications(self):
         """Test default mask classifications"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [
             np.random.random((50, 50)) > 0.3,  # Large mask
             np.random.random((50, 50)) > 0.7,  # Medium mask
-            np.random.random((50, 50)) > 0.9   # Small mask
+            np.random.random((50, 50)) > 0.9,  # Small mask
         ]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
-            
+
             # Should default first two masks to planet/sky, rest to exclude
-            assert selector.mask_classifications[0] == 'planet'
-            assert selector.mask_classifications[1] == 'sky'
-            assert selector.mask_classifications[2] == 'exclude'
+            assert selector.mask_classifications[0] == "planet"
+            assert selector.mask_classifications[1] == "sky"
+            assert selector.mask_classifications[2] == "exclude"
 
     def test_init_single_mask(self):
         """Test initialization with single mask"""
-        image = np.random.randint(0, 255, (30, 30, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (30, 30, 3), dtype="uint8")
         masks = [np.random.random((30, 30)) > 0.5]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
-            
+
             assert len(selector.masks) == 1
-            assert selector.mask_classifications[0] == 'planet'
+            assert selector.mask_classifications[0] == "planet"
             assert selector.selected_mask == 0
 
     def test_init_empty_masks(self):
         """Test initialization with empty mask list"""
-        image = np.random.randint(0, 255, (30, 30, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (30, 30, 3), dtype="uint8")
         masks = []
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
-            
+
             assert len(selector.masks) == 0
             assert selector.selected_mask is None
 
@@ -1420,81 +1437,87 @@ class TestMaskNormalization:
 
     def test_normalize_numpy_array_masks(self):
         """Test normalization of numpy array masks"""
-        image = np.random.randint(0, 255, (40, 40, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (40, 40, 3), dtype="uint8")
         mask1 = np.random.random((40, 40)) > 0.3
         mask2 = np.random.random((40, 40)) > 0.7
         masks = [mask1, mask2]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             normalized = selector.masks
-            
+
             assert len(normalized) == 2
             for i, mask_dict in enumerate(normalized):
-                assert 'mask' in mask_dict
-                assert 'area' in mask_dict
-                assert 'id' in mask_dict
-                assert mask_dict['mask'].dtype == bool
-                assert mask_dict['area'] > 0
+                assert "mask" in mask_dict
+                assert "area" in mask_dict
+                assert "id" in mask_dict
+                assert mask_dict["mask"].dtype == bool
+                assert mask_dict["area"] > 0
 
     def test_normalize_dict_with_mask_key(self):
         """Test normalization of dict with 'mask' key"""
-        image = np.random.randint(0, 255, (40, 40, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (40, 40, 3), dtype="uint8")
         mask_data = np.random.random((40, 40)) > 0.5
-        masks = [{'mask': mask_data, 'area': 500, 'extra_field': 'test'}]
+        masks = [{"mask": mask_data, "area": 500, "extra_field": "test"}]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             normalized = selector.masks
-            
+
             assert len(normalized) == 1
-            assert normalized[0]['area'] == 500
-            assert 'original' in normalized[0]
-            assert normalized[0]['original']['extra_field'] == 'test'
+            assert normalized[0]["area"] == 500
+            assert "original" in normalized[0]
+            assert normalized[0]["original"]["extra_field"] == "test"
 
     def test_normalize_dict_with_segmentation_key(self):
         """Test normalization of dict with 'segmentation' key (SAM format)"""
-        image = np.random.randint(0, 255, (40, 40, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (40, 40, 3), dtype="uint8")
         mask_data = np.random.random((40, 40)) > 0.5
-        masks = [{'segmentation': mask_data}]
+        masks = [{"segmentation": mask_data}]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             normalized = selector.masks
-            
+
             assert len(normalized) == 1
-            assert normalized[0]['area'] == int(np.sum(mask_data))
+            assert normalized[0]["area"] == int(np.sum(mask_data))
 
     def test_normalize_invalid_dict(self):
         """Test normalization error with invalid dict"""
-        image = np.random.randint(0, 255, (40, 40, 3), dtype='uint8')
-        masks = [{'invalid_key': np.random.random((40, 40)) > 0.5}]
+        image = np.random.randint(0, 255, (40, 40, 3), dtype="uint8")
+        masks = [{"invalid_key": np.random.random((40, 40)) > 0.5}]
 
-        with patch('tkinter.Tk'):
+        with patch("tkinter.Tk"):
             with pytest.raises(ValueError, match="has no 'mask' or 'segmentation' key"):
                 TkMaskSelector(image, masks)
 
     def test_normalize_invalid_type(self):
         """Test normalization error with invalid type"""
-        image = np.random.randint(0, 255, (40, 40, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (40, 40, 3), dtype="uint8")
         masks = ["invalid_string_mask"]
 
-        with patch('tkinter.Tk'):
+        with patch("tkinter.Tk"):
             with pytest.raises(TypeError, match="must be ndarray or dict"):
                 TkMaskSelector(image, masks)
 
     def test_mask_sorting_by_area(self):
         """Test that masks are sorted by area (largest first)"""
-        image = np.random.randint(0, 255, (100, 100, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (100, 100, 3), dtype="uint8")
         # Create masks with different sizes
         large_mask = np.ones((100, 100), dtype=bool)
         large_mask[50:, :] = False  # ~50% area
@@ -1502,17 +1525,19 @@ class TestMaskNormalization:
         medium_mask[70:, :] = False  # ~30% area
         small_mask = np.ones((100, 100), dtype=bool)
         small_mask[90:, :] = False  # ~10% area
-        
+
         masks = [small_mask, large_mask, medium_mask]  # Unsorted order
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
-            
+
             # Should be sorted by area (largest first)
-            areas = [mask['area'] for mask in selector.masks]
+            areas = [mask["area"] for mask in selector.masks]
             assert areas == sorted(areas, reverse=True)
 
 
@@ -1521,20 +1546,25 @@ class TestGUIComponents:
 
     def test_build_gui_components(self):
         """Test that GUI components are created"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch('tkinter.Tk') as mock_tk, \
-             patch('tkinter.ttk.Frame') as mock_frame, \
-             patch('tkinter.ttk.Label') as mock_label, \
-             patch('tkinter.Listbox') as mock_listbox, \
-             patch('tkinter.Canvas') as mock_canvas, \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'), \
-             patch.object(TkMaskSelector, 'update_mask_list'):
-            
+        with patch("tkinter.Tk") as mock_tk, patch(
+            "tkinter.ttk.Frame"
+        ) as mock_frame, patch("tkinter.ttk.Label") as mock_label, patch(
+            "tkinter.Listbox"
+        ) as mock_listbox, patch(
+            "tkinter.Canvas"
+        ) as mock_canvas, patch.object(
+            TkMaskSelector, "_create_overlay_image"
+        ), patch.object(
+            TkMaskSelector, "update_canvas"
+        ), patch.object(
+            TkMaskSelector, "update_mask_list"
+        ):
+
             selector = TkMaskSelector(image, masks)
-            
+
             # Verify GUI creation was attempted
             assert mock_tk.called
             assert mock_frame.called
@@ -1542,20 +1572,22 @@ class TestGUIComponents:
 
     def test_update_mask_list(self):
         """Test mask list update"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         mask1 = np.random.random((50, 50)) > 0.3
         mask2 = np.random.random((50, 50)) > 0.7
         masks = [mask1, mask2]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             selector.mask_listbox = Mock()
-            
+
             selector.update_mask_list()
-            
+
             # Should delete existing items and insert new ones
             selector.mask_listbox.delete.assert_called_with(0, tk.END)
             assert selector.mask_listbox.insert.call_count == 2
@@ -1563,24 +1595,27 @@ class TestGUIComponents:
 
     def test_listbox_selection_handler(self):
         """Test listbox selection event handler"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5, np.random.random((50, 50)) > 0.7]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             selector.mask_listbox = Mock()
             selector.mask_listbox.curselection.return_value = (1,)
             selector.status_label = Mock()
-            
-            with patch.object(selector, '_create_overlay_image'), \
-                 patch.object(selector, 'update_canvas'):
-                
+
+            with patch.object(selector, "_create_overlay_image"), patch.object(
+                selector, "update_canvas"
+            ):
+
                 event = Mock()
                 selector.on_listbox_select(event)
-                
+
                 assert selector.selected_mask == 1
 
 
@@ -1589,7 +1624,7 @@ class TestCanvasInteraction:
 
     def test_canvas_click_selection(self):
         """Test mask selection via canvas click"""
-        image = np.random.randint(0, 255, (100, 100, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (100, 100, 3), dtype="uint8")
         # Create non-overlapping masks for predictable clicking
         mask1 = np.zeros((100, 100), dtype=bool)
         mask1[10:20, 10:20] = True
@@ -1597,77 +1632,86 @@ class TestCanvasInteraction:
         mask2[30:40, 30:40] = True
         masks = [mask1, mask2]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             selector.canvas = Mock()
-            selector.canvas.canvasx.return_value = 150  # 15 * zoom_level (assuming 10x zoom)
+            selector.canvas.canvasx.return_value = (
+                150  # 15 * zoom_level (assuming 10x zoom)
+            )
             selector.canvas.canvasy.return_value = 150
             selector.mask_listbox = Mock()
             selector.status_label = Mock()
             selector.zoom_level = 10.0
-            
-            with patch.object(selector, '_create_overlay_image'), \
-                 patch.object(selector, 'update_canvas'):
-                
+
+            with patch.object(selector, "_create_overlay_image"), patch.object(
+                selector, "update_canvas"
+            ):
+
                 event = Mock()
                 event.x = 15
                 event.y = 15
                 selector.on_canvas_click(event)
-                
+
                 # Should select mask 0 (coordinates 15,15 map to mask1)
                 assert selector.selected_mask == 0
 
     def test_canvas_click_outside_image(self):
         """Test canvas click outside image bounds"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             selector.canvas = Mock()
             selector.canvas.canvasx.return_value = 1000  # Way outside image
             selector.canvas.canvasy.return_value = 1000
             selector.zoom_level = 1.0
             original_selection = selector.selected_mask
-            
+
             event = Mock()
             event.x = 1000
             event.y = 1000
             selector.on_canvas_click(event)
-            
+
             # Selection should remain unchanged
             assert selector.selected_mask == original_selection
 
     def test_canvas_click_no_mask_found(self):
         """Test canvas click where no mask is present"""
-        image = np.random.randint(0, 255, (100, 100, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (100, 100, 3), dtype="uint8")
         # Create mask that doesn't cover the click location
         mask1 = np.zeros((100, 100), dtype=bool)
         mask1[80:90, 80:90] = True  # Only small area at bottom-right
         masks = [mask1]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             selector.canvas = Mock()
             selector.canvas.canvasx.return_value = 10  # Click at top-left
             selector.canvas.canvasy.return_value = 10
             selector.zoom_level = 1.0
             original_selection = selector.selected_mask
-            
+
             event = Mock()
             event.x = 10
             event.y = 10
             selector.on_canvas_click(event)
-            
+
             # Selection should remain unchanged when no mask is clicked
             assert selector.selected_mask == original_selection
 
@@ -1677,110 +1721,120 @@ class TestKeyboardShortcuts:
 
     def test_arrow_key_navigation(self):
         """Test arrow key navigation through masks"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5 for _ in range(3)]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             selector.mask_listbox = Mock()
             selector.status_label = Mock()
-            
-            with patch.object(selector, '_create_overlay_image'), \
-                 patch.object(selector, 'update_canvas'):
-                
+
+            with patch.object(selector, "_create_overlay_image"), patch.object(
+                selector, "update_canvas"
+            ):
+
                 # Test up arrow
                 selector.selected_mask = 1
                 event = Mock()
-                event.keysym = 'up'
+                event.keysym = "up"
                 selector.on_key_press(event)
                 assert selector.selected_mask == 0
-                
+
                 # Test down arrow
-                event.keysym = 'down'
+                event.keysym = "down"
                 selector.on_key_press(event)
                 assert selector.selected_mask == 1
-                
+
                 # Test wraparound
                 selector.selected_mask = 2
-                event.keysym = 'down'
+                event.keysym = "down"
                 selector.on_key_press(event)
                 assert selector.selected_mask == 0  # Should wrap to first
 
     def test_arrow_key_no_selection(self):
         """Test arrow key when no mask is selected"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5 for _ in range(3)]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             selector.selected_mask = None
             selector.mask_listbox = Mock()
             selector.status_label = Mock()
-            
-            with patch.object(selector, '_create_overlay_image'), \
-                 patch.object(selector, 'update_canvas'):
-                
+
+            with patch.object(selector, "_create_overlay_image"), patch.object(
+                selector, "update_canvas"
+            ):
+
                 event = Mock()
-                event.keysym = 'up'
+                event.keysym = "up"
                 selector.on_key_press(event)
                 assert selector.selected_mask == 0  # Should select first mask
 
     def test_classification_shortcuts(self):
         """Test keyboard shortcuts for mask classification"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5 for _ in range(3)]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             selector.selected_mask = 1
             selector.status_label = Mock()
-            
-            with patch.object(selector, '_create_overlay_image'), \
-                 patch.object(selector, 'update_canvas'), \
-                 patch.object(selector, 'update_mask_list'):
-                
+
+            with patch.object(selector, "_create_overlay_image"), patch.object(
+                selector, "update_canvas"
+            ), patch.object(selector, "update_mask_list"):
+
                 # Test 'p' for planet
                 event = Mock()
-                event.char = 'p'
+                event.char = "p"
                 selector.on_key_press(event)
-                assert selector.mask_classifications[1] == 'planet'
-                
+                assert selector.mask_classifications[1] == "planet"
+
                 # Test 's' for sky
-                event.char = 's'
+                event.char = "s"
                 selector.on_key_press(event)
-                assert selector.mask_classifications[1] == 'sky'
-                
+                assert selector.mask_classifications[1] == "sky"
+
                 # Test 'x' for exclude
-                event.char = 'x'
+                event.char = "x"
                 selector.on_key_press(event)
-                assert selector.mask_classifications[1] == 'exclude'
+                assert selector.mask_classifications[1] == "exclude"
 
     def test_classification_shortcuts_no_selection(self):
         """Test classification shortcuts when no mask is selected"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             selector.selected_mask = None
             original_classifications = selector.mask_classifications.copy()
-            
+
             event = Mock()
-            event.char = 'p'
+            event.char = "p"
             selector.on_key_press(event)
-            
+
             # Classifications should remain unchanged
             assert selector.mask_classifications == original_classifications
 
@@ -1790,21 +1844,23 @@ class TestPanningAndZooming:
 
     def test_start_pan(self):
         """Test starting pan operation"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             selector.canvas = Mock()
-            
+
             event = Mock()
             event.x = 100
             event.y = 200
             selector.start_pan(event)
-            
+
             assert selector.is_panning == True
             assert selector.last_mouse_x == 100
             assert selector.last_mouse_y == 200
@@ -1812,24 +1868,26 @@ class TestPanningAndZooming:
 
     def test_do_pan(self):
         """Test pan operation"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             selector.canvas = Mock()
             selector.is_panning = True
             selector.last_mouse_x = 100
             selector.last_mouse_y = 200
-            
+
             event = Mock()
             event.x = 120
             event.y = 180
             selector.do_pan(event)
-            
+
             # Should scroll canvas by delta
             selector.canvas.xview_scroll.assert_called_with(-20, tk.UNITS)
             selector.canvas.yview_scroll.assert_called_with(20, tk.UNITS)
@@ -1838,108 +1896,121 @@ class TestPanningAndZooming:
 
     def test_do_pan_not_panning(self):
         """Test pan when not in panning mode"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             selector.canvas = Mock()
             selector.is_panning = False
-            
+
             event = Mock()
             event.x = 120
             event.y = 180
             selector.do_pan(event)
-            
+
             # Should not scroll when not panning
             selector.canvas.xview_scroll.assert_not_called()
             selector.canvas.yview_scroll.assert_not_called()
 
     def test_end_pan(self):
         """Test ending pan operation"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             selector.canvas = Mock()
             selector.is_panning = True
-            
+
             event = Mock()
             selector.end_pan(event)
-            
+
             assert selector.is_panning == False
             selector.canvas.config.assert_called_with(cursor="")
 
     def test_mousewheel_zoom_in(self):
         """Test mouse wheel zoom in"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             original_zoom = selector.zoom_level
-            
-            with patch.object(selector, '_create_overlay_image'), \
-                 patch.object(selector, 'update_canvas'):
-                
+
+            with patch.object(selector, "_create_overlay_image"), patch.object(
+                selector, "update_canvas"
+            ):
+
                 event = Mock()
                 event.delta = 120  # Positive delta = zoom in
                 selector.on_mousewheel(event)
-                
+
                 assert selector.zoom_level > original_zoom
 
     def test_mousewheel_zoom_out(self):
         """Test mouse wheel zoom out"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             original_zoom = selector.zoom_level
-            
-            with patch.object(selector, '_create_overlay_image'), \
-                 patch.object(selector, 'update_canvas'):
-                
+
+            with patch.object(selector, "_create_overlay_image"), patch.object(
+                selector, "update_canvas"
+            ):
+
                 event = Mock()
                 event.delta = -120  # Negative delta = zoom out
                 selector.on_mousewheel(event)
-                
+
                 assert selector.zoom_level < original_zoom
 
     def test_zoom_clamping(self):
         """Test zoom level clamping"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
-            
-            with patch.object(selector, '_create_overlay_image'), \
-                 patch.object(selector, 'update_canvas'):
-                
+
+            with patch.object(selector, "_create_overlay_image"), patch.object(
+                selector, "update_canvas"
+            ):
+
                 # Test maximum zoom
                 selector.zoom_level = 10.0
                 event = Mock()
                 event.delta = 120
                 selector.on_mousewheel(event)
                 assert selector.zoom_level <= 5.0  # Should be clamped
-                
+
                 # Test minimum zoom
                 selector.zoom_level = 0.05
                 event.delta = -120
@@ -1952,54 +2023,58 @@ class TestUtilityMethods:
 
     def test_reset_classifications(self):
         """Test resetting all classifications to defaults"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5 for _ in range(4)]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
             selector.status_label = Mock()
-            
+
             # Change some classifications
-            selector.mask_classifications[2] = 'planet'
-            selector.mask_classifications[3] = 'sky'
-            
-            with patch.object(selector, '_create_overlay_image'), \
-                 patch.object(selector, 'update_canvas'), \
-                 patch.object(selector, 'update_mask_list'):
-                
+            selector.mask_classifications[2] = "planet"
+            selector.mask_classifications[3] = "sky"
+
+            with patch.object(selector, "_create_overlay_image"), patch.object(
+                selector, "update_canvas"
+            ), patch.object(selector, "update_mask_list"):
+
                 selector.reset_classifications()
-                
+
                 # Should reset to defaults
-                assert selector.mask_classifications[0] == 'planet'
-                assert selector.mask_classifications[1] == 'sky'
-                assert selector.mask_classifications[2] == 'exclude'
-                assert selector.mask_classifications[3] == 'exclude'
+                assert selector.mask_classifications[0] == "planet"
+                assert selector.mask_classifications[1] == "sky"
+                assert selector.mask_classifications[2] == "exclude"
+                assert selector.mask_classifications[3] == "exclude"
 
     def test_get_classified_masks(self):
         """Test getting classified masks"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5 for _ in range(4)]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             selector = TkMaskSelector(image, masks)
-            
+
             # Set specific classifications
-            selector.mask_classifications[0] = 'planet'
-            selector.mask_classifications[1] = 'sky'
-            selector.mask_classifications[2] = 'planet'
-            selector.mask_classifications[3] = 'exclude'
-            
+            selector.mask_classifications[0] = "planet"
+            selector.mask_classifications[1] = "sky"
+            selector.mask_classifications[2] = "planet"
+            selector.mask_classifications[3] = "exclude"
+
             classified = selector.get_classified_masks()
-            
-            assert len(classified['planet']) == 2
-            assert len(classified['sky']) == 1
-            assert len(classified['exclude']) == 1
+
+            assert len(classified["planet"]) == 2
+            assert len(classified["sky"]) == 1
+            assert len(classified["exclude"]) == 1
 
 
 class TestFinishAndCleanup:
@@ -2007,135 +2082,146 @@ class TestFinishAndCleanup:
 
     def test_finish_method(self):
         """Test finish method execution"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch('tkinter.Tk') as mock_tk, \
-             patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk") as mock_tk, patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             mock_root = Mock()
             mock_tk.return_value = mock_root
-            
+
             selector = TkMaskSelector(image, masks)
             selector.root = mock_root
-            
+
             selector.finish()
-            
+
             assert selector.is_finished == True
             mock_root.withdraw.assert_called_once()
             mock_root.quit.assert_called_once()
 
-    @patch('logging.warning')
+    @patch("logging.warning")
     def test_finish_method_with_exception(self, mock_warning):
         """Test finish method when exception occurs"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch('tkinter.Tk') as mock_tk, \
-             patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk") as mock_tk, patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             mock_root = Mock()
             mock_root.quit.side_effect = Exception("Test exception")
             mock_tk.return_value = mock_root
-            
+
             selector = TkMaskSelector(image, masks)
             selector.root = mock_root
-            
+
             # Should not raise exception, should log warning
             selector.finish()
-            
+
             assert selector.is_finished == True
             mock_warning.assert_called()
 
     def test_run_method_normal_execution(self):
         """Test run method normal execution"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch('tkinter.Tk') as mock_tk, \
-             patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk") as mock_tk, patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             mock_root = Mock()
             mock_tk.return_value = mock_root
-            
+
             selector = TkMaskSelector(image, masks)
             selector.root = mock_root
-            
+
             selector.run()
-            
+
             mock_root.mainloop.assert_called_once()
 
     def test_run_method_keyboard_interrupt(self):
         """Test run method with keyboard interrupt"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch('tkinter.Tk') as mock_tk, \
-             patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk") as mock_tk, patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
+
             mock_root = Mock()
             mock_root.mainloop.side_effect = KeyboardInterrupt()
             mock_tk.return_value = mock_root
-            
+
             selector = TkMaskSelector(image, masks)
             selector.root = mock_root
-            
+
             # Should handle KeyboardInterrupt gracefully
             selector.run()
-            
+
             mock_root.mainloop.assert_called_once()
 
 
 class TestOverlayImageCreation:
     """Test overlay image creation and color coding"""
 
-    @patch('cv2.dilate')
+    @patch("cv2.dilate")
     def test_create_overlay_image_basic(self, mock_dilate):
         """Test basic overlay image creation"""
-        image = np.random.randint(0, 255, (50, 50, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         mask1 = np.random.random((50, 50)) > 0.5
         mask2 = np.random.random((50, 50)) > 0.7
         masks = [mask1, mask2]
 
         # Mock cv2.dilate to return a simple dilation
-        mock_dilate.return_value = np.ones((50, 50), dtype='uint8')
+        mock_dilate.return_value = np.ones((50, 50), dtype="uint8")
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
-            
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "update_canvas"):
+
             selector = TkMaskSelector(image, masks)
             selector.selected_mask = 0
-            
+
             # This should create overlay without errors
             selector._create_overlay_image()
-            
-            assert hasattr(selector, 'overlay_image')
+
+            assert hasattr(selector, "overlay_image")
             mock_dilate.assert_called()
 
     def test_update_canvas_basic(self):
         """Test basic canvas update functionality"""
-        image = np.random.randint(0, 255, (100, 200, 3), dtype='uint8')
+        image = np.random.randint(0, 255, (100, 200, 3), dtype="uint8")
         masks = [np.random.random((100, 200)) > 0.5]
 
-        with patch('tkinter.Tk'), patch.object(TkMaskSelector, '_build_gui'), \
-             patch.object(TkMaskSelector, '_create_overlay_image'), \
-             patch.object(TkMaskSelector, 'update_canvas'):
+        with patch("tkinter.Tk"), patch.object(
+            TkMaskSelector, "_build_gui"
+        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
+            TkMaskSelector, "update_canvas"
+        ):
 
             selector = TkMaskSelector(image, masks)
-            
+
             # Test that canvas dimensions are calculated correctly
             selector.zoom_level = 2.0
-            expected_width = int(selector.width * selector.zoom_level)  # 200 * 2.0 = 400
-            expected_height = int(selector.height * selector.zoom_level)  # 100 * 2.0 = 200
-            
+            expected_width = int(
+                selector.width * selector.zoom_level
+            )  # 200 * 2.0 = 400
+            expected_height = int(
+                selector.height * selector.zoom_level
+            )  # 100 * 2.0 = 200
+
             assert expected_width == 400
             assert expected_height == 200
             assert selector.zoom_level == 2.0

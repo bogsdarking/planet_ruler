@@ -284,7 +284,7 @@ class TestLimbObservation:
                 method="sam",
                 downsample_factor=1,
                 interactive=True,
-                segmenter="segment-anything"
+                segmenter="segment-anything",
             )
             mock_segmenter.segment.assert_called_once()
 
@@ -1240,7 +1240,9 @@ class TestObservationMultiResolution:
             # Mock fitted limb
             fitted_limb = np.random.random(large_image.shape[1])
             mock_cost_function.evaluate.return_value = fitted_limb
-            mock_cost_function.cost.return_value = 0.123456  # Real number for formatting
+            mock_cost_function.cost.return_value = (
+                0.123456  # Real number for formatting
+            )
 
             obs.fit_limb(
                 loss_function="gradient_field",
@@ -1344,7 +1346,9 @@ class TestObservationMultiResolution:
 
             fitted_limb = np.random.random(image_data.shape[1])
             mock_cost_function.evaluate.return_value = fitted_limb
-            mock_cost_function.cost.return_value = 0.234567  # Real number for formatting
+            mock_cost_function.cost.return_value = (
+                0.234567  # Real number for formatting
+            )
 
             obs.fit_limb(
                 loss_function="gradient_field",
@@ -1367,9 +1371,7 @@ class TestObservationMultiResolution:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
             with patch("planet_ruler.observation.logging") as mock_logging:
@@ -1383,7 +1385,10 @@ class TestObservationMultiResolution:
                         # Should log warning about fallback
                         mock_logging.warning.assert_called_once()
                         warning_msg = mock_logging.warning.call_args[0][0]
-                        assert "Multi-resolution optimization is only supported" in warning_msg
+                        assert (
+                            "Multi-resolution optimization is only supported"
+                            in warning_msg
+                        )
 
             os.unlink(tmp_file.name)
 
@@ -1395,9 +1400,7 @@ class TestObservationMultiResolution:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
 
             # Test parameters
             params = {
@@ -1576,9 +1579,7 @@ class TestObservationMinimizers:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
             with pytest.raises(ValueError, match="Unknown preset"):
@@ -1594,9 +1595,7 @@ class TestObservationMinimizers:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
             with pytest.raises(ValueError, match="Unknown minimizer"):
@@ -1620,9 +1619,7 @@ class TestObservationMinimizers:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
             # Mock cost function and results
@@ -1638,7 +1635,11 @@ class TestObservationMinimizers:
             mock_cost_function.evaluate.return_value = fitted_limb
 
             # Override some preset parameters
-            custom_kwargs = {"popsize": 25, "mutation": [0.2, 2.0], "custom_param": "test"}
+            custom_kwargs = {
+                "popsize": 25,
+                "mutation": [0.2, 2.0],
+                "custom_param": "test",
+            }
 
             obs.fit_limb(
                 loss_function="l2",
@@ -1684,7 +1685,7 @@ class TestObservationImageSmoothing:
         config_file,
     ):
         """Test that image smoothing is applied and then restored"""
-        original_image = np.random.random((400, 500)).astype('float32')
+        original_image = np.random.random((400, 500)).astype("float32")
         smoothed_image = original_image + 0.1
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
@@ -1748,9 +1749,7 @@ class TestObservationImageSmoothing:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
             # Mock cost function and results
@@ -1811,9 +1810,7 @@ class TestObservationDashboard:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
             # Mock dashboard
@@ -2026,9 +2023,7 @@ class TestObservationDetectionMethods:
             yield f.name
         os.unlink(f.name)
 
-    def test_detect_limb_gradient_field_method(
-        self, sample_horizon_image, config_file
-    ):
+    def test_detect_limb_gradient_field_method(self, sample_horizon_image, config_file):
         """Test gradient-field detection method (which skips detection)"""
         image_data = sample_horizon_image()
 
@@ -2065,7 +2060,9 @@ class TestObservationDetectionMethods:
             )
 
             # Override method at detection time
-            with patch("planet_ruler.observation.gradient_break") as mock_gradient_break:
+            with patch(
+                "planet_ruler.observation.gradient_break"
+            ) as mock_gradient_break:
                 expected_limb = np.random.random(image_data.shape[1])
                 mock_gradient_break.return_value = expected_limb
 
@@ -2085,9 +2082,7 @@ class TestObservationDetectionMethods:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
 
             limb_data = np.random.random(100)
             result = obs.register_limb(limb_data)
@@ -2122,9 +2117,7 @@ class TestObservationErrorHandling:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
             # No limb data registered
 
             with pytest.raises(ValueError, match="requires detected limb"):
@@ -2143,9 +2136,7 @@ class TestObservationErrorHandling:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
             obs.fit_results = Mock()  # Mock fit results exist
 
             # Mock exception
@@ -2161,7 +2152,9 @@ class TestObservationErrorHandling:
 
             os.unlink(tmp_file.name)
 
-    def test_warm_start_with_missing_parameters(self, sample_horizon_image, config_file):
+    def test_warm_start_with_missing_parameters(
+        self, sample_horizon_image, config_file
+    ):
         """Test warm start handles missing parameters in best_parameters"""
         image_data = sample_horizon_image()
 
@@ -2169,9 +2162,7 @@ class TestObservationErrorHandling:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
 
             assert obs.init_parameter_values is not None
             assert obs.free_parameters is not None
@@ -2215,9 +2206,7 @@ class TestObservationMiscellaneous:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
 
             raw_limb = np.random.random(100)
             obs._raw_limb = raw_limb
@@ -2246,9 +2235,7 @@ class TestObservationMiscellaneous:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
 
             # Set best_parameters with missing keys
             obs.best_parameters = {
@@ -2271,9 +2258,7 @@ class TestObservationMiscellaneous:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
 
             with patch.object(obs, "detect_limb") as mock_detect:
                 with patch.object(obs, "fit_limb") as mock_fit:
@@ -2296,9 +2281,7 @@ class TestObservationMiscellaneous:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(
-                image_filepath=tmp_file.name, fit_config=config_file
-            )
+            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
             # Mock dashboard
