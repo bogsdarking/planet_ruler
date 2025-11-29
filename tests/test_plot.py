@@ -604,7 +604,7 @@ class TestPlotGradientFieldAtLimb:
         mock_gradient_field.assert_called_once_with(
             ANY,
             kernel_smoothing=5.0,
-            directional_smoothing=30,
+            directional_smoothing=50,
             directional_decay_rate=0.15,
         )
 

@@ -21,6 +21,7 @@ for fitting with the existing planet_ruler pipeline.
 
 import numpy as np
 import json
+import logging
 from pathlib import Path
 
 import tkinter as tk
@@ -1001,8 +1002,12 @@ class TkMaskSelector:
         display_width = int(self.width * self.zoom_level)
         display_height = int(self.height * self.zoom_level)
         
+        # Ensure overlay_image exists (defensive programming for testing)
+        if not hasattr(self, 'overlay_image') or self.overlay_image is None:
+            self._create_overlay_image()
+        
         # Resize overlay image
-        resized = self.overlay_image.resize((display_width, display_height), 
+        resized = self.overlay_image.resize((display_width, display_height),
                                            Image.Resampling.LANCZOS)
         
         # Convert to PhotoImage
