@@ -575,6 +575,7 @@ class LimbObservation(PlanetObservation):
 
         elif self.limb_detection == "gradient-field":
             print("Skipping detection step (not needed for gradient-field method)")
+            return self
 
         # For non-manual methods, register the limb
         self.register_limb(limb)
