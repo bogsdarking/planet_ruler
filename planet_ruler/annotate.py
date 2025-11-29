@@ -692,12 +692,12 @@ class TkLimbAnnotator:
 class TkMaskSelector:
     """
     Interactive mask classification tool for segmentation results.
-    
+
     Works with ANY segmentation method - completely backend-agnostic.
-    Allows users to classify masks as 'planet', 'sky', or 'exclude' for 
+    Allows users to classify masks as 'planet', 'sky', or 'exclude' for
     horizon detection. Aligns with Planet Ruler's educational philosophy
     of transparency over black-box automation.
-    
+
     Args:
         image: Original image array (H x W x 3)
         masks: List of masks in any of these formats:
@@ -706,44 +706,44 @@ class TkMaskSelector:
             - Mixed formats are OK
         initial_zoom: Initial zoom level (None = auto-fit to window)
     """
-    
+
     def __init__(self, image: np.ndarray, masks: list, initial_zoom: float = None):
         self.image = image
         self.height, self.width = image.shape[:2]
-        
+
         # Normalize masks to consistent internal format
         self.masks = self._normalize_masks(masks)
-        
+
         # Classification state - default first two to planet/sky
-        self.mask_classifications = {i: 'exclude' for i in range(len(self.masks))}
+        self.mask_classifications = {i: "exclude" for i in range(len(self.masks))}
         if len(self.masks) >= 1:
-            self.mask_classifications[0] = 'planet'
+            self.mask_classifications[0] = "planet"
         if len(self.masks) >= 2:
-            self.mask_classifications[1] = 'sky'
-        
+            self.mask_classifications[1] = "sky"
+
         self.selected_mask = 0 if len(self.masks) > 0 else None
-        
+
         # Colors for visualization (lighter colors for readability)
         self.colors = {
-            'planet': (100, 200, 100),  # Green
-            'sky': (100, 200, 255),      # Light cyan (readable on dark bg)
-            'exclude': (128, 128, 128)   # Gray
+            "planet": (100, 200, 100),  # Green
+            "sky": (100, 200, 255),  # Light cyan (readable on dark bg)
+            "exclude": (128, 128, 128),  # Gray
         }
-        
+
         # Text colors for listbox (readable on white)
         self.text_colors = {
-            'planet': 'darkgreen',
-            'sky': 'blue',  # Standard blue on white
-            'exclude': 'gray'
+            "planet": "darkgreen",
+            "sky": "blue",  # Standard blue on white
+            "exclude": "gray",
         }
-        
+
         # Highlight colors based on classification
         self.highlight_colors = {
-            'planet': (150, 255, 150),  # Light green
-            'sky': (150, 200, 255),     # Light cyan
-            'exclude': (255, 255, 100)  # Yellow (default/unclassified)
+            "planet": (150, 255, 150),  # Light green
+            "sky": (150, 200, 255),  # Light cyan
+            "exclude": (255, 255, 100),  # Yellow (default/unclassified)
         }
-        
+
         # GUI state
         self.pan_x = 0
         self.pan_y = 0
@@ -751,18 +751,18 @@ class TkMaskSelector:
         self.last_mouse_y = 0
         self.is_panning = False
         self.is_finished = False  # Track if user clicked Done
-        
+
         # Create GUI
         self.root = tk.Tk()
         self.root.title("Mask Classification - Planet Ruler")
-        
+
         # Handle window close properly
         self.root.protocol("WM_DELETE_WINDOW", self.finish)
-        
+
         # Calculate window size and zoom to fit image
         target_canvas_width = 1000
         target_canvas_height = 700
-        
+
         if initial_zoom is None:
             # Auto-fit: calculate zoom to show full image
             zoom_w = target_canvas_width / self.width
@@ -770,280 +770,302 @@ class TkMaskSelector:
             self.zoom_level = min(zoom_w, zoom_h, 1.0)  # Don't zoom in, only out
         else:
             self.zoom_level = initial_zoom
-        
+
         # Set window size based on zoom
         window_width = min(1600, int(self.width * self.zoom_level) + 450)
         window_height = min(1000, int(self.height * self.zoom_level) + 100)
         self.root.geometry(f"{window_width}x{window_height}")
-        
+
         self._build_gui()
         self._create_overlay_image()
         self.update_canvas()
-    
+
     def _normalize_masks(self, masks: list) -> list:
         """
         Convert various mask formats to consistent internal format.
-        
+
         Accepts:
         - np.ndarray: boolean mask
         - dict with 'mask' key: {'mask': array, ...}
         - dict with 'segmentation' key: {'segmentation': array, ...} (SAM format)
-        
+
         Returns:
         - List of dicts: [{'mask': array, 'area': int, 'id': int}, ...]
         """
         normalized = []
-        
+
         for idx, m in enumerate(masks):
             if isinstance(m, np.ndarray):
                 # Just a boolean array
-                normalized.append({
-                    'mask': m.astype(bool),
-                    'area': int(np.sum(m)),
-                    'id': idx
-                })
+                normalized.append(
+                    {"mask": m.astype(bool), "area": int(np.sum(m)), "id": idx}
+                )
             elif isinstance(m, dict):
                 # Dict format - extract mask
-                mask_array = m.get('mask', m.get('segmentation'))
+                mask_array = m.get("mask", m.get("segmentation"))
                 if mask_array is None:
-                    raise ValueError(f"Mask {idx} dict has no 'mask' or 'segmentation' key")
-                
-                normalized.append({
-                    'mask': mask_array.astype(bool),
-                    'area': m.get('area', int(np.sum(mask_array))),
-                    'id': idx,
-                    'original': m  # Keep original for reference
-                })
+                    raise ValueError(
+                        f"Mask {idx} dict has no 'mask' or 'segmentation' key"
+                    )
+
+                normalized.append(
+                    {
+                        "mask": mask_array.astype(bool),
+                        "area": m.get("area", int(np.sum(mask_array))),
+                        "id": idx,
+                        "original": m,  # Keep original for reference
+                    }
+                )
             else:
                 raise TypeError(f"Mask {idx} must be ndarray or dict, got {type(m)}")
-        
+
         # Sort by area (largest first) - universal heuristic
-        normalized.sort(key=lambda x: x['area'], reverse=True)
-        
+        normalized.sort(key=lambda x: x["area"], reverse=True)
+
         return normalized
-        
+
     def _build_gui(self):
         """Build the GUI layout."""
         # Main container
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill=tk.BOTH, expand=True)
-        
+
         # Left panel - controls
         left_panel = ttk.Frame(main_frame, width=400)  # Even wider
         left_panel.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
         left_panel.pack_propagate(False)
-        
+
         # Title
-        title = ttk.Label(left_panel, text="Mask Classification", 
-                         font=("Arial", 16, "bold"))
+        title = ttk.Label(
+            left_panel, text="Mask Classification", font=("Arial", 16, "bold")
+        )
         title.pack(pady=(0, 10))
-        
+
         # Instructions
-        instructions = ttk.Label(left_panel, text=(
-            "Select mask:\n"
-            "  • Click directly on image\n"
-            "  • Click in list below\n"
-            "  • Arrow keys (↑/↓) to cycle\n\n"
-            "Classify selected mask:\n"
-            "  P = Planet (green)\n"
-            "  S = Sky (cyan)\n"
-            "  X = Exclude (gray)\n\n"
-            "Navigate:\n"
-            "  Middle click = Pan\n"
-            "  Scroll = Zoom"
-        ), justify=tk.LEFT, font=("Arial", 11))
+        instructions = ttk.Label(
+            left_panel,
+            text=(
+                "Select mask:\n"
+                "  • Click directly on image\n"
+                "  • Click in list below\n"
+                "  • Arrow keys (↑/↓) to cycle\n\n"
+                "Classify selected mask:\n"
+                "  P = Planet (green)\n"
+                "  S = Sky (cyan)\n"
+                "  X = Exclude (gray)\n\n"
+                "Navigate:\n"
+                "  Middle click = Pan\n"
+                "  Scroll = Zoom"
+            ),
+            justify=tk.LEFT,
+            font=("Arial", 11),
+        )
         instructions.pack(pady=(0, 15))
-        
+
         # Mask list
-        list_label = ttk.Label(left_panel, text="Masks (by area):",
-                              font=("Arial", 13, "bold"))
+        list_label = ttk.Label(
+            left_panel, text="Masks (by area):", font=("Arial", 13, "bold")
+        )
         list_label.pack()
-        
+
         # Scrollable mask list
         list_frame = ttk.Frame(left_panel)
         list_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-        
+
         scrollbar = ttk.Scrollbar(list_frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
+
         self.mask_listbox = tk.Listbox(
-            list_frame, 
+            list_frame,
             yscrollcommand=scrollbar.set,
-            font=("Arial", 13)  # Large, readable font
+            font=("Arial", 13),  # Large, readable font
         )
         self.mask_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.mask_listbox.yview)
-        
-        self.mask_listbox.bind('<<ListboxSelect>>', self.on_listbox_select)
-        
+
+        self.mask_listbox.bind("<<ListboxSelect>>", self.on_listbox_select)
+
         # Action buttons
         button_frame = ttk.Frame(left_panel)
         button_frame.pack(pady=10)
-        
-        ttk.Button(button_frame, text="Done", 
-                  command=self.finish).pack(fill=tk.X, pady=2)
-        ttk.Button(button_frame, text="Reset All", 
-                  command=self.reset_classifications).pack(fill=tk.X, pady=2)
-        
+
+        ttk.Button(button_frame, text="Done", command=self.finish).pack(
+            fill=tk.X, pady=2
+        )
+        ttk.Button(
+            button_frame, text="Reset All", command=self.reset_classifications
+        ).pack(fill=tk.X, pady=2)
+
         # Status
-        self.status_label = ttk.Label(left_panel, text="", 
-                                     font=("Arial", 11), foreground="blue")
+        self.status_label = ttk.Label(
+            left_panel, text="", font=("Arial", 11), foreground="blue"
+        )
         self.status_label.pack(pady=5)
-        
+
         # Right panel - canvas
         right_panel = ttk.Frame(main_frame)
         right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        
+
         # Canvas with scrollbars
-        self.canvas = tk.Canvas(right_panel, bg='gray')
-        h_scrollbar = ttk.Scrollbar(right_panel, orient=tk.HORIZONTAL, 
-                                   command=self.canvas.xview)
-        v_scrollbar = ttk.Scrollbar(right_panel, orient=tk.VERTICAL,
-                                   command=self.canvas.yview)
-        
-        self.canvas.config(xscrollcommand=h_scrollbar.set,
-                          yscrollcommand=v_scrollbar.set)
-        
+        self.canvas = tk.Canvas(right_panel, bg="gray")
+        h_scrollbar = ttk.Scrollbar(
+            right_panel, orient=tk.HORIZONTAL, command=self.canvas.xview
+        )
+        v_scrollbar = ttk.Scrollbar(
+            right_panel, orient=tk.VERTICAL, command=self.canvas.yview
+        )
+
+        self.canvas.config(
+            xscrollcommand=h_scrollbar.set, yscrollcommand=v_scrollbar.set
+        )
+
         h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
         v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
+
         # Bind events
-        self.canvas.bind('<Button-1>', self.on_canvas_click)
-        self.canvas.bind('<Button-2>', self.start_pan)  # Middle click
-        self.canvas.bind('<B2-Motion>', self.do_pan)
-        self.canvas.bind('<ButtonRelease-2>', self.end_pan)
-        self.canvas.bind('<MouseWheel>', self.on_mousewheel)
-        self.root.bind('<Key>', self.on_key_press)
-        
+        self.canvas.bind("<Button-1>", self.on_canvas_click)
+        self.canvas.bind("<Button-2>", self.start_pan)  # Middle click
+        self.canvas.bind("<B2-Motion>", self.do_pan)
+        self.canvas.bind("<ButtonRelease-2>", self.end_pan)
+        self.canvas.bind("<MouseWheel>", self.on_mousewheel)
+        self.root.bind("<Key>", self.on_key_press)
+
         self.update_mask_list()
-        
+
     def _create_overlay_image(self):
         """Create overlay image with color-coded highlights and proper edge detection."""
         import cv2
-        
+
         # Start with original image
         overlay_array = self.image.copy().astype(np.float32)
-        
+
         # Alpha blending parameter
         alpha = 0.4
-        
+
         # Apply masks using vectorized operations
         for mask_idx, mask_dict in enumerate(self.masks):
-            mask_bool = mask_dict['mask']
+            mask_bool = mask_dict["mask"]
             classification = self.mask_classifications[mask_idx]
-            
-            if classification != 'exclude':
+
+            if classification != "exclude":
                 color = self.colors[classification]
                 r, g, b = color
-                
+
                 # Vectorized blend: overlay = alpha * color + (1-alpha) * original
-                overlay_array[mask_bool, 0] = alpha * r + (1 - alpha) * overlay_array[mask_bool, 0]
-                overlay_array[mask_bool, 1] = alpha * g + (1 - alpha) * overlay_array[mask_bool, 1]
-                overlay_array[mask_bool, 2] = alpha * b + (1 - alpha) * overlay_array[mask_bool, 2]
-        
+                overlay_array[mask_bool, 0] = (
+                    alpha * r + (1 - alpha) * overlay_array[mask_bool, 0]
+                )
+                overlay_array[mask_bool, 1] = (
+                    alpha * g + (1 - alpha) * overlay_array[mask_bool, 1]
+                )
+                overlay_array[mask_bool, 2] = (
+                    alpha * b + (1 - alpha) * overlay_array[mask_bool, 2]
+                )
+
         # Add color-coded highlight border for selected mask
         if self.selected_mask is not None:
-            selected_mask_bool = self.masks[self.selected_mask]['mask'].astype(np.uint8)
+            selected_mask_bool = self.masks[self.selected_mask]["mask"].astype(np.uint8)
             classification = self.mask_classifications[self.selected_mask]
-            
+
             # Get highlight color based on classification
-            highlight_r, highlight_g, highlight_b = self.highlight_colors[classification]
-            
+            highlight_r, highlight_g, highlight_b = self.highlight_colors[
+                classification
+            ]
+
             # Create thick border by dilating mask
             kernel = np.ones((15, 15), np.uint8)  # Very thick border
             dilated = cv2.dilate(selected_mask_bool, kernel, iterations=1)
             border = (dilated > 0) & (~selected_mask_bool.astype(bool))
-            
+
             # Highlight edges ONLY where mask actually touches
             edge_highlight = np.zeros_like(selected_mask_bool, dtype=bool)
-            
+
             # Top edge - highlight only columns where mask touches top
             top_touching = selected_mask_bool[0, :]
             if np.any(top_touching):
                 for x in np.where(top_touching)[0]:
                     edge_highlight[0:10, x] = True
-            
+
             # Bottom edge
             bottom_touching = selected_mask_bool[-1, :]
             if np.any(bottom_touching):
                 for x in np.where(bottom_touching)[0]:
                     edge_highlight[-10:, x] = True
-            
+
             # Left edge - highlight only rows where mask touches left
             left_touching = selected_mask_bool[:, 0]
             if np.any(left_touching):
                 for y in np.where(left_touching)[0]:
                     edge_highlight[y, 0:10] = True
-            
+
             # Right edge
             right_touching = selected_mask_bool[:, -1]
             if np.any(right_touching):
                 for y in np.where(right_touching)[0]:
                     edge_highlight[y, -10:] = True
-            
+
             # Combine border and edge highlights
             full_highlight = border | edge_highlight
-            
+
             # Apply color-coded highlight
             overlay_array[full_highlight, 0] = highlight_r
             overlay_array[full_highlight, 1] = highlight_g
             overlay_array[full_highlight, 2] = highlight_b
-        
+
         # Convert to uint8
         overlay_array = np.clip(overlay_array, 0, 255).astype(np.uint8)
-        
+
         # Convert to PIL Image
         self.overlay_image = Image.fromarray(overlay_array)
-        
+
     def update_canvas(self):
         """Update canvas with current overlay at current zoom level."""
         # Calculate zoomed size
         display_width = int(self.width * self.zoom_level)
         display_height = int(self.height * self.zoom_level)
-        
+
         # Ensure overlay_image exists (defensive programming for testing)
-        if not hasattr(self, 'overlay_image') or self.overlay_image is None:
+        if not hasattr(self, "overlay_image") or self.overlay_image is None:
             self._create_overlay_image()
-        
+
         # Resize overlay image
-        resized = self.overlay_image.resize((display_width, display_height),
-                                           Image.Resampling.LANCZOS)
-        
+        resized = self.overlay_image.resize(
+            (display_width, display_height), Image.Resampling.LANCZOS
+        )
+
         # Convert to PhotoImage
         self.photo = ImageTk.PhotoImage(resized)
-        
+
         # Update canvas
-        self.canvas.delete('all')
+        self.canvas.delete("all")
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.photo)
         self.canvas.config(scrollregion=(0, 0, display_width, display_height))
-        
+
     def update_mask_list(self):
         """Update the mask listbox with text labels."""
         self.mask_listbox.delete(0, tk.END)
-        
+
         for idx, mask_dict in enumerate(self.masks):
-            area = mask_dict['area']
+            area = mask_dict["area"]
             classification = self.mask_classifications[idx]
-            
+
             # Text labels instead of symbols
-            label_text = {
-                'planet': 'Planet',
-                'sky': 'Sky',
-                'exclude': 'Exclude'
-            }[classification]
-            
+            label_text = {"planet": "Planet", "sky": "Sky", "exclude": "Exclude"}[
+                classification
+            ]
+
             label = f"[{label_text:>7}] #{idx}: {area:,}px"
             self.mask_listbox.insert(tk.END, label)
-            
+
             # Color code with readable colors
             self.mask_listbox.itemconfig(idx, fg=self.text_colors[classification])
-        
+
         # Highlight selected
         if self.selected_mask is not None:
             self.mask_listbox.selection_set(self.selected_mask)
             self.mask_listbox.see(self.selected_mask)
-            
+
     def on_listbox_select(self, event):
         """Handle mask selection from listbox."""
         selection = self.mask_listbox.curselection()
@@ -1051,30 +1073,28 @@ class TkMaskSelector:
             self.selected_mask = selection[0]
             self._create_overlay_image()
             self.update_canvas()
-            self.status_label.config(
-                text=f"Selected mask #{self.selected_mask}"
-            )
-            
+            self.status_label.config(text=f"Selected mask #{self.selected_mask}")
+
     def on_canvas_click(self, event):
         """Handle click on canvas to select mask."""
         # Convert canvas coords to image coords
         canvas_x = self.canvas.canvasx(event.x)
         canvas_y = self.canvas.canvasy(event.y)
-        
+
         img_x = int(canvas_x / self.zoom_level)
         img_y = int(canvas_y / self.zoom_level)
-        
+
         # Check if within image bounds
         if not (0 <= img_x < self.width and 0 <= img_y < self.height):
             return
-        
+
         # Find which mask was clicked (check from smallest to largest area)
         clicked_mask = None
         for idx in reversed(range(len(self.masks))):
-            if self.masks[idx]['mask'][img_y, img_x]:
+            if self.masks[idx]["mask"][img_y, img_x]:
                 clicked_mask = idx
                 break
-        
+
         if clicked_mask is not None:
             self.selected_mask = clicked_mask
             self.mask_listbox.selection_clear(0, tk.END)
@@ -1083,21 +1103,21 @@ class TkMaskSelector:
             self._create_overlay_image()
             self.update_canvas()
             self.status_label.config(text=f"Selected mask #{clicked_mask}")
-            
+
     def on_key_press(self, event):
         """Handle keyboard shortcuts."""
         key = event.keysym.lower()
-        
+
         # Arrow keys to cycle through masks
-        if key in ('up', 'down'):
+        if key in ("up", "down"):
             if self.selected_mask is None:
                 self.selected_mask = 0
             else:
-                if key == 'up':
+                if key == "up":
                     self.selected_mask = (self.selected_mask - 1) % len(self.masks)
                 else:  # down
                     self.selected_mask = (self.selected_mask + 1) % len(self.masks)
-            
+
             self.mask_listbox.selection_clear(0, tk.END)
             self.mask_listbox.selection_set(self.selected_mask)
             self.mask_listbox.see(self.selected_mask)
@@ -1105,39 +1125,39 @@ class TkMaskSelector:
             self.update_canvas()
             self.status_label.config(text=f"Selected mask #{self.selected_mask}")
             return
-        
+
         # Classification shortcuts
         if self.selected_mask is None:
             return
-        
+
         key_char = event.char.lower()
-        
-        if key_char == 'p':
-            self.mask_classifications[self.selected_mask] = 'planet'
+
+        if key_char == "p":
+            self.mask_classifications[self.selected_mask] = "planet"
             self._create_overlay_image()
             self.update_canvas()
             self.update_mask_list()
             self.status_label.config(text=f"Mask #{self.selected_mask} → Planet")
-        elif key_char == 's':
-            self.mask_classifications[self.selected_mask] = 'sky'
+        elif key_char == "s":
+            self.mask_classifications[self.selected_mask] = "sky"
             self._create_overlay_image()
             self.update_canvas()
             self.update_mask_list()
             self.status_label.config(text=f"Mask #{self.selected_mask} → Sky")
-        elif key_char == 'x':
-            self.mask_classifications[self.selected_mask] = 'exclude'
+        elif key_char == "x":
+            self.mask_classifications[self.selected_mask] = "exclude"
             self._create_overlay_image()
             self.update_canvas()
             self.update_mask_list()
             self.status_label.config(text=f"Mask #{self.selected_mask} → Exclude")
-                
+
     def start_pan(self, event):
         """Start panning."""
         self.is_panning = True
         self.last_mouse_x = event.x
         self.last_mouse_y = event.y
         self.canvas.config(cursor="fleur")
-        
+
     def do_pan(self, event):
         """Pan the canvas."""
         if self.is_panning:
@@ -1147,12 +1167,12 @@ class TkMaskSelector:
             self.canvas.yview_scroll(-dy, tk.UNITS)
             self.last_mouse_x = event.x
             self.last_mouse_y = event.y
-            
+
     def end_pan(self, event):
         """End panning."""
         self.is_panning = False
         self.canvas.config(cursor="")
-        
+
     def on_mousewheel(self, event):
         """Zoom with mouse wheel."""
         # Zoom factor
@@ -1160,47 +1180,47 @@ class TkMaskSelector:
             self.zoom_level *= 1.1
         else:
             self.zoom_level /= 1.1
-            
+
         self.zoom_level = max(0.1, min(5.0, self.zoom_level))
         self._create_overlay_image()
         self.update_canvas()
-        
+
     def reset_classifications(self):
         """Reset all to exclude except first two."""
-        self.mask_classifications = {i: 'exclude' for i in range(len(self.masks))}
+        self.mask_classifications = {i: "exclude" for i in range(len(self.masks))}
         if len(self.masks) >= 1:
-            self.mask_classifications[0] = 'planet'
+            self.mask_classifications[0] = "planet"
         if len(self.masks) >= 2:
-            self.mask_classifications[1] = 'sky'
+            self.mask_classifications[1] = "sky"
         self._create_overlay_image()
         self.update_canvas()
         self.update_mask_list()
         self.status_label.config(text="Reset to defaults")
-        
+
     def finish(self):
         """Close window - nuclear option for Jupyter compatibility."""
         self.is_finished = True
-        
+
         try:
             # Disconnect from display
             self.root.withdraw()
-            
+
             # Give it a moment
             self.root.update()
-            
+
             # Force quit the mainloop
             self.root.quit()
-            
+
         except Exception as e:
             logging.warning(f"Error during finish: {e}")
-        
+
         finally:
             # Destroy in a separate try block
             try:
                 self.root.destroy()
             except:
                 pass
-    
+
     def run(self):
         """Run the interactive selector with proper cleanup."""
         try:
@@ -1214,13 +1234,25 @@ class TkMaskSelector:
                     self.root.destroy()
             except:
                 pass
-        
+
     def get_classified_masks(self):
         """Return dictionary of classified masks with original mask objects."""
         return {
-            'planet': [self.masks[i] for i, c in self.mask_classifications.items() if c == 'planet'],
-            'sky': [self.masks[i] for i, c in self.mask_classifications.items() if c == 'sky'],
-            'exclude': [self.masks[i] for i, c in self.mask_classifications.items() if c == 'exclude']
+            "planet": [
+                self.masks[i]
+                for i, c in self.mask_classifications.items()
+                if c == "planet"
+            ],
+            "sky": [
+                self.masks[i]
+                for i, c in self.mask_classifications.items()
+                if c == "sky"
+            ],
+            "exclude": [
+                self.masks[i]
+                for i, c in self.mask_classifications.items()
+                if c == "exclude"
+            ],
         }
 
 

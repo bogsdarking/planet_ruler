@@ -769,7 +769,7 @@ def plot_residuals(
         figsize: Figure size (width, height).
         show_image: Show straightened image strip as background.
         image_alpha: Transparency of background image.
-        band_size: Size of band around residuals to plot (in pixels) 
+        band_size: Size of band around residuals to plot (in pixels)
     """
     # Check if gradient-field method was used
     if observation.limb_detection == "gradient-field":
@@ -818,13 +818,13 @@ def plot_residuals(
     if show_image:
         residual_range = np.nanmax(np.abs(residuals))
         y_extent = int(max(band_size, residual_range * 1.5))
-        
+
         # Create straightened image strip
         if len(observation.image.shape) == 3:
             straightened = np.zeros((2 * y_extent, n_pix_x, 3))
         else:
             straightened = np.zeros((2 * y_extent, n_pix_x))
-        
+
         for x in range(n_pix_x):
             y_pred = predicted_limb[x]
             if np.isnan(y_pred):
@@ -833,14 +833,14 @@ def plot_residuals(
                 y_img = int(y_pred) + dy
                 if 0 <= y_img < n_pix_y:
                     straightened[y_extent + dy, x] = observation.image[y_img, x]
-        
+
         # Explicit cast or things don't appear
         straightened = straightened.astype(int)
 
         ax.imshow(
             straightened,
             extent=[0, n_pix_x, -y_extent, y_extent],
-            aspect='auto',
+            aspect="auto",
             alpha=image_alpha,
             zorder=0,
         )
@@ -856,10 +856,18 @@ def plot_residuals(
             s=marker_size * 2,
             alpha=alpha,
             label=f"Residuals (n={n_valid})",
-            zorder=2
+            zorder=2,
         )
     else:
-        ax.plot(x_coords, residuals, "b-", linewidth=1.5, alpha=alpha, label="Residuals", zorder=2)
+        ax.plot(
+            x_coords,
+            residuals,
+            "b-",
+            linewidth=1.5,
+            alpha=alpha,
+            label="Residuals",
+            zorder=2,
+        )
 
     # Add zero reference line
     ax.axhline(y=0, color="k", linestyle="--", linewidth=1, alpha=0.5, zorder=1)
@@ -935,11 +943,11 @@ def plot_gradient_field_quiver(
 
     if image_smoothing is not None:
         image = cv2.GaussianBlur(
-                image.astype(np.float32),
-                (0, 0),  # Kernel size auto-determined from sigma
-                sigmaX=image_smoothing,
-                sigmaY=image_smoothing,
-            )
+            image.astype(np.float32),
+            (0, 0),  # Kernel size auto-determined from sigma
+            sigmaX=image_smoothing,
+            sigmaY=image_smoothing,
+        )
 
     # Downsample image if requested
     if downsample_factor > 1:
@@ -947,32 +955,28 @@ def plot_gradient_field_quiver(
         orig_height, orig_width = image.shape[:2]
         new_width = orig_width // downsample_factor
         new_height = orig_height // downsample_factor
-        
+
         if len(image.shape) == 3:
             downsampled = cv2.resize(
-                image, 
-                (new_width, new_height), 
-                interpolation=cv2.INTER_AREA
+                image, (new_width, new_height), interpolation=cv2.INTER_AREA
             )
         else:
             downsampled = cv2.resize(
-                image, 
-                (new_width, new_height), 
-                interpolation=cv2.INTER_AREA
+                image, (new_width, new_height), interpolation=cv2.INTER_AREA
             )
-        
+
         # Scale limb if provided
         if limb_y is not None:
             limb_y_scaled = limb_y / downsample_factor
         else:
             limb_y_scaled = None
-        
+
         # Scale ROI height
         if roi_height is not None:
             roi_height_scaled = roi_height // downsample_factor
         else:
             roi_height_scaled = None
-        
+
         working_image = downsampled
         coord_scale = downsample_factor
     else:
@@ -1023,10 +1027,10 @@ def plot_gradient_field_quiver(
 
     # Show image as background (scale coordinates back to original)
     ax.imshow(
-        working_image[y_min:y_max, :], 
-        extent=[0, width * coord_scale, y_max * coord_scale, y_min * coord_scale], 
-        aspect="auto", 
-        alpha=0.5
+        working_image[y_min:y_max, :],
+        extent=[0, width * coord_scale, y_max * coord_scale, y_min * coord_scale],
+        aspect="auto",
+        alpha=0.5,
     )
 
     # Plot quiver with color based on magnitude (scale coordinates back)
@@ -1054,12 +1058,12 @@ def plot_gradient_field_quiver(
 
     ax.set_xlabel("X (pixels)")
     ax.set_ylabel("Y (pixels)")
-    
+
     if downsample_factor > 1:
         ax.set_title(f"Gradient Field (step={step}, downsample={downsample_factor}x)")
     else:
         ax.set_title(f"Gradient Field (step={step})")
-    
+
     ax.set_xlim(0, width * coord_scale)
     ax.set_ylim(y_max * coord_scale, y_min * coord_scale)  # Invert y-axis
 
@@ -1135,8 +1139,17 @@ def plot_sam_masks(
     # Generate default colors if not provided
     if colors is None:
         # Use a nice color cycle
-        default_colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8", "#F7DC6F"]
-        colors = [default_colors[i % len(default_colors)] for i in range(len(seg_arrays))]
+        default_colors = [
+            "#FF6B6B",
+            "#4ECDC4",
+            "#45B7D1",
+            "#FFA07A",
+            "#98D8C8",
+            "#F7DC6F",
+        ]
+        colors = [
+            default_colors[i % len(default_colors)] for i in range(len(seg_arrays))
+        ]
 
     # Create figure
     fig, ax = plt.subplots(figsize=figsize)
