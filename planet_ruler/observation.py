@@ -609,7 +609,7 @@ class LimbObservation(PlanetObservation):
         minimizer: Optional[
             Literal["differential-evolution", "dual-annealing", "basinhopping"]
         ] = None,
-        minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
+        minimizer_preset: Literal["fast", "balanced", "robust", "scipy-default"] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         warm_start: bool = False,
         dashboard: bool = False,
