@@ -1,7 +1,7 @@
 Testing
 =======
 
-Planet Ruler includes a comprehensive test suite with 492+ tests covering all functionality.
+Planet Ruler includes a comprehensive test suite with 635+ tests covering all functionality.
 
 Test Categories
 --------------
@@ -35,7 +35,7 @@ Using Hypothesis framework for mathematical function validation:
 Performance Benchmarks
 ~~~~~~~~~~~~~~~~~~~~~~
 
-* **21 benchmark tests**: Function execution timing from nanoseconds to milliseconds
+* **40 benchmark tests**: Function execution timing from nanoseconds to milliseconds
 * **Memory usage**: Profiling large image processing operations
 * **Optimization performance**: Convergence rates and iteration counts
 * **Scaling analysis**: Performance vs. image size and parameter complexity
@@ -97,22 +97,23 @@ Test Coverage Analysis
 Current Coverage
 ~~~~~~~~~~~~~~~
 
-Planet Ruler maintains 80% overall test coverage with the following module-level coverage:
+Planet Ruler maintains 84% overall test coverage with the following module-level coverage:
 
 * **planet_ruler.__init__.py**: 100% line coverage (initialization module)
-* **planet_ruler.annotate.py**: 58% line coverage (annotation and marking functions)
-* **planet_ruler.camera.py**: 98% line coverage (camera model and optics)
-* **planet_ruler.cli.py**: 80% line coverage (command-line interface)
+* **planet_ruler.annotate.py**: 78% line coverage (annotation and GUI components)
+* **planet_ruler.camera.py**: 96% line coverage (camera model and optics)
+* **planet_ruler.cli.py**: 81% line coverage (command-line interface)
+* **planet_ruler.dashboard.py**: 81% line coverage (real-time optimization dashboard)
 * **planet_ruler.demo.py**: 100% line coverage (demo parameter loading)
-* **planet_ruler.fit.py**: 100% line coverage (cost functions and optimization)
+* **planet_ruler.fit.py**: 98% line coverage (cost functions and optimization)
 * **planet_ruler.geometry.py**: 68% line coverage (geometric calculations)
-* **planet_ruler.image.py**: 96% line coverage (image processing and gradient detection)
-* **planet_ruler.observation.py**: 47% line coverage (main observation workflows)
-* **planet_ruler.plot.py**: 98% line coverage (visualization and plotting)
+* **planet_ruler.image.py**: 83% line coverage (image processing and gradient detection)
+* **planet_ruler.observation.py**: 94% line coverage (main observation workflows)
+* **planet_ruler.plot.py**: 76% line coverage (visualization and plotting)
 * **planet_ruler.uncertainty.py**: 86% line coverage (parameter uncertainty estimation)
 * **planet_ruler.validation.py**: 93% line coverage (input validation functions)
 
-**Total: 80% line coverage** (2120 statements, 431 missed)
+**Total: 84% line coverage** (3307 statements, 545 missed)
 
 Coverage Reports
 ~~~~~~~~~~~~~~~
@@ -446,7 +447,7 @@ Test Quality Metrics
 
 The Planet Ruler test suite maintains high quality standards:
 
-* **Test Coverage**: 80% overall line coverage with 492+ comprehensive tests
+* **Test Coverage**: 84% overall line coverage with 635+ comprehensive tests
 * **Execution Time**: Full test suite completes in ~2 minutes with 21 performance benchmarks
 * **Reliability**: 100% pass rate with deterministic test execution (fixed random seeds)
 * **Maintainability**: Clear test organization and comprehensive documentation

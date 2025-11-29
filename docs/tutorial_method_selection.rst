@@ -8,19 +8,31 @@ Planet Ruler offers three distinct methods for horizon detection, each with diff
 Quick Decision Tree
 -------------------
 
-.. [PLACEHOLDER: Visual decision tree flowchart]
-   
-   Start → Is horizon clearly visible?
-      ├─ YES → Do you have time to click points?
-      │    ├─ YES → **Manual Annotation** (most accurate)
-      │    └─ NO → Processing many images?
-      │         ├─ YES → **Gradient-Field** (automated, lightweight)
-      │         └─ NO → Have GPU + PyTorch installed?
-      │              ├─ YES → **ML Segmentation** (try it!)
-      │              └─ NO → **Gradient-Field** (no dependencies)
-      └─ NO → Complex scene (clouds, haze)?
-           ├─ YES → **Manual Annotation** (user control wins)
-           └─ NO → **ML Segmentation** (handles ambiguity)
+.. mermaid::
+
+   flowchart TD
+       Start([Start]) --> Q1{Is horizon<br/>obstructed?}
+       
+       Q1 -->|YES| Q2{GPU Available?}
+       Q1 -->|NO| Q3{Smooth horizon line?}
+       
+       Q2 -->|YES| ML1[ML Segmentation:<br/>Interactive Mode]
+       Q2 -->|NO| Manual1[Manual Annotation:<br/>Click around obstructions]
+       
+       Q3 -->|YES| Q4{Prefer automated?}
+       Q3 -->|NO| Q2
+
+       Q4 -->|YES| Q5{GPU Available?}
+       Q4 -->|NO| Manual2[Manual Annotation:<br/>Fast & foolproof]
+              
+       Q5 -->|YES| ML2[ML Segmentation:<br/>Automatic mode]
+       Q5 -->|NO| Gradient1[Gradient-Field:<br/>Fast, lightweight]
+
+       style Manual1 fill:#90EE90
+       style Manual2 fill:#90EE90
+       style Gradient1 fill:#87CEEB
+       style ML1 fill:#FFB6C1
+       style ML2 fill:#FFB6C1
 
 Method Overview
 ---------------
@@ -68,10 +80,10 @@ Comparison Table
      - Not practical
      - Excellent
      - Good (if GPU available)
-   * - **Educational Value**
-     - Highest (hands-on)
-     - Medium
-     - Low (black box)
+   * - **Educational Focus**
+     - Hands-on data
+     - Mathematics/Physics
+     - Machine Learning
 
 Method 1: Manual Annotation
 ---------------------------
@@ -95,24 +107,17 @@ It also lets you stretch the image vertically to exaggerate curvature and enhanc
 
 **Strengths:**
 
-✅ **Universal applicability** - Works with any image that has a visible horizon
-
-✅ **No dependencies** - Works immediately after installing Planet Ruler
-
-✅ **Educational** - Students learn by actively identifying the horizon
-
-✅ **Handles complexity** - Clouds, haze, wing, terrain? You decide what's horizon
-
+| ✅ **Universal applicability** - Works with any image that has a visible horizon
+| ✅ **No dependencies** - Works immediately after installing Planet Ruler
+| ✅ **Educational** - Students learn by actively identifying the horizon
+| ✅ **Handles complexity** - Clouds, haze, wing, terrain? You decide what's horizon
 
 **Limitations:**
 
-❌ **User-dependent** - Different people get slightly different results
-
-❌ **Time-consuming** - Takes 30-120 seconds per image
-
-❌ **Not batch-friendly** - Must manually process each image
-
-❌ **Requires practice** - Takes a few tries to get good at point placement
+| ❌ **User-dependent** - Different people get slightly different results
+| ❌ **Time-consuming** - Takes 30-120 seconds per image
+| ❌ **Not batch-friendly** - Must manually process each image
+| ❌ **Requires practice** - Takes a few tries to get good at point placement
 
 
 When to Use
@@ -220,27 +225,19 @@ The method uses multi-resolution optimization (coarse → fine) to avoid local m
 
 **Strengths:**
 
-✅ **Fully automated** - No user interaction required
-
-✅ **Lightweight** - No ML models, low memory usage
-
-✅ **Reproducible** - Same image → same result every time
-
-✅ **Fast** - Processes images in around a minute
-
-✅ **Batch-friendly** - Perfect for processing hundreds of images
-
-✅ **Multi-resolution** - Robust to initialization
+| ✅ **Fully automated** - No user interaction require
+| ✅ **Lightweight** - No ML models, low memory usage
+| ✅ **Reproducible** - Same image → same result every time
+| ✅ **Fast** - Processes images in around a minute
+| ✅ **Batch-friendly** - Perfect for processing hundreds of images
+| ✅ **Multi-resolution** - Robust to initialization
 
 **Limitations:**
 
-❌ **Needs clear edges** - Struggles with diffuse or gradual horizons
-
-❌ **Sensitive to obstruction** - Horizon obsturctions can confuse it
-
-❌ **No visual feedback** - You don't see the detected horizon until after fitting
-
-❌ **Parameter tuning** - May need to adjust smoothing parameters
+| ❌ **Needs clear edges** - Struggles with diffuse or gradual horizons
+| ❌ **Sensitive to obstruction** - Horizon obsturctions can confuse it
+| ❌ **No visual feedback** - You don't see the detected horizon until after fitting
+| ❌ **Parameter tuning** - May need to adjust smoothing parameters
 
 When to Use
 ~~~~~~~~~~~
@@ -282,7 +279,7 @@ Example Usage
    * Increase ``image_smoothing`` (2.0 → 4.0) for noisy images
    * Increase ``gradient_smoothing`` (8.0 → 16.0) for hazy horizons
    * Use ``prefer_direction="up"`` if above the horizon is darker than below
-   * More resolution stages (e.g., [8,4,2,1]) for difficult cases
+   * More resolution stages (e.g., [8,4,2,1]) or "differential-evolution" for difficult cases
 
 Visual Examples
 ~~~~~~~~~~~~~~~
@@ -357,7 +354,9 @@ Method 3: ML Segmentation
 How It Works
 ~~~~~~~~~~~~
 
-ML segmentation such as Meta's Segment Anything Model (SAM) can be used to automatically detect the planetary body. The model finds the dominant segmentation mask and extracts its upper edge as the horizon.
+ML segmentation such as Meta's Segment Anything Model (SAM) can be used to automatically detect the planetary body. 
+In automatic mode (interactive=False), the model assumes the two largest masks are the planet and sky and labels their
+boundary as the horizon.
 
 .. list-table::
    :widths: 33 33 33
@@ -381,29 +380,48 @@ ML segmentation such as Meta's Segment Anything Model (SAM) can be used to autom
           
           Detected limb
 
+When set to interactive, however, the user is allowed to validate which masks belong to the 
+sky and planet (or which to exclude) before the horizon is determined. This can help with obscuring objects like 
+airplane wings or clouds. Note this method still isn't foolproof -- stay tuned for updates!
+
+.. list-table::
+   :widths: 33 33 33
+   :class: borderless
+
+   * - .. figure:: images/2013-08-05_22-42-14_Wikimania.jpg
+          :width: 100%
+          :height: 190px
+
+          Original
+
+     - .. figure:: images/manual_segment.png
+          :width: 100%
+          :height: 190px
+
+          User Mask Annotation
+
+     - .. figure:: images/segmented_after_manual.png
+          :width: 100%
+          :height: 190px
+          
+          Detected limb
+
 **Strengths:**
 
-✅ **Handles complexity** - Can work with clouds, terrain, atmospheric layers
-
-✅ **Fully automated** - No user interaction needed
-
-✅ **Semantic understanding** - "Knows" what a planet looks like
-
-✅ **Reproducible** - Deterministic results
+| ✅ **Handles complexity** - Can work with clouds, terrain, atmospheric layers
+| ✅ **Fully automated** - Can run with zero user interaction
+| ✅ **Semantic understanding** - "Knows" what a planet looks like
+| ✅ **Human-in-the-loop ready** - Can leverage user annotations for increased accuracy
+| ✅ **Reproducible** - Deterministic results
 
 **Limitations:**
 
-❌ **Heavy dependencies** - Requires PyTorch + SAM (~2GB model)
-
-❌ **Slow** - 30-300 seconds per image (CPU) or 5-20 seconds (GPU)
-
-❌ **Memory hungry** - Needs 2-4 GB RAM
-
-❌ **First-time setup** - Model download takes 5-10 minutes
-
-❌ **Not always accurate** - Can misidentify horizon with complex scenes
-
-❌ **Black box** - Hard to understand why it makes certain decisions
+| ❌ **Heavy dependencies** - Requires PyTorch + SAM (~2GB model)
+| ❌ **Slow** - 30-300 seconds per image (CPU) or 5-20 seconds (GPU)
+| ❌ **Memory hungry** - Needs 2-4 GB RAM
+| ❌ **First-time setup** - Model download takes 5-10 minutes
+| ❌ **Not always accurate** - Can misidentify horizon with complex scenes
+| ❌ **Black box** - Hard to understand why it makes certain decisions
 
 When to Use
 ~~~~~~~~~~~
@@ -440,7 +458,7 @@ Example Usage
    obs.fit_limb(maxiter=1000)
 
 .. warning::
-   **Always visually inspect** ML segmentation results before fitting! The model can occasionally misidentify features as the horizon. If the detection looks wrong, use manual annotation instead.
+   **Always visually inspect** ML segmentation results before fitting! The model can occasionally misidentify features as the horizon. If the detection looks wrong, use interactive mode or manual annotation instead.
 
 Installation
 ~~~~~~~~~~~~
@@ -455,30 +473,6 @@ Installation
    
    # For GPU support (faster, requires CUDA)
    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-
-Visual Examples
-~~~~~~~~~~~~~~~
-
-.. [PLACEHOLDER: Side-by-side comparison showing:
-   - Original image
-   - SAM segmentation mask
-   - Extracted horizon
-   - Final fit]
-
-**Example 1: Success Case**
-
-.. [PLACEHOLDER: Image where ML segmentation works well]
-   Caption: Clean segmentation of planetary body. Extracted horizon is accurate.
-
-**Example 2: Partial Success**
-
-.. [PLACEHOLDER: Image with some clouds but ML still works]
-   Caption: Model correctly identifies planet despite atmospheric features.
-
-**Example 3: Failure Case**
-
-.. [PLACEHOLDER: Image where ML mis-segments]
-   Caption: Model confused by clouds - manual annotation needed here.
 
 Combining Methods
 -----------------
@@ -554,7 +548,7 @@ If Your Results Look Wrong
 **Problem:** ML segmentation detects wrong features
 
 * **Check:** Visually inspect with ``obs.plot()`` before fitting
-* **Solution:** Try adjusting detection parameters
+* **Solution:** Try interactive mode to refine masks
 * **Solution:** Increase smoothing after detection
 * **Fallback:** Use manual annotation (always reliable)
 
