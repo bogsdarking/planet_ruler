@@ -163,7 +163,7 @@ Visual Examples
    :widths: 50 50
    :class: borderless
 
-   * - .. figure:: images/2013-08-05_22-42-14_Wikimania.jpg
+   * - .. figure:: ../demo/images/2013-08-05_22-42-14_Wikimania.jpg
           :width: 100%
 
           Raw image
@@ -187,14 +187,14 @@ Visual Examples
 
 **Example 1: Clear Horizon**
 
-.. figure:: images/PIA21341.jpg
+.. figure:: ../demo/images/PIA21341.jpg
    :width: 100%
 
    Manual annotation goes quickly with clear horizons.
 
 **Example 2: Obstructions**
 
-.. figure:: images/iss064e002941.jpg
+.. figure:: ../demo/images/iss064e002941.jpg
    :width: 100%
 
    User can avoid obstructions that can be tricky for automated methods.
@@ -290,7 +290,7 @@ Visual Examples
    :widths: 50 50
    :class: borderless
 
-   * - .. figure:: images/50644513538_56228a2027_o.jpg
+   * - .. figure:: ../demo/images/50644513538_56228a2027_o.jpg
           :width: 100%
 
           Raw image
@@ -321,7 +321,7 @@ Visual Examples
 
 **Example 2: New Horizons Photo**
 
-.. figure:: images/PIA19948.tif
+.. figure:: ../demo/images/PIA19948.tif
    Caption: Hazy atmospheric boundary detected accurately. Multi-resolution helps.
 
 **Example 3: Failure Case**
@@ -362,7 +362,7 @@ boundary as the horizon.
    :widths: 33 33 33
    :class: borderless
 
-   * - .. figure:: images/50644513538_56228a2027_o.jpg
+   * - .. figure:: ../demo/images/50644513538_56228a2027_o.jpg
           :width: 100%
           :height: 190px
 
@@ -388,7 +388,7 @@ airplane wings or clouds. Note this method still isn't foolproof -- stay tuned f
    :widths: 33 33 33
    :class: borderless
 
-   * - .. figure:: images/2013-08-05_22-42-14_Wikimania.jpg
+   * - .. figure:: ../demo/images/2013-08-05_22-42-14_Wikimania.jpg
           :width: 100%
           :height: 190px
 
