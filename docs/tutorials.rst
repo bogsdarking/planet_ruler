@@ -89,124 +89,7 @@ Comparing Earth, Pluto, and Saturn with Precise Manual Selection
 Tutorial 4: Detection Method Comparison
 --------------------------------------
 
-Comparing Manual, Gradient-Field, and AI Segmentation Methods
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-   import time
-   
-   # Load test image
-   observation = obs.LimbObservation("test_image.jpg", "config/earth_iss_1.yaml")
-   
-   methods_to_test = [
-       ("manual", {}),  # Interactive GUI - time depends on user
-       ("gradient-field", {})  # Automated gradient analysis
-   ]
-   
-   # Optional: test segmentation if available
-   try:
-       from segment_anything import sam_model_registry
-       methods_to_test.append(("segmentation", {"segmenter": "segment-anything"}))
-   except ImportError:
-       print("⚠ Segmentation not available - install with: pip install segment-anything torch")
-   
-   results = {}
-   
-   for method_name, kwargs in methods_to_test:
-       print(f"\nTesting {method_name}...")
-       
-       # Fresh observation for each test
-       test_obs = obs.LimbObservation("test_image.jpg", "config/earth_iss_1.yaml")
-       
-       if method_name == "manual":
-           print("  Manual annotation - time depends on user interaction")
-           print("  Opening GUI... Click points along horizon, press 'g' to generate, 'q' to close")
-           # Time manual interaction
-           start_time = time.time()
-           test_obs.detect_limb(method=method_name, **kwargs)
-           detection_time = time.time() - start_time
-       else:
-           # Time automatic methods
-           start_time = time.time()
-           try:
-               test_obs.detect_limb(method=method_name, **kwargs)
-               detection_time = time.time() - start_time
-           except Exception as e:
-               results[method_name] = {
-                   "error": str(e),
-                   "success": False
-               }
-               continue
-       
-       test_obs.smooth_limb()
-       test_obs.fit_limb(
-           minimizer='dual-annealing',
-           resolution_stages='auto' if method_name == "gradient-field" else None,
-           maxiter=500
-       )
-       
-       # Calculate uncertainty
-       from planet_ruler.uncertainty import calculate_parameter_uncertainty
-       radius_result = calculate_parameter_uncertainty(
-           test_obs, "r", scale_factor=1000, method='auto'
-       )
-       
-       results[method_name] = {
-           "time": detection_time,
-           "radius": radius_result['uncertainty'],
-           "method_info": radius_result['method'],
-           "success": True
-       }
-   
-   # Compare results
-   print("\n" + "="*70)
-   print("METHOD COMPARISON")
-   print("="*70)
-   
-   for method, result in results.items():
-       if result["success"]:
-           print(f"\n{method.upper()}:")
-           if method == "manual":
-               print(f"  Time: {result['time']:.1f} seconds (user-dependent)")
-               print(f"  Precision: User-controlled (typically highest)")
-           elif method == "gradient-field":
-               print(f"  Time: {result['time']:.1f} seconds (automated)")
-               print(f"  Precision: Good for clear horizons")
-               print(f"  Dependencies: None (uses SciPy only)")
-           else:
-               print(f"  Time: {result['time']:.1f} seconds (automated)")
-               print(f"  Precision: Best for complex images")
-               print(f"  Dependencies: PyTorch + Segment Anything (~2GB)")
-           print(f"  Radius: {result['radius']:.1f} km")
-           print(f"  Uncertainty method: {result['method_info']}")
-       else:
-           print(f"\n{method.upper()}: FAILED - {result['error']}")
-   
-   # Summary recommendation
-   print("\n" + "="*70)
-   print("RECOMMENDATIONS")
-   print("="*70)
-   print("""
-   Choose detection method based on your needs:
-   
-   • MANUAL: Best when precision is critical, any image quality
-     - User controls every aspect
-     - Works immediately (no dependencies)
-     - Interactive and educational
-   
-   • GRADIENT-FIELD: Best for batch processing clear horizons
-     - Fully automated
-     - No ML dependencies
-     - Fast and reproducible
-     - Requires clear, well-defined horizons
-   
-   • SEGMENTATION: Best for complex or challenging images
-     - Most versatile
-     - Handles clouds, haze, complex scenes
-     - Requires PyTorch (~2GB) + Segment Anything
-     - Slower due to model inference
-   """)
+.. include:: tutorial_method_selection.rst
 
 Installation and Setup
 ----------------------
@@ -261,7 +144,7 @@ Testing Optional Dependencies
 
    # Test AI segmentation installation (optional)
    try:
-       from planet_ruler.image import ImageSegmentation
+       from planet_ruler.image import MaskSegmenter
        from segment_anything import sam_model_registry
        print("✓ AI segmentation available")
    except ImportError as e:
