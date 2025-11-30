@@ -43,7 +43,7 @@ from planet_ruler.geometry import (
     extrinsic_transform,
 )
 from planet_ruler.fit import CostFunction, unpack_parameters, pack_parameters
-from planet_ruler.image import gradient_break, smooth_limb
+from planet_ruler.image import gradient_break, smooth_limb, MaskSegmenter
 from planet_ruler.observation import LimbObservation, PlanetObservation
 from planet_ruler.camera import (
     extract_camera_parameters,
@@ -865,13 +865,14 @@ class TestFullPipelineBenchmarks:
             obs.fit_limb(
                 loss_function="gradient_field",
                 minimizer="differential-evolution",
-                minimizer_preset="robust",
+                minimizer_preset="scipy-default",
                 max_iter=300,
                 verbose=False,
                 resolution_stages=[8, 4],
                 image_smoothing=2.0,  # Remove high-frequency image artifacts
                 kernel_smoothing=8.0,  # Smooth gradient field for stability
-                seed=25,
+                prefer_direction=None,
+                seed=0,
             )
 
             # Step 6: Calculate uncertainty
@@ -939,6 +940,343 @@ class TestFullPipelineBenchmarks:
         assert hasattr(result, "free_parameters")
         assert hasattr(result, "init_parameter_values")
         assert hasattr(result, "parameter_limits")
+
+
+class TestSegmentationBenchmarks:
+    """Benchmark tests for segmentation-based limb detection."""
+
+    def test_custom_backend_segment_benchmark(self, benchmark):
+        """Benchmark custom backend mask generation."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (500, 500, 3), dtype=np.uint8)
+
+        def simple_segmenter(img):
+            """Simple threshold-based segmentation."""
+            h, w = img.shape[:2]
+            gray = img.sum(axis=2) / 3
+            threshold = np.mean(gray)
+
+            mask1 = gray < threshold
+            mask2 = gray >= threshold
+
+            return [
+                {"mask": mask1, "area": np.sum(mask1)},
+                {"mask": mask2, "area": np.sum(mask2)},
+            ]
+
+        def run_segmentation():
+            segmenter = MaskSegmenter(
+                image, method="custom", segment_fn=simple_segmenter, interactive=False
+            )
+            return segmenter.segment()
+
+        result = benchmark(run_segmentation)
+
+        assert len(result) == 500
+        assert not np.all(np.isnan(result))
+
+    def test_classify_automatic_benchmark(self, benchmark):
+        """Benchmark automatic mask classification."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (1000, 1000, 3), dtype=np.uint8)
+
+        def multi_mask_segmenter(img):
+            """Generate multiple masks for classification."""
+            h, w = img.shape[:2]
+            masks = []
+
+            # Generate 10 masks at different positions
+            for i in range(10):
+                mask = np.zeros((h, w), dtype=bool)
+                start_row = int(i * h / 10)
+                end_row = int((i + 1) * h / 10)
+                mask[start_row:end_row, :] = True
+                masks.append({"mask": mask, "area": np.sum(mask)})
+
+            return masks
+
+        segmenter = MaskSegmenter(
+            image, method="custom", segment_fn=multi_mask_segmenter, interactive=False
+        )
+        segmenter._masks = multi_mask_segmenter(image)
+
+        result = benchmark(segmenter._classify_automatic)
+
+        assert "sky" in result
+        assert "planet" in result
+        assert len(result["sky"]) == 1
+        assert len(result["planet"]) == 1
+
+    def test_combine_masks_benchmark(self, benchmark):
+        """Benchmark limb extraction from classified masks."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (2000, 2000, 3), dtype=np.uint8)
+
+        def horizon_segmenter(img):
+            h, w = img.shape[:2]
+            sky_mask = np.zeros((h, w), dtype=bool)
+            sky_mask[: h // 2, :] = True
+            planet_mask = np.zeros((h, w), dtype=bool)
+            planet_mask[h // 2 :, :] = True
+
+            return [
+                {"mask": sky_mask, "area": np.sum(sky_mask)},
+                {"mask": planet_mask, "area": np.sum(planet_mask)},
+            ]
+
+        segmenter = MaskSegmenter(
+            image, method="custom", segment_fn=horizon_segmenter, interactive=False
+        )
+        segmenter._masks = horizon_segmenter(image)
+
+        classified = {
+            "sky": [segmenter._masks[0]],
+            "planet": [segmenter._masks[1]],
+            "exclude": [],
+        }
+
+        result = benchmark(segmenter._combine_masks, classified)
+
+        assert "limb" in result
+        assert len(result["limb"]) == 2000
+
+    def test_downsampling_benchmark_2x(self, benchmark):
+        """Benchmark segmentation with 2x downsampling."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (1000, 1000, 3), dtype=np.uint8)
+
+        def fast_segmenter(img):
+            h, w = img.shape[:2]
+            midpoint = h // 2
+
+            sky = np.zeros((h, w), dtype=bool)
+            sky[:midpoint, :] = True
+            planet = np.zeros((h, w), dtype=bool)
+            planet[midpoint:, :] = True
+
+            return [
+                {"mask": sky, "area": np.sum(sky)},
+                {"mask": planet, "area": np.sum(planet)},
+            ]
+
+        def run_downsampled():
+            segmenter = MaskSegmenter(
+                image,
+                method="custom",
+                segment_fn=fast_segmenter,
+                downsample_factor=2,
+                interactive=False,
+            )
+            return segmenter.segment()
+
+        result = benchmark(run_downsampled)
+
+        assert len(result) == 1000  # Original size
+
+    def test_downsampling_benchmark_4x(self, benchmark):
+        """Benchmark segmentation with 4x downsampling."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (2000, 2000, 3), dtype=np.uint8)
+
+        def fast_segmenter(img):
+            h, w = img.shape[:2]
+            midpoint = h // 2
+
+            sky = np.zeros((h, w), dtype=bool)
+            sky[:midpoint, :] = True
+            planet = np.zeros((h, w), dtype=bool)
+            planet[midpoint:, :] = True
+
+            return [
+                {"mask": sky, "area": np.sum(sky)},
+                {"mask": planet, "area": np.sum(planet)},
+            ]
+
+        def run_downsampled():
+            segmenter = MaskSegmenter(
+                image,
+                method="custom",
+                segment_fn=fast_segmenter,
+                downsample_factor=4,
+                interactive=False,
+            )
+            return segmenter.segment()
+
+        result = benchmark(run_downsampled)
+
+        assert len(result) == 2000  # Original size
+
+    def test_outlier_detection_benchmark(self, benchmark):
+        """Benchmark outlier detection and interpolation in limb extraction."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (500, 1000, 3), dtype=np.uint8)
+
+        def outlier_segmenter(img):
+            h, w = img.shape[:2]
+            sky_mask = np.zeros((h, w), dtype=bool)
+            planet_mask = np.zeros((h, w), dtype=bool)
+
+            # Create horizon with some outliers
+            for col in range(w):
+                if col % 50 == 0:  # Outlier every 50 columns
+                    horizon_row = 100
+                else:
+                    horizon_row = 250
+
+                sky_mask[:horizon_row, col] = True
+                planet_mask[horizon_row:, col] = True
+
+            return [
+                {"mask": sky_mask, "area": np.sum(sky_mask)},
+                {"mask": planet_mask, "area": np.sum(planet_mask)},
+            ]
+
+        segmenter = MaskSegmenter(
+            image, method="custom", segment_fn=outlier_segmenter, interactive=False
+        )
+        segmenter._masks = outlier_segmenter(image)
+
+        classified = {
+            "sky": [segmenter._masks[0]],
+            "planet": [segmenter._masks[1]],
+            "exclude": [],
+        }
+
+        result = benchmark(segmenter._combine_masks, classified)
+
+        assert "limb" in result
+        assert len(result["limb"]) == 1000
+
+    def test_sparse_mask_interpolation_benchmark(self, benchmark):
+        """Benchmark interpolation with sparse masks."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (500, 1000, 3), dtype=np.uint8)
+
+        def sparse_segmenter(img):
+            h, w = img.shape[:2]
+            sky_mask = np.zeros((h, w), dtype=bool)
+            planet_mask = np.zeros((h, w), dtype=bool)
+
+            # Only fill every 5th column
+            for col in range(0, w, 5):
+                sky_mask[:200, col] = True
+                planet_mask[300:, col] = True
+
+            return [
+                {"mask": sky_mask, "area": np.sum(sky_mask)},
+                {"mask": planet_mask, "area": np.sum(planet_mask)},
+            ]
+
+        segmenter = MaskSegmenter(
+            image, method="custom", segment_fn=sparse_segmenter, interactive=False
+        )
+        segmenter._masks = sparse_segmenter(image)
+
+        classified = {
+            "sky": [segmenter._masks[0]],
+            "planet": [segmenter._masks[1]],
+            "exclude": [],
+        }
+
+        result = benchmark(segmenter._combine_masks, classified)
+
+        assert "limb" in result
+        assert not np.any(np.isnan(result["limb"]))
+
+    @pytest.mark.slow
+    def test_full_pipeline_benchmark_large_image(self, benchmark):
+        """Benchmark full segmentation pipeline with large image."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (4000, 6000, 3), dtype=np.uint8)
+
+        def comprehensive_segmenter(img):
+            """More realistic segmentation with multiple regions."""
+            h, w = img.shape[:2]
+            masks = []
+
+            # Sky region
+            sky = np.zeros((h, w), dtype=bool)
+            sky[: h // 3, :] = True
+            masks.append({"mask": sky, "area": np.sum(sky)})
+
+            # Planet region
+            planet = np.zeros((h, w), dtype=bool)
+            planet[h // 2 :, :] = True
+            masks.append({"mask": planet, "area": np.sum(planet)})
+
+            # Some noise regions
+            for i in range(3):
+                noise = np.zeros((h, w), dtype=bool)
+                start_row = int((0.3 + i * 0.05) * h)
+                end_row = int((0.35 + i * 0.05) * h)
+                noise[start_row:end_row, ::10] = True
+                masks.append({"mask": noise, "area": np.sum(noise)})
+
+            return masks
+
+        def run_full_pipeline():
+            segmenter = MaskSegmenter(
+                image,
+                method="custom",
+                segment_fn=comprehensive_segmenter,
+                downsample_factor=2,  # Use downsampling for large image
+                interactive=False,
+            )
+            return segmenter.segment()
+
+        result = benchmark(run_full_pipeline)
+
+        assert len(result) == 6000
+        assert not np.all(np.isnan(result))
+
+
+class TestSegmentationComparisonBenchmarks:
+    """Compare performance of different segmentation configurations."""
+
+    def test_downsampling_speedup_comparison(self, benchmark):
+        """Benchmark segmentation with downsampling."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (2000, 2000, 3), dtype=np.uint8)
+
+        def segmenter(img):
+            h, w = img.shape[:2]
+            sky = np.zeros((h, w), dtype=bool)
+            sky[: h // 2, :] = True
+            planet = np.zeros((h, w), dtype=bool)
+            planet[h // 2 :, :] = True
+            return [
+                {"mask": sky, "area": np.sum(sky)},
+                {"mask": planet, "area": np.sum(planet)},
+            ]
+
+        # Test with factor 2 (good balance of speed and accuracy)
+        def run_with_downsampling():
+            seg = MaskSegmenter(
+                image,
+                method="custom",
+                segment_fn=segmenter,
+                downsample_factor=2,
+                interactive=False,
+            )
+            return seg.segment()
+
+        result = benchmark(run_with_downsampling)
+
+        # Verify result is valid
+        assert len(result) == 2000  # Original width
+        # Check that we don't have all NaN values (some valid limb points detected)
+        import math
+
+        assert not all(math.isnan(x) for x in result)
 
 
 # Performance test markers

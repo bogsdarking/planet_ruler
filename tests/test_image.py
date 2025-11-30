@@ -12,19 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Comprehensive tests for planet_ruler.image module.
-
-Tests cover:
-- load_image: Image loading with different formats and channels
-- gradient_break: Horizon detection via gradient analysis
-- ImageSegmentation: Segmentation-based limb detection with mocking
-- smooth_limb: Limb smoothing with various methods
-- fill_nans: NaN interpolation for limb data
-
-Uses proper mocking for external dependencies (PIL, kagglehub, segment_anything).
-"""
-
 import pytest
 import numpy as np
 import pandas as pd
@@ -35,6 +22,7 @@ from planet_ruler.image import (
     load_image,
     gradient_break,
     ImageSegmentation,
+    MaskSegmenter,
     smooth_limb,
     fill_nans,
     directional_gradient_blur,
@@ -189,11 +177,11 @@ class TestGradientBreak:
 
 
 class TestImageSegmentation:
-    """Test segmentation-based limb detection."""
+    """Test segmentation-based limb detection with new MaskSegmenter architecture."""
 
     @patch("planet_ruler.image.kagglehub.model_download")
     def test_init_segment_anything(self, mock_download):
-        """Test ImageSegmentation initialization with segment-anything."""
+        """Test ImageSegmentation initialization with segment-anything (backward compatibility)."""
         mock_download.return_value = "/fake/path"
         image = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
 
@@ -269,40 +257,192 @@ class TestImageSegmentation:
     ):
         """Test full segmentation pipeline with mocked SAM model."""
         mock_download.return_value = "/fake/path"
-
-        # Mock SAM model
-        mock_model = Mock()
-        mock_registry.return_value = mock_model
-
-        # Mock mask generator
+        mock_registry.return_value = Mock()
         mock_generator = Mock()
         mock_generator_class.return_value = mock_generator
 
-        # Mock generated masks - simulate planet detection with valid limb
+        # Optimized: 20x20 instead of 50x50 (4x fewer pixels)
         fake_masks = [
-            {"segmentation": np.ones((50, 50), dtype=bool)},  # Sky
-            {"segmentation": np.zeros((50, 50), dtype=bool)},  # Planet
+            {"segmentation": np.ones((20, 20), dtype=bool)},  # Sky
+            {"segmentation": np.zeros((20, 20), dtype=bool)},  # Planet
         ]
-        # Create a proper limb by setting planet area in bottom half
-        fake_masks[1]["segmentation"][30:, :] = True  # Planet in bottom half
-        # Combine to create limb mask (sky AND NOT planet)
-        combined_mask = fake_masks[0]["segmentation"] & ~fake_masks[1]["segmentation"]
+        fake_masks[1]["segmentation"][10:, :] = True  # Planet in bottom half
         mock_generator.generate.return_value = fake_masks
 
-        image = np.random.randint(0, 255, (50, 50, 3), dtype=np.uint8)
-        seg = ImageSegmentation(image, segmenter="segment-anything")
+        image = np.random.randint(0, 255, (20, 20, 3), dtype=np.uint8)
+        seg = ImageSegmentation(
+            image, segmenter="segment-anything", downsample_factor=1, interactive=False
+        )
 
-        # Mock the limb_from_mask to return a predictable result
         with patch.object(seg, "limb_from_mask") as mock_limb:
-            expected_limb = np.full(50, 30.0)  # Limb at y=30 for all columns
+            expected_limb = np.full(20, 10.0)  # Limb at y=10
             mock_limb.return_value = expected_limb
 
             result = seg.segment()
 
-            assert len(result) == 50
+            assert len(result) == 20
             np.testing.assert_array_equal(result, expected_limb)
 
         mock_generator.generate.assert_called_once_with(image)
+
+
+class TestMaskSegmenter:
+    """Test new MaskSegmenter architecture with pluggable backends."""
+
+    def test_init_with_custom_backend(self):
+        """Test MaskSegmenter initialization with custom backend."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+
+        def dummy_segmenter(img):
+            return []
+
+        segmenter = MaskSegmenter(
+            image, method="custom", segment_fn=dummy_segmenter, interactive=False
+        )
+
+        assert segmenter.image.shape == (100, 100, 3)
+        assert segmenter.original_shape == (100, 100)
+        assert segmenter.downsample_factor == 1
+        assert segmenter.interactive is False
+
+    def test_classify_automatic_basic(self):
+        """Test automatic mask classification."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+
+        def simple_segmenter(img):
+            h, w = img.shape[:2]
+            # Upper mask (sky)
+            mask1 = np.zeros((h, w), dtype=bool)
+            mask1[:30, :] = True
+            # Lower mask (planet)
+            mask2 = np.zeros((h, w), dtype=bool)
+            mask2[70:, :] = True
+            return [{"mask": mask1, "area": 3000}, {"mask": mask2, "area": 3000}]
+
+        segmenter = MaskSegmenter(
+            image, method="custom", segment_fn=simple_segmenter, interactive=False
+        )
+        segmenter._masks = simple_segmenter(image)
+
+        classified = segmenter._classify_automatic()
+
+        assert len(classified["sky"]) == 1
+        assert len(classified["planet"]) == 1
+        assert len(classified["exclude"]) == 0
+
+    def test_combine_masks_horizon_extraction(self):
+        """Test limb extraction from classified masks."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+
+        def horizon_segmenter(img):
+            h, w = img.shape[:2]
+            # Sky: upper 40 rows
+            sky_mask = np.zeros((h, w), dtype=bool)
+            sky_mask[:40, :] = True
+            # Planet: lower 60 rows
+            planet_mask = np.zeros((h, w), dtype=bool)
+            planet_mask[60:, :] = True
+
+            return [
+                {"mask": sky_mask, "area": 4000},
+                {"mask": planet_mask, "area": 6000},
+            ]
+
+        segmenter = MaskSegmenter(
+            image, method="custom", segment_fn=horizon_segmenter, interactive=False
+        )
+        segmenter._masks = horizon_segmenter(image)
+
+        classified = {
+            "sky": [segmenter._masks[0]],
+            "planet": [segmenter._masks[1]],
+            "exclude": [],
+        }
+
+        result = segmenter._combine_masks(classified)
+        limb = result["limb"]
+
+        # Limb should be at row 49.5 (average of 39 and 60)
+        assert len(limb) == 100
+        assert np.allclose(limb, 49.5)
+
+    def test_segment_with_downsampling(self):
+        """Test complete pipeline with downsampling."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (200, 200, 3), dtype=np.uint8)
+
+        def test_segmenter(img):
+            h, w = img.shape[:2]
+            sky = np.zeros((h, w), dtype=bool)
+            sky[: h // 2, :] = True
+            planet = np.zeros((h, w), dtype=bool)
+            planet[h // 2 :, :] = True
+            return [
+                {"mask": sky, "area": np.sum(sky)},
+                {"mask": planet, "area": np.sum(planet)},
+            ]
+
+        segmenter = MaskSegmenter(
+            image,
+            method="custom",
+            segment_fn=test_segmenter,
+            downsample_factor=2,
+            interactive=False,
+        )
+
+        limb = segmenter.segment()
+
+        # Should return limb for original size (200 wide)
+        assert len(limb) == 200
+        # Limb should be around row 100 (midpoint)
+        assert 95 < np.mean(limb) < 105
+
+    @patch("planet_ruler.image.HAS_SEGMENT_ANYTHING", True)
+    @patch("planet_ruler.image.kagglehub.model_download")
+    @patch("planet_ruler.image.sam_model_registry")
+    @patch("planet_ruler.image.SamAutomaticMaskGenerator")
+    def test_sam_backend_integration(
+        self, mock_generator_class, mock_registry, mock_download
+    ):
+        """Test SAM backend integration with MaskSegmenter."""
+        from planet_ruler.image import MaskSegmenter
+
+        mock_download.return_value = "/fake/path"
+
+        # Mock SAM outputs
+        mock_sam_instance = Mock()
+        mock_registry.return_value = mock_sam_instance
+
+        mock_generator = Mock()
+        mock_generator_class.return_value = mock_generator
+
+        # SAM returns masks with 'segmentation' key
+        h, w = 50, 50
+        fake_masks = [
+            {"segmentation": np.zeros((h, w), dtype=bool), "area": 0},
+            {"segmentation": np.zeros((h, w), dtype=bool), "area": 0},
+        ]
+        fake_masks[0]["segmentation"][:25, :] = True  # Sky
+        fake_masks[1]["segmentation"][25:, :] = True  # Planet
+        mock_generator.generate.return_value = fake_masks
+
+        image = np.random.randint(0, 255, (50, 50, 3), dtype=np.uint8)
+
+        segmenter = MaskSegmenter(
+            image, method="sam", model_size="vit_b", interactive=False
+        )
+
+        limb = segmenter.segment()
+
+        assert len(limb) == 50
+        mock_generator.generate.assert_called_once()
 
 
 class TestSmoothLimb:
