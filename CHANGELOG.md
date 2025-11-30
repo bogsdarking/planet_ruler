@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.X] - XXXX-XX-XX
+## [1.6.0] - 2025-11-30
 
 ### Added
 
@@ -13,8 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added 'plot_residuals' function to zoom in on fit quality along with a 'plot_gradient_field_quiver' to directly visualize the field.
 - Added 'plot_sam_masks' and generic 'plot_segmentation_masks' to visualize segmentation output.
 - New tutorial 1.5 specifically for taking limb measurements from an airplane.
-- New tutorial on selecting a detection method.
+- New tutorial 4 on selecting a detection method.
 - New manual annotation step available for ML segmentation -- user can tag masks to increase accuracy.
+
+### Changed
+
+- ImageSegmentation class replaced by the more method-agnostic MaskSegmenter
 
 ## [1.5.0] - 2025-11-11
 
