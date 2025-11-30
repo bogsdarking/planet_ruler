@@ -29,13 +29,14 @@ from planet_ruler.plot import (
     plot_diff_evol_posteriors,
     plot_full_limb,
     plot_segmentation_masks,
+    plot_residuals,
 )
 from planet_ruler.image import (
     load_image,
     gradient_break,
     smooth_limb,
     fill_nans,
-    ImageSegmentation,
+    MaskSegmenter,
 )
 from planet_ruler.annotate import TkLimbAnnotator
 from planet_ruler.validation import validate_limb_config
@@ -498,7 +499,10 @@ class LimbObservation(PlanetObservation):
         polyorder: int = 1,
         deriv: int = 0,
         delta: int = 1,
-        segmenter: str = "segment-anything",
+        segmentation_method: str = "sam",
+        downsample_factor: int = 1,
+        interactive: bool = True,
+        **segmentation_kwargs,
     ) -> "LimbObservation":
         """
         Use the instance-defined method to find the limb in our observation.
@@ -522,8 +526,11 @@ class LimbObservation(PlanetObservation):
             polyorder (int): Polynomial order for smoothing.
             deriv (int): Derivative level for smoothing.
             delta (int): Delta for smoothing.
-            segmenter (str): Model used for segmentation. Must be one
-                of ['segment-anything'].
+            segmentation_method (str): Model used for segmentation. Must be one
+                of ['sam'].
+            downsample_factor (int): Downsampling used for segmentation.
+            interactive (bool): Prompts user to verify segmentation via annotation tool.
+            segmentation_kwargs (dict): Kwargs passed to segmentation engine.
 
         """
         if detection_method is not None:
@@ -541,8 +548,13 @@ class LimbObservation(PlanetObservation):
                 delta=delta,
             )
         elif self.limb_detection == "segmentation":
-            if self._segmenter is None:
-                self._segmenter = ImageSegmentation(self.image, segmenter=segmenter)
+            self._segmenter = MaskSegmenter(
+                image=self.image,
+                method=segmentation_method,
+                downsample_factor=downsample_factor,
+                interactive=interactive,
+                **segmentation_kwargs,
+            )
             limb = self._segmenter.segment()
 
         elif self.limb_detection == "manual":
@@ -563,6 +575,7 @@ class LimbObservation(PlanetObservation):
 
         elif self.limb_detection == "gradient-field":
             print("Skipping detection step (not needed for gradient-field method)")
+            return self
 
         # For non-manual methods, register the limb
         self.register_limb(limb)
@@ -591,12 +604,14 @@ class LimbObservation(PlanetObservation):
         image_smoothing: Optional[float] = None,
         kernel_smoothing: float = 5.0,
         directional_smoothing: int = 50,
-        directional_decay_rate: float = 0.10,
+        directional_decay_rate: float = 0.15,
         prefer_direction: Optional[Literal["up", "down"]] = None,
         minimizer: Optional[
             Literal["differential-evolution", "dual-annealing", "basinhopping"]
         ] = None,
-        minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
+        minimizer_preset: Literal[
+            "fast", "balanced", "robust", "scipy-default"
+        ] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         warm_start: bool = False,
         dashboard: bool = False,
