@@ -551,7 +551,7 @@ class TestImageIntegration:
             planet_mask[30:, :] = True
             return [
                 {"mask": sky_mask, "area": np.sum(sky_mask)},
-                {"mask": planet_mask, "area": np.sum(planet_mask)}
+                {"mask": planet_mask, "area": np.sum(planet_mask)},
             ]
 
         # Test MaskSegmenter initialization and segmentation
@@ -559,7 +559,7 @@ class TestImageIntegration:
             image, method="custom", segment_fn=simple_segmenter, interactive=False
         )
         limb = segmenter.segment()
-        
+
         smoothed = smooth_limb(limb, method="savgol", window_length=7, polyorder=1)
         final = fill_nans(smoothed)
 
@@ -1084,7 +1084,7 @@ class TestImageEdgeCases:
             # Right half (columns 10-19) are completely empty
             return [
                 {"mask": sky_mask, "area": np.sum(sky_mask)},
-                {"mask": planet_mask, "area": np.sum(planet_mask)}
+                {"mask": planet_mask, "area": np.sum(planet_mask)},
             ]
 
         segmenter = MaskSegmenter(
