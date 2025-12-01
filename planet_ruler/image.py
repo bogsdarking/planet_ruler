@@ -347,68 +347,395 @@ def gradient_break(
     return breaks
 
 
-class ImageSegmentation:
-    def __init__(self, image: np.ndarray, segmenter: str = "segment-anything"):
+class MaskSegmenter:
+    """
+    Method-agnostic mask-based segmentation.
+
+    Supports pluggable backends (SAM, custom algorithms, etc.) with
+    optional downsampling and interactive classification.
+    """
+
+    def __init__(
+        self,
+        image: np.ndarray,
+        method: str = "sam",
+        downsample_factor: int = 1,
+        interactive: bool = True,
+        **backend_kwargs,
+    ):
+        """
+        Initialize mask segmenter.
+
+        Args:
+            image: Input image (H x W x 3)
+            method: Backend method ('sam' or 'custom')
+            downsample_factor: Downsample factor for speed (1 = no downsampling)
+            interactive: Use interactive GUI for classification
+            **backend_kwargs: Backend-specific arguments
+        """
         self.image = image
-        self.segmenter = segmenter
+        self.original_shape = image.shape[:2]  # (H, W)
+        self.downsample_factor = downsample_factor
+        self.interactive = interactive
+
+        # Create backend
+        self._backend = self._create_backend(method, **backend_kwargs)
+
+        # Will hold masks after segmentation
         self._masks = None
 
-        if segmenter == "segment-anything":
-            if not HAS_SEGMENT_ANYTHING:
-                raise ImportError(
-                    "segment-anything dependencies not available. "
-                    "Install with: pip install 'planet_ruler[ml]' or conda install pytorch torchvision segment-anything"
-                )
-            self.model_path = kagglehub.model_download(
-                "metaresearch/segment-anything/pyTorch/vit-b"
-            )
+    def _create_backend(self, method: str, **kwargs):
+        """Create segmentation backend."""
+        if method == "sam":
+            return SAMBackend(**kwargs)
+        elif method == "custom":
+            if "segment_fn" not in kwargs:
+                raise ValueError("custom method requires 'segment_fn' argument")
+            return CustomBackend(kwargs["segment_fn"])
         else:
-            self.model_path = None
-            raise ValueError(f"segmenter must be one of [segment-anything]")
-
-    def limb_from_mask(self, mask: np.ndarray) -> np.ndarray:
-        limb = []
-        for y in mask.T:
-            try:
-                pt = np.arange(len(y))[np.where((y == True))][0]
-            except IndexError:
-                pt = np.nan
-            limb.append(pt)
-        limb = np.array(limb).astype(float)
-        # handling of blips (sometimes the image edges confuse segmenters)
-        # set big jumps to NaN
-        limb[
-            abs(np.diff(limb, n=1, append=limb[-1]))
-            > 10 * abs(np.nanmean(np.diff(limb, n=1, append=limb[-1])))
-        ] = np.nan
-        # set their immediate neighbors to NaN
-        limb[np.isnan(np.diff(limb, n=1, append=limb[-1]))] = np.nan
-        nan_mask = np.isnan(limb)
-        # interpolate them back in
-        limb[nan_mask] = np.interp(
-            np.flatnonzero(nan_mask), np.flatnonzero(~nan_mask), limb[~nan_mask]
-        )
-
-        return np.array(limb)
+            raise ValueError(f"Unknown segmentation method: {method}")
 
     def segment(self) -> np.ndarray:
-        if self.segmenter == "segment-anything":
-            if not HAS_SEGMENT_ANYTHING:
-                raise ImportError(
-                    "segment-anything dependencies not available. "
-                    "Install with: pip install 'planet_ruler[ml]' or conda install pytorch torchvision segment-anything"
+        """
+        Run segmentation pipeline.
+
+        Returns:
+            Limb coordinates (1D array of y-values)
+        """
+        # Downsample if requested
+        if self.downsample_factor > 1:
+            work_height = self.original_shape[0] // self.downsample_factor
+            work_width = self.original_shape[1] // self.downsample_factor
+            work_image = cv2.resize(
+                self.image, (work_width, work_height), interpolation=cv2.INTER_AREA
+            )
+            logging.info(f"Downsampled: {self.original_shape} → {work_image.shape[:2]}")
+        else:
+            work_image = self.image
+
+        # Generate masks using backend
+        self._masks = self._backend.segment(work_image)
+
+        # Scale masks back to original size if needed
+        if self.downsample_factor > 1:
+            scaled_masks = []
+            for mask_dict in self._masks:
+                mask_array = mask_dict.get("mask", mask_dict.get("segmentation"))
+
+                # Scale mask
+                scaled_mask = cv2.resize(
+                    mask_array.astype(np.uint8),
+                    (self.original_shape[1], self.original_shape[0]),
+                    interpolation=cv2.INTER_NEAREST,
+                ).astype(bool)
+
+                # Update dict
+                new_dict = mask_dict.copy()
+                new_dict["mask"] = scaled_mask
+                new_dict["area"] = int(np.sum(scaled_mask))
+                scaled_masks.append(new_dict)
+
+            self._masks = scaled_masks
+            logging.info(f"Scaled {len(self._masks)} masks back to original size")
+
+        # Classify masks (interactive or automatic)
+        if self.interactive:
+            classified = self._classify_interactive()
+        else:
+            classified = self._classify_automatic()
+
+        # Extract limb directly (simplified v6 method)
+        result = self._combine_masks(classified)
+
+        # Return limb coordinates
+        return result["limb"]
+
+    def _classify_interactive(self) -> dict:
+        """
+        Classify masks interactively using GUI.
+
+        Returns:
+            Dict with 'planet', 'sky', 'exclude' keys
+        """
+        from planet_ruler.annotate import TkMaskSelector
+
+        logging.info("Opening interactive mask classifier...")
+
+        # Create and run selector
+        selector = TkMaskSelector(self.image, self._masks)
+        selector.run()
+
+        # Get classifications
+        classified = selector.get_classified_masks()
+
+        logging.info(
+            f"Classified: {len(classified['planet'])} planet, "
+            f"{len(classified['sky'])} sky, {len(classified['exclude'])} exclude"
+        )
+
+        return classified
+
+    def _classify_automatic(self) -> dict:
+        """
+        Classify masks automatically (simple heuristic).
+
+        Assumes largest mask in lower half is planet, largest in upper half is sky.
+
+        Returns:
+            Dict with 'planet', 'sky', 'exclude' keys
+        """
+        logging.info("Automatic classification...")
+
+        if len(self._masks) < 2:
+            raise ValueError("Need at least 2 masks for automatic classification")
+
+        # Find center row of each mask
+        image_height = self.original_shape[0]
+        midpoint = image_height // 2
+
+        upper_masks = []
+        lower_masks = []
+
+        for mask_dict in self._masks:
+            mask_array = mask_dict.get("mask", mask_dict.get("segmentation"))
+            rows = np.where(mask_array.any(axis=1))[0]
+
+            if len(rows) > 0:
+                center_row = (rows[0] + rows[-1]) // 2
+
+                if center_row < midpoint:
+                    upper_masks.append(mask_dict)
+                else:
+                    lower_masks.append(mask_dict)
+
+        # Sort by area
+        upper_masks.sort(key=lambda x: x["area"], reverse=True)
+        lower_masks.sort(key=lambda x: x["area"], reverse=True)
+
+        # Largest in upper half = sky, largest in lower half = planet
+        classified = {
+            "planet": [lower_masks[0]] if lower_masks else [],
+            "sky": [upper_masks[0]] if upper_masks else [],
+            "exclude": [],
+        }
+
+        logging.info(
+            f"Auto-classified: planet area={classified['planet'][0]['area'] if classified['planet'] else 0}, "
+            f"sky area={classified['sky'][0]['area'] if classified['sky'] else 0}"
+        )
+
+        return classified
+
+    def _combine_masks(self, classified_masks: dict) -> dict:
+        """
+        Combine classified masks and extract horizon directly.
+
+        Simplified v6 approach: Returns the actual limb coordinates.
+
+        Args:
+            classified_masks: Dict with 'planet', 'sky', 'exclude' keys
+
+        Returns:
+            dict with 'limb' array directly
+        """
+        planet_masks = classified_masks.get("planet", [])
+        sky_masks = classified_masks.get("sky", [])
+
+        logging.info(
+            f"Combining masks: {len(planet_masks)} planet, {len(sky_masks)} sky"
+        )
+
+        # Fallback if no classifications
+        if not planet_masks or not sky_masks:
+            logging.warning(
+                "Incomplete classification. "
+                f"Planet: {len(planet_masks)}, Sky: {len(sky_masks)}"
+            )
+            if len(self._masks) >= 2:
+                if not planet_masks:
+                    planet_masks = [self._masks[0]]
+                    logging.info("Using mask #0 as planet (fallback)")
+                if not sky_masks:
+                    sky_masks = [self._masks[1]]
+                    logging.info("Using mask #1 as sky (fallback)")
+
+        # Combine masks
+        planet_mask = np.zeros(self.original_shape, dtype=bool)
+        for mask_obj in planet_masks:
+            mask_array = mask_obj.get("mask", mask_obj.get("segmentation"))
+            if isinstance(mask_obj, np.ndarray):
+                mask_array = mask_obj
+            planet_mask |= mask_array
+
+        sky_mask = np.zeros(self.original_shape, dtype=bool)
+        for mask_obj in sky_masks:
+            mask_array = mask_obj.get("mask", mask_obj.get("segmentation"))
+            if isinstance(mask_obj, np.ndarray):
+                mask_array = mask_obj
+            sky_mask |= mask_array
+
+        # Check extents for debugging
+        planet_rows = np.where(planet_mask.any(axis=1))[0]
+        sky_rows = np.where(sky_mask.any(axis=1))[0]
+
+        if len(planet_rows) > 0:
+            logging.info(f"Planet: rows {planet_rows[0]} to {planet_rows[-1]}")
+        if len(sky_rows) > 0:
+            logging.info(f"Sky: rows {sky_rows[0]} to {sky_rows[-1]}")
+
+        # Extract horizon directly: column by column
+        limb = []
+
+        for col_idx in range(self.original_shape[1]):
+            sky_col = sky_mask[:, col_idx]
+            planet_col = planet_mask[:, col_idx]
+
+            # Find where sky is
+            sky_indices = np.where(sky_col)[0]
+            # Find where planet is
+            planet_indices = np.where(planet_col)[0]
+
+            if len(sky_indices) > 0 and len(planet_indices) > 0:
+                # Last row with sky
+                last_sky = sky_indices[-1]
+                # First row with planet
+                first_planet = planet_indices[0]
+
+                # Horizon is between them
+                horizon_y = (last_sky + first_planet) / 2.0
+                limb.append(horizon_y)
+
+            elif len(planet_indices) > 0:
+                # Only planet - use top edge
+                limb.append(float(planet_indices[0]))
+
+            elif len(sky_indices) > 0:
+                # Only sky - use bottom edge
+                limb.append(float(sky_indices[-1]))
+
+            else:
+                # No mask at all
+                limb.append(np.nan)
+
+        limb = np.array(limb)
+
+        # Apply robust outlier detection (your original code)
+        # Set big jumps to NaN
+        diff = np.abs(np.diff(limb, n=1, append=limb[-1]))
+        mean_diff = np.nanmean(diff)
+
+        if mean_diff > 0:
+            outliers = diff > 10 * mean_diff
+            limb[outliers] = np.nan
+
+            # Set their immediate neighbors to NaN
+            limb[np.isnan(np.diff(limb, n=1, append=limb[-1]))] = np.nan
+
+        # Interpolate NaNs
+        nan_mask = np.isnan(limb)
+        if np.any(~nan_mask) and np.sum(~nan_mask) > 1:
+            limb[nan_mask] = np.interp(
+                np.flatnonzero(nan_mask), np.flatnonzero(~nan_mask), limb[~nan_mask]
+            )
+
+        logging.info(
+            f"Extracted limb: min={np.nanmin(limb):.1f}, "
+            f"max={np.nanmax(limb):.1f}, mean={np.nanmean(limb):.1f}"
+        )
+
+        # Return limb directly
+        return {"limb": limb, "planet_mask": planet_mask, "sky_mask": sky_mask}
+
+
+class SegmentationBackend:
+    """Base class for segmentation backends."""
+
+    def segment(self, image: np.ndarray) -> list:
+        """
+        Segment image into masks.
+
+        Args:
+            image: Input image (H x W x 3)
+
+        Returns:
+            List of mask objects (format can vary by backend)
+        """
+        raise NotImplementedError
+
+
+class SAMBackend(SegmentationBackend):
+    """Segment Anything Model backend."""
+
+    def __init__(self, model_size: str = "vit_b"):
+        """
+        Initialize SAM backend.
+
+        Args:
+            model_size: SAM model variant ('vit_b', 'vit_l', 'vit_h')
+        """
+        if not HAS_SEGMENT_ANYTHING:
+            raise ImportError(
+                "segment-anything dependencies not available. "
+                "Install with: pip install 'planet_ruler[ml]'"
+            )
+
+        self.model_size = model_size
+
+        # Convert underscores to hyphens for Kaggle download path
+        kaggle_model_name = model_size.replace("_", "-")
+
+        # Download model (cached after first time)
+        self.model_path = kagglehub.model_download(
+            f"metaresearch/segment-anything/pyTorch/{kaggle_model_name}"
+        )
+
+        logging.info(f"SAM model ready: {model_size}")
+
+    def segment(self, image: np.ndarray) -> list:
+        """Run SAM on image."""
+        sam = sam_model_registry[self.model_size](
+            checkpoint=f"{self.model_path}/model.pth"
+        )
+        mask_generator = SamAutomaticMaskGenerator(sam)
+        masks = mask_generator.generate(image)
+
+        logging.info(f"SAM generated {len(masks)} masks")
+        return masks
+
+
+class CustomBackend(SegmentationBackend):
+    """Custom user-provided segmentation backend."""
+
+    def __init__(self, segment_fn):
+        """
+        Initialize with custom segmentation function.
+
+        Args:
+            segment_fn: Function that takes image and returns list of masks
+        """
+        self.segment_fn = segment_fn
+
+    def segment(self, image: np.ndarray) -> list:
+        """Run custom segmentation function."""
+        masks = self.segment_fn(image)
+
+        # Normalize to expected format
+        normalized = []
+        for idx, mask in enumerate(masks):
+            if isinstance(mask, np.ndarray):
+                normalized.append(
+                    {"mask": mask.astype(bool), "area": int(np.sum(mask)), "id": idx}
                 )
-            sam = sam_model_registry["vit_b"](checkpoint=f"{self.model_path}/model.pth")
-            mask_generator = SamAutomaticMaskGenerator(sam)
-            masks = mask_generator.generate(self.image)
-            self._masks = masks
-            # combine first two (should be above/below)
-            mask = (1 - masks[0]["segmentation"]) * masks[1]["segmentation"]
+            elif isinstance(mask, dict):
+                normalized.append(mask)
+            else:
+                raise TypeError(f"Mask must be ndarray or dict, got {type(mask)}")
 
-            return self.limb_from_mask(mask)
+        logging.info(f"Custom backend generated {len(normalized)} masks")
+        return normalized
 
-        # This should never be reached given current validation, but adding for completeness
-        raise ValueError(f"Unknown segmenter: {self.segmenter}")
+
+# Removed vestigial ImageSegmentation class - replaced by MaskSegmenter
 
 
 def smooth_limb(
@@ -504,7 +831,7 @@ def fill_nans(limb: np.ndarray) -> np.ndarray:
 def gradient_field(
     image: np.ndarray,
     kernel_smoothing: float = 5.0,
-    directional_smoothing: int = 30,
+    directional_smoothing: int = 50,
     directional_decay_rate: float = 0.15,
 ) -> dict:
     """
