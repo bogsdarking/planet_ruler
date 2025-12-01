@@ -36,6 +36,7 @@ extensions = [
     "myst_parser",
     "sphinx_autodoc_typehints",
     "sphinxcontrib.bibtex",
+    "sphinxcontrib.mermaid",
 ]
 
 templates_path = ["_templates"]

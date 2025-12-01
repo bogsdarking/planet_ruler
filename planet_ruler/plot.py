@@ -247,7 +247,7 @@ def plot_gradient_field_at_limb(
     image,
     image_smoothing=None,
     kernel_smoothing=5.0,
-    directional_smoothing=30,
+    directional_smoothing=50,
     directional_decay_rate=0.15,
     sample_spacing=50,
     arrow_scale=20,
@@ -316,10 +316,6 @@ def plot_gradient_field_at_limb(
 
     normal_angle = np.arctan2(normal_y_unit, normal_x_unit)
 
-    # Verify perpendicularity (dot product should be ~0)
-    # dot = tangent_x_unit * normal_x_unit + tangent_y_unit * normal_y_unit
-    # Should equal 0 for perpendicular vectors
-
     # Sample points along the curve
     x_samples = np.arange(0, len(y_pixels), sample_spacing)
 
@@ -379,25 +375,6 @@ def plot_gradient_field_at_limb(
             linewidth=2,
         )
 
-        # # Draw tangent direction (magenta, dashed)
-        # tangent_x_at_point = tangent_x_unit[x_idx]
-        # tangent_y_at_point = tangent_y_unit[x_idx]
-        # tan_dx = 30 * tangent_x_at_point
-        # tan_dy = 30 * tangent_y_at_point
-        # ax.arrow(
-        #     x_pos,
-        #     y_pos,
-        #     tan_dx,
-        #     tan_dy,
-        #     head_width=8,
-        #     head_length=8,
-        #     fc="magenta",
-        #     ec="magenta",
-        #     alpha=0.6,
-        #     linestyle="--",
-        #     linewidth=1.5,
-        # )
-
         # Draw normal direction (cyan, dashed)
         norm_dx = 30 * normal_x_unit[x_idx]
         norm_dy = 30 * normal_y_unit[x_idx]
@@ -413,16 +390,6 @@ def plot_gradient_field_at_limb(
             alpha=0.5,
             linewidth=1.5,
         )
-
-        # # Verify perpendicularity (for debugging)
-        # dot_product = (
-        #     tangent_x_at_point * normal_x_unit[x_idx]
-        #     + tangent_y_at_point * normal_y_unit[x_idx]
-        # )
-        # if abs(dot_product) > 0.01:
-        #     print(
-        #         f"WARNING at x={x_idx}: dot product = {dot_product:.4f} (should be ~0)"
-        #     )
 
     # Add legend
     from matplotlib.lines import Line2D
@@ -779,3 +746,454 @@ def plot_segmentation_masks(observation) -> None:
         plt.imshow(mask)
         plt.title(f"Mask {i}")
         plt.show()
+
+
+def plot_residuals(
+    observation,
+    show_sparse_markers: bool = True,
+    marker_size: int = 10,
+    alpha: float = 0.6,
+    figsize: tuple = (16, 6),
+    show_image: bool = False,
+    image_alpha: float = 0.4,
+    band_size: int = 30,
+) -> None:
+    """
+    Plot residuals between the fitted limb and the detected target limb.
+
+    Args:
+        observation: Instance of LimbObservation that has been fitted.
+        show_sparse_markers: Use larger markers for sparse data.
+        marker_size: Size of markers for sparse data.
+        alpha: Transparency of residual markers/line.
+        figsize: Figure size (width, height).
+        show_image: Show straightened image strip as background.
+        image_alpha: Transparency of background image.
+        band_size: Size of band around residuals to plot (in pixels)
+    """
+    # Check if gradient-field method was used
+    if observation.limb_detection == "gradient-field":
+        raise ValueError(
+            "Cannot plot residuals for gradient-field detection method. "
+            "Gradient-field optimization has no target limb to compare against. "
+            "This function only works with 'manual', 'gradient-break', or "
+            "'segmentation' detection methods."
+        )
+
+    # Check if the observation has been fitted
+    if observation.best_parameters is None:
+        raise AttributeError(
+            "Observation has not been fitted yet. "
+            "Call obs.fit_limb() or obs.analyze() before plotting residuals."
+        )
+
+    # Get the target limb (detected limb)
+    target_limb = observation.features["limb"].copy()
+
+    # Get image dimensions
+    n_pix_y, n_pix_x = observation.image.shape[:2]
+
+    # Extract fitted parameters and generate predicted limb
+    params = observation.best_parameters.copy()
+    r = params.pop("r")
+    params.pop("n_pix_x", None)
+    params.pop("n_pix_y", None)
+    predicted_limb = limb_arc(r, n_pix_x, n_pix_y, **params)
+
+    # Calculate residuals (target - predicted)
+    residuals = target_limb - predicted_limb
+
+    # Determine if data is sparse
+    valid_mask = ~np.isnan(residuals)
+    n_valid = np.sum(valid_mask)
+    n_total = len(residuals)
+    sparsity_fraction = n_valid / n_total
+    is_sparse = sparsity_fraction < 0.1
+
+    # Create figure
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    x_coords = np.arange(n_pix_x)
+
+    # Optionally show straightened image in background
+    if show_image:
+        residual_range = np.nanmax(np.abs(residuals))
+        y_extent = int(max(band_size, residual_range * 1.5))
+
+        # Create straightened image strip
+        if len(observation.image.shape) == 3:
+            straightened = np.zeros((2 * y_extent, n_pix_x, 3))
+        else:
+            straightened = np.zeros((2 * y_extent, n_pix_x))
+
+        for x in range(n_pix_x):
+            y_pred = predicted_limb[x]
+            if np.isnan(y_pred):
+                continue
+            for dy in range(-y_extent, y_extent):
+                y_img = int(y_pred) + dy
+                if 0 <= y_img < n_pix_y:
+                    straightened[y_extent + dy, x] = observation.image[y_img, x]
+
+        # Explicit cast or things don't appear
+        straightened = straightened.astype(int)
+
+        ax.imshow(
+            straightened,
+            extent=[0, n_pix_x, -y_extent, y_extent],
+            aspect="auto",
+            alpha=image_alpha,
+            zorder=0,
+        )
+
+    # Plot residuals
+    if is_sparse and show_sparse_markers:
+        valid_x = x_coords[valid_mask]
+        valid_residuals = residuals[valid_mask]
+        ax.scatter(
+            valid_x,
+            valid_residuals,
+            c="blue",
+            s=marker_size * 2,
+            alpha=alpha,
+            label=f"Residuals (n={n_valid})",
+            zorder=2,
+        )
+    else:
+        ax.plot(
+            x_coords,
+            residuals,
+            "b-",
+            linewidth=1.5,
+            alpha=alpha,
+            label="Residuals",
+            zorder=2,
+        )
+
+    # Add zero reference line
+    ax.axhline(y=0, color="k", linestyle="--", linewidth=1, alpha=0.5, zorder=1)
+
+    # Add statistics
+    residual_std = np.nanstd(residuals)
+    residual_mean = np.nanmean(residuals)
+    residual_rms = np.sqrt(np.nanmean(residuals**2))
+
+    stats_text = (
+        f"Mean: {residual_mean:.2f} px\n"
+        f"Std: {residual_std:.2f} px\n"
+        f"RMS: {residual_rms:.2f} px"
+    )
+
+    ax.text(
+        0.98,
+        0.97,
+        stats_text,
+        transform=ax.transAxes,
+        verticalalignment="top",
+        horizontalalignment="right",
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+        fontsize=10,
+    )
+
+    ax.set_xlabel("X (pixels)")
+    ax.set_ylabel("Residual (pixels)")
+    ax.set_title("Residuals: Target - Fitted")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_gradient_field_quiver(
+    image: np.ndarray,
+    step: int = 2,
+    scale: Optional[float] = 0.15,
+    limb_y: Optional[np.ndarray] = None,
+    roi_height: Optional[int] = None,
+    image_smoothing: Optional[int] = None,
+    kernel_smoothing: float = 5.0,
+    directional_smoothing: int = 50,
+    directional_decay_rate: float = 0.15,
+    downsample_factor: int = 32,
+    figsize: tuple = (16, 10),
+    cmap: str = "hot",
+) -> None:
+    """
+    Plot gradient field as quiver (arrow) plot.
+
+    Args:
+        image: Input image array.
+        step: Spacing between arrows (every Nth pixel).
+        scale: Arrow scale factor (None = auto).
+        limb_y: Optional limb curve to overlay (y-coordinates).
+        roi_height: If provided, only show ±roi_height pixels around limb.
+        image_smoothing: For gradient_field - Gaussian blur sigma applied to image
+            before gradient computation. Removes high-frequency artifacts (crater rims,
+            striations) that could mislead optimization. Different from kernel_smoothing.
+        kernel_smoothing: Sigma for initial gradient direction estimation.
+        directional_smoothing: Distance for directional blur sampling.
+        directional_decay_rate: Exponential decay for directional blur.
+        downsample_factor: Downsample image by this factor before computing gradients.
+            Values > 1 reduce resolution (e.g., 2 = half resolution, 4 = quarter).
+            Useful for visualizing gradient field at different optimization stages.
+        figsize: Figure size (width, height).
+        cmap: Colormap for gradient magnitude.
+    """
+    from planet_ruler.image import gradient_field
+
+    if image_smoothing is not None:
+        image = cv2.GaussianBlur(
+            image.astype(np.float32),
+            (0, 0),  # Kernel size auto-determined from sigma
+            sigmaX=image_smoothing,
+            sigmaY=image_smoothing,
+        )
+
+    # Downsample image if requested
+    if downsample_factor > 1:
+        # Use area interpolation for clean downsampling
+        orig_height, orig_width = image.shape[:2]
+        new_width = orig_width // downsample_factor
+        new_height = orig_height // downsample_factor
+
+        if len(image.shape) == 3:
+            downsampled = cv2.resize(
+                image, (new_width, new_height), interpolation=cv2.INTER_AREA
+            )
+        else:
+            downsampled = cv2.resize(
+                image, (new_width, new_height), interpolation=cv2.INTER_AREA
+            )
+
+        # Scale limb if provided
+        if limb_y is not None:
+            limb_y_scaled = limb_y / downsample_factor
+        else:
+            limb_y_scaled = None
+
+        # Scale ROI height
+        if roi_height is not None:
+            roi_height_scaled = roi_height // downsample_factor
+        else:
+            roi_height_scaled = None
+
+        working_image = downsampled
+        coord_scale = downsample_factor
+    else:
+        working_image = image
+        limb_y_scaled = limb_y
+        roi_height_scaled = roi_height
+        coord_scale = 1
+
+    # Compute gradient field
+    grad_data = gradient_field(
+        working_image,
+        kernel_smoothing=kernel_smoothing,
+        directional_smoothing=directional_smoothing,
+        directional_decay_rate=directional_decay_rate,
+    )
+
+    grad_x = grad_data["grad_x"]
+    grad_y = grad_data["grad_y"]
+    grad_mag = grad_data["grad_mag"]
+
+    height, width = grad_mag.shape
+
+    # Determine region of interest
+    if roi_height_scaled is not None and limb_y_scaled is not None:
+        # Find limb extent
+        valid_limb = limb_y_scaled[~np.isnan(limb_y_scaled)]
+        if len(valid_limb) > 0:
+            limb_center = int(np.median(valid_limb))
+            y_min = max(0, limb_center - roi_height_scaled)
+            y_max = min(height, limb_center + roi_height_scaled)
+        else:
+            y_min, y_max = 0, height
+    else:
+        y_min, y_max = 0, height
+
+    # Create meshgrid for quiver plot (downsampled)
+    y_indices = np.arange(y_min, y_max, step)
+    x_indices = np.arange(0, width, step)
+    X, Y = np.meshgrid(x_indices, y_indices)
+
+    # Sample gradient at grid points
+    U = grad_x[Y, X]
+    V = grad_y[Y, X]
+    M = grad_mag[Y, X]
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Show image as background (scale coordinates back to original)
+    ax.imshow(
+        working_image[y_min:y_max, :],
+        extent=[0, width * coord_scale, y_max * coord_scale, y_min * coord_scale],
+        aspect="auto",
+        alpha=0.5,
+    )
+
+    # Plot quiver with color based on magnitude (scale coordinates back)
+    quiv = ax.quiver(
+        X * coord_scale,
+        Y * coord_scale,
+        U,
+        V,
+        M,
+        cmap=cmap,
+        scale=scale,
+        scale_units="xy",
+        angles="xy",
+        alpha=0.8,
+    )
+
+    # Add colorbar
+    cbar = plt.colorbar(quiv, ax=ax, label="Gradient Magnitude")
+
+    # Overlay limb if provided (use original scale)
+    if limb_y is not None:
+        x_coords = np.arange(len(limb_y))
+        ax.plot(x_coords, limb_y, "cyan", linewidth=2, alpha=0.7, label="Limb")
+        ax.legend()
+
+    ax.set_xlabel("X (pixels)")
+    ax.set_ylabel("Y (pixels)")
+
+    if downsample_factor > 1:
+        ax.set_title(f"Gradient Field (step={step}, downsample={downsample_factor}x)")
+    else:
+        ax.set_title(f"Gradient Field (step={step})")
+
+    ax.set_xlim(0, width * coord_scale)
+    ax.set_ylim(y_max * coord_scale, y_min * coord_scale)  # Invert y-axis
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_segmentation_masks(observation) -> None:
+    """
+    Display all the classes/masks generated by the segmentation.
+
+    Args:
+        observation (object): Instance of LimbObservation.
+    """
+    for i, mask in enumerate(observation._segmenter._masks):
+        mask = mask["segmentation"]
+        plt.imshow(mask)
+        plt.title(f"Mask {i}")
+        plt.show()
+
+
+def plot_sam_masks(
+    masks: list,
+    labels: Optional[list] = None,
+    colors: Optional[list] = None,
+    alpha: float = 0.5,
+    image: Optional[np.ndarray] = None,
+    figsize: tuple = (16, 10),
+    title: Optional[str] = None,
+    show: bool = True,
+) -> tuple:
+    """
+    Plot multiple SAM segmentation masks as separate labeled objects with legend.
+
+    Args:
+        masks (list): List of SAM mask dictionaries with 'segmentation' keys containing
+            boolean arrays. Can also be a list of boolean arrays directly.
+        labels (list): Labels for each mask (for legend). If None, uses "Mask 0", "Mask 1", etc.
+        colors (list): Colors for each mask. If None, uses a default color cycle.
+        alpha (float): Transparency of mask overlays (0=transparent, 1=opaque).
+        image (np.ndarray): Optional background image to display under masks.
+        figsize (tuple): Figure size in inches.
+        title (str): Optional title for the plot.
+        show (bool): Whether to display the plot immediately.
+
+    Returns:
+        tuple: (fig, ax) matplotlib figure and axis objects.
+
+    Example:
+        >>> masks = [{'segmentation': planet_mask}, {'segmentation': sky_mask}]
+        >>> fig, ax = plot_sam_masks(
+        ...     masks,
+        ...     labels=['Planet', 'Sky'],
+        ...     colors=['yellow', 'cyan'],
+        ...     image=observation.image
+        ... )
+    """
+    from matplotlib.patches import Patch
+
+    # Extract segmentation arrays if masks are SAM dictionaries
+    seg_arrays = []
+    for mask in masks:
+        if isinstance(mask, dict) and "segmentation" in mask:
+            seg_arrays.append(mask["segmentation"])
+        else:
+            # Assume it's already a boolean array
+            seg_arrays.append(mask)
+
+    # Generate default labels if not provided
+    if labels is None:
+        labels = [f"Mask {i}" for i in range(len(seg_arrays))]
+
+    # Generate default colors if not provided
+    if colors is None:
+        # Use a nice color cycle
+        default_colors = [
+            "#FF6B6B",
+            "#4ECDC4",
+            "#45B7D1",
+            "#FFA07A",
+            "#98D8C8",
+            "#F7DC6F",
+        ]
+        colors = [
+            default_colors[i % len(default_colors)] for i in range(len(seg_arrays))
+        ]
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Display background image if provided
+    if image is not None:
+        ax.imshow(image)
+    else:
+        # Create blank background with same size as first mask
+        height, width = seg_arrays[0].shape
+        ax.imshow(np.zeros((height, width, 3)), aspect="auto")
+
+    # Create RGBA overlays for each mask
+    legend_elements = []
+    for seg_array, label, color in zip(seg_arrays, labels, colors):
+        # Convert color to RGBA
+        from matplotlib.colors import to_rgba
+
+        rgba_color = to_rgba(color, alpha=alpha)
+
+        # Create colored overlay where mask is True
+        overlay = np.zeros((*seg_array.shape, 4))
+        overlay[seg_array] = rgba_color
+
+        # Display the overlay
+        ax.imshow(overlay, aspect="auto")
+
+        # Add to legend
+        legend_elements.append(Patch(facecolor=color, label=label, alpha=alpha))
+
+    # Add legend
+    ax.legend(handles=legend_elements, loc="best", fontsize=12)
+
+    # Add title if provided
+    if title:
+        ax.set_title(title)
+
+    # Remove axis ticks for cleaner look
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    plt.tight_layout()
+
+    if show:
+        plt.show()
+
+    return fig, ax
