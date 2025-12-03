@@ -493,26 +493,26 @@ PLANET_RADII = {
 }
 
 
-def get_initial_radius(planet: str, perturbation_factor: float = 0.5) -> float:
+def get_initial_radius(
+    planet: str = "earth", 
+    perturbation_factor: float = 0.5,
+    seed: Optional[int] = None
+) -> float:
     """
-    Get initial radius guess with large random perturbation.
-
-    Perturbation is much larger than typical measurement errors (~10-20%)
-    to ensure results are data-driven, not artifacts of starting close to truth.
-
+    Get initial radius guess with perturbation.
+    
     Args:
-        planet: Planet name (e.g., 'earth', 'mars')
-        perturbation_factor: Relative perturbation range (default: 0.5 = ±50%)
-
-    Returns:
-        Perturbed initial radius in meters
+        planet: Planet name
+        perturbation_factor: Relative perturbation (default: 0.5 = ±50%)
+        seed: Random seed for reproducibility (default: None = unseeded)
     """
     import random
-
+    
+    if seed is not None:
+        random.seed(seed)
+    
     if planet.lower() in PLANET_RADII:
         true_value = PLANET_RADII[planet.lower()]
-        # Perturb by ±perturbation_factor (default ±50%)
-        # Much larger than typical ~15-20% measurement error
         min_factor = 1.0 - perturbation_factor
         max_factor = 1.0 + perturbation_factor
         perturbation = random.uniform(min_factor, max_factor)
@@ -523,7 +523,7 @@ def get_initial_radius(planet: str, perturbation_factor: float = 0.5) -> float:
         return r_init
     else:
         logger.warning(f"Unknown planet '{planet}', using middle-range guess")
-        return 10_000_000  # 10,000 km - middle of parameter space
+        return 10_000_000  # 10,000 km
 
 
 def create_config_from_image(
@@ -532,6 +532,7 @@ def create_config_from_image(
     planet: str = "earth",
     param_tolerance: float = 0.1,
     perturbation_factor: float = 0.5,
+    seed: Optional[int] = None,
 ) -> Dict:
     """
     Create a complete planet_ruler configuration from an image.
@@ -543,6 +544,7 @@ def create_config_from_image(
         planet: Planet name for initial radius guess (default: 'earth')
         param_tolerance: Fractional tolerance for parameter limits (default: 0.1 = ±10%)
         perturbation_factor: Initial radius perturbation (default: 0.5 = ±50%)
+        seed: Random seed for reproducibility (default: None = unseeded)
 
     Returns:
         dict: Configuration ready for planet_ruler
@@ -572,7 +574,7 @@ def create_config_from_image(
         )
 
     # Get initial planet radius with perturbation to avoid local minima
-    r_init = get_initial_radius(planet, perturbation_factor)
+    r_init = get_initial_radius(planet, perturbation_factor, seed=seed)
 
     # Determine which camera parameters to use (pick 2 of 3)
     # Priority: focal_length > sensor_width > field_of_view
