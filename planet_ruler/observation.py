@@ -1266,6 +1266,21 @@ class LimbObservation(PlanetObservation):
         bounds = [self.parameter_limits[key] for key in self.free_parameters]
         x0 = [working_parameters[key] for key in self.free_parameters]
 
+        # Clamp x0 to be strictly within bounds (avoid edge case violations)
+        x0_clamped = []
+        for val, (lower, upper) in zip(x0, bounds):
+            # Ensure value is strictly within bounds with small epsilon
+            epsilon = 1e-9 * (upper - lower)  # Relative epsilon
+            clamped_val = max(lower + epsilon, min(upper - epsilon, val))
+            if clamped_val != val:
+                import warnings
+                warnings.warn(
+                    f"Initial parameter {val} clamped to [{lower}, {upper}]",
+                    UserWarning
+                )
+            x0_clamped.append(clamped_val)
+        x0 = x0_clamped
+
         # Run minimizer
         if self.minimizer == "differential-evolution":
             updating = "deferred" if n_jobs > 1 else "immediate"
