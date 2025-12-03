@@ -29,13 +29,14 @@ from planet_ruler.plot import (
     plot_diff_evol_posteriors,
     plot_full_limb,
     plot_segmentation_masks,
+    plot_residuals,
 )
 from planet_ruler.image import (
     load_image,
     gradient_break,
     smooth_limb,
     fill_nans,
-    ImageSegmentation,
+    MaskSegmenter,
 )
 from planet_ruler.annotate import TkLimbAnnotator
 from planet_ruler.validation import validate_limb_config
@@ -498,7 +499,10 @@ class LimbObservation(PlanetObservation):
         polyorder: int = 1,
         deriv: int = 0,
         delta: int = 1,
-        segmenter: str = "segment-anything",
+        segmentation_method: str = "sam",
+        downsample_factor: int = 1,
+        interactive: bool = True,
+        **segmentation_kwargs,
     ) -> "LimbObservation":
         """
         Use the instance-defined method to find the limb in our observation.
@@ -522,8 +526,11 @@ class LimbObservation(PlanetObservation):
             polyorder (int): Polynomial order for smoothing.
             deriv (int): Derivative level for smoothing.
             delta (int): Delta for smoothing.
-            segmenter (str): Model used for segmentation. Must be one
-                of ['segment-anything'].
+            segmentation_method (str): Model used for segmentation. Must be one
+                of ['sam'].
+            downsample_factor (int): Downsampling used for segmentation.
+            interactive (bool): Prompts user to verify segmentation via annotation tool.
+            segmentation_kwargs (dict): Kwargs passed to segmentation engine.
 
         """
         if detection_method is not None:
@@ -541,8 +548,13 @@ class LimbObservation(PlanetObservation):
                 delta=delta,
             )
         elif self.limb_detection == "segmentation":
-            if self._segmenter is None:
-                self._segmenter = ImageSegmentation(self.image, segmenter=segmenter)
+            self._segmenter = MaskSegmenter(
+                image=self.image,
+                method=segmentation_method,
+                downsample_factor=downsample_factor,
+                interactive=interactive,
+                **segmentation_kwargs,
+            )
             limb = self._segmenter.segment()
 
         elif self.limb_detection == "manual":
@@ -563,6 +575,7 @@ class LimbObservation(PlanetObservation):
 
         elif self.limb_detection == "gradient-field":
             print("Skipping detection step (not needed for gradient-field method)")
+            return self
 
         # For non-manual methods, register the limb
         self.register_limb(limb)
@@ -591,12 +604,14 @@ class LimbObservation(PlanetObservation):
         image_smoothing: Optional[float] = None,
         kernel_smoothing: float = 5.0,
         directional_smoothing: int = 50,
-        directional_decay_rate: float = 0.10,
+        directional_decay_rate: float = 0.15,
         prefer_direction: Optional[Literal["up", "down"]] = None,
-        minimizer: Literal[
-            "differential-evolution", "dual-annealing", "basinhopping"
-        ] = "differential-evolution",
-        minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
+        minimizer: Optional[
+            Literal["differential-evolution", "dual-annealing", "basinhopping"]
+        ] = None,
+        minimizer_preset: Literal[
+            "fast", "balanced", "robust", "scipy-default"
+        ] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         warm_start: bool = False,
         dashboard: bool = False,
@@ -776,6 +791,7 @@ class LimbObservation(PlanetObservation):
             if not use_multires:
                 result = self._fit_single_resolution(
                     loss_function=loss_function,
+                    minimizer=minimizer,
                     max_iter=max_iter,
                     n_jobs=n_jobs,
                     seed=seed,
@@ -793,6 +809,7 @@ class LimbObservation(PlanetObservation):
             else:
                 result = self._fit_multi_resolution(
                     loss_function=loss_function,
+                    minimizer=minimizer,
                     resolution_stages=resolution_stages,
                     max_iter=max_iter,
                     max_iter_per_stage=max_iter_per_stage,
@@ -1039,6 +1056,7 @@ class LimbObservation(PlanetObservation):
                 directional_smoothing=scaled_directional_smoothing,
                 directional_decay_rate=directional_decay_rate,
                 prefer_direction=prefer_direction,
+                minimizer=minimizer,
                 minimizer_preset=minimizer_preset,
                 minimizer_kwargs=minimizer_kwargs,
                 dashboard=dashboard,  # Boolean flag
@@ -1131,9 +1149,9 @@ class LimbObservation(PlanetObservation):
         directional_smoothing: int,
         directional_decay_rate: float,
         prefer_direction: Optional[Literal["up", "down"]] = None,
-        minimizer: Literal[
-            "differential-evolution", "dual-annealing", "basinhopping"
-        ] = "differential-evolution",
+        minimizer: Optional[
+            Literal["differential-evolution", "dual-annealing", "basinhopping"]
+        ] = None,
         minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         dashboard: bool = False,
@@ -1247,6 +1265,22 @@ class LimbObservation(PlanetObservation):
         # Prepare bounds and initial guess
         bounds = [self.parameter_limits[key] for key in self.free_parameters]
         x0 = [working_parameters[key] for key in self.free_parameters]
+
+        # Clamp x0 to be strictly within bounds (avoid edge case violations)
+        x0_clamped = []
+        for val, (lower, upper) in zip(x0, bounds):
+            # Ensure value is strictly within bounds with small epsilon
+            epsilon = 1e-9 * (upper - lower)  # Relative epsilon
+            clamped_val = max(lower + epsilon, min(upper - epsilon, val))
+            if clamped_val != val:
+                import warnings
+
+                warnings.warn(
+                    f"Initial parameter {val} clamped to [{lower}, {upper}]",
+                    UserWarning,
+                )
+            x0_clamped.append(clamped_val)
+        x0 = x0_clamped
 
         # Run minimizer
         if self.minimizer == "differential-evolution":
