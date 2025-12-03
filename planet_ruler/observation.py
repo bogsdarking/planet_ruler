@@ -1274,9 +1274,10 @@ class LimbObservation(PlanetObservation):
             clamped_val = max(lower + epsilon, min(upper - epsilon, val))
             if clamped_val != val:
                 import warnings
+
                 warnings.warn(
                     f"Initial parameter {val} clamped to [{lower}, {upper}]",
-                    UserWarning
+                    UserWarning,
                 )
             x0_clamped.append(clamped_val)
         x0 = x0_clamped

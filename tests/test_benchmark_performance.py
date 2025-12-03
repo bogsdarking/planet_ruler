@@ -604,7 +604,10 @@ class TestConfigurationBenchmarks:
         """Benchmark configuration validation workflow."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
         config = create_config_from_image(
-            image_path=image_path, altitude_m=10000, planet="earth", seed=0,
+            image_path=image_path,
+            altitude_m=10000,
+            planet="earth",
+            seed=0,
         )
 
         def validate_config():
@@ -933,7 +936,10 @@ class TestFullPipelineBenchmarks:
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
 
         config = create_config_from_image(
-            image_path=image_path, altitude_m=10000, planet="earth", seed=0,
+            image_path=image_path,
+            altitude_m=10000,
+            planet="earth",
+            seed=0,
         )
 
         def obs_setup_workflow():

@@ -494,23 +494,21 @@ PLANET_RADII = {
 
 
 def get_initial_radius(
-    planet: str = "earth", 
-    perturbation_factor: float = 0.5,
-    seed: Optional[int] = None
+    planet: str = "earth", perturbation_factor: float = 0.5, seed: Optional[int] = None
 ) -> float:
     """
     Get initial radius guess with perturbation.
-    
+
     Args:
         planet: Planet name
         perturbation_factor: Relative perturbation (default: 0.5 = ±50%)
         seed: Random seed for reproducibility (default: None = unseeded)
     """
     import random
-    
+
     if seed is not None:
         random.seed(seed)
-    
+
     if planet.lower() in PLANET_RADII:
         true_value = PLANET_RADII[planet.lower()]
         min_factor = 1.0 - perturbation_factor
