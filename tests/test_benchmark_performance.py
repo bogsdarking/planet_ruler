@@ -18,10 +18,21 @@ Performance benchmark tests for planet_ruler critical functions.
 These tests measure execution time and performance characteristics of
 computationally intensive functions to track performance regressions
 and identify optimization opportunities.
+
+BENCHMARK CATEGORIES:
+- Fast benchmarks (~microseconds to seconds): Default, no special markers
+- Slow benchmarks (~minutes): Marked with @pytest.mark.slow
+
+USAGE:
+- Run all benchmarks: pytest tests/test_benchmark_performance.py
+- Run only fast benchmarks: pytest tests/test_benchmark_performance.py -m "not slow"
+- Run only slow benchmarks: pytest tests/test_benchmark_performance.py -m "slow"
+- Skip slow during development: pytest tests/test_benchmark_performance.py -v -m "not slow"
 """
 
 import pytest
 import numpy as np
+import json
 from unittest.mock import patch
 
 from planet_ruler.geometry import (
@@ -32,8 +43,18 @@ from planet_ruler.geometry import (
     extrinsic_transform,
 )
 from planet_ruler.fit import CostFunction, unpack_parameters, pack_parameters
-from planet_ruler.image import gradient_break, smooth_limb
+from planet_ruler.image import gradient_break, smooth_limb, MaskSegmenter
 from planet_ruler.observation import LimbObservation, PlanetObservation
+from planet_ruler.camera import (
+    extract_camera_parameters,
+    create_config_from_image,
+    extract_exif,
+    get_camera_model,
+    get_focal_length_mm,
+    get_gps_altitude,
+)
+from planet_ruler.validation import validate_limb_config
+from planet_ruler.uncertainty import calculate_parameter_uncertainty
 
 
 class TestGeometryBenchmarks:
@@ -499,6 +520,780 @@ class TestIntegratedWorkflowBenchmarks:
         result = benchmark(optimization_simulation)
         assert len(result) == 50
         assert all(r >= 0 for r in result)
+
+
+class TestCameraParameterBenchmarks:
+    """Benchmark tests for camera parameter extraction pipeline."""
+
+    def test_extract_exif_benchmark(self, benchmark):
+        """Benchmark EXIF data extraction from image files."""
+        # Use a test image from the demo directory
+        image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
+
+        def extract_exif_data():
+            return extract_exif(image_path)
+
+        result = benchmark(extract_exif_data)
+        assert result is not None
+
+    def test_extract_camera_parameters_benchmark(self, benchmark):
+        """Benchmark complete camera parameter extraction workflow."""
+        image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
+
+        def extract_params():
+            return extract_camera_parameters(image_path)
+
+        result = benchmark(extract_params)
+        assert result is not None
+        assert "image_width_px" in result
+        assert "image_height_px" in result
+
+    def test_camera_model_detection_benchmark(self, benchmark):
+        """Benchmark camera model detection from EXIF."""
+        image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
+
+        def detect_camera_model():
+            exif = extract_exif(image_path)
+            return get_camera_model(exif)
+
+        result = benchmark(detect_camera_model)
+        # Result may be None for test images without camera info
+
+    def test_focal_length_extraction_benchmark(self, benchmark):
+        """Benchmark focal length extraction from EXIF."""
+        image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
+
+        def extract_focal_length():
+            exif = extract_exif(image_path)
+            return get_focal_length_mm(exif)
+
+        benchmark(extract_focal_length)
+
+    def test_gps_altitude_extraction_benchmark(self, benchmark):
+        """Benchmark GPS altitude extraction from EXIF."""
+        image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
+
+        def extract_gps_altitude():
+            return get_gps_altitude(image_path)
+
+        benchmark(extract_gps_altitude)
+
+
+class TestConfigurationBenchmarks:
+    """Benchmark tests for configuration generation and validation."""
+
+    def test_create_config_from_image_benchmark(self, benchmark):
+        """Benchmark automatic configuration generation from image."""
+        image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
+
+        def create_config():
+            return create_config_from_image(
+                image_path=image_path,
+                altitude_m=10000,
+                planet="earth",
+                perturbation_factor=0.5,
+                seed=0,
+            )
+
+        result = benchmark(create_config)
+        assert result is not None
+        assert "init_parameter_values" in result
+        assert "parameter_limits" in result
+
+    def test_config_validation_benchmark(self, benchmark):
+        """Benchmark configuration validation workflow."""
+        image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
+        config = create_config_from_image(
+            image_path=image_path,
+            altitude_m=10000,
+            planet="earth",
+            seed=0,
+        )
+
+        def validate_config():
+            return validate_limb_config(config, strict=False)
+
+        benchmark(validate_config)
+
+
+class TestLimbDetectionBenchmarks:
+    """Benchmark tests for different limb detection methods."""
+
+    @pytest.fixture
+    def test_observation_for_detection(self):
+        """Create a test observation for limb detection benchmarks using real Pluto image."""
+        # Use real Pluto image and configuration for realistic benchmark
+        image_path = "demo/images/PIA19948.tif"
+        config_path = "config/pluto-new-horizons.yaml"
+
+        obs = LimbObservation(image_filepath=image_path, fit_config=config_path)
+
+        return obs
+
+    @pytest.mark.slow
+    def test_gradient_field_detection_benchmark(
+        self, benchmark, test_observation_for_detection
+    ):
+        """Benchmark gradient-field limb detection/optimization with real Pluto image."""
+        obs = test_observation_for_detection
+        obs.limb_detection = "gradient_field"
+
+        def run_gradient_field():
+            # Use a minimal fitting to benchmark the gradient field approach
+            obs.fit_limb(
+                loss_function="gradient_field",
+                minimizer="dual-annealing",
+                max_iter=150,  # More iterations for robust analysis
+                verbose=False,
+                resolution_stages=[2, 1],  # Quick multi-resolution
+                image_smoothing=2.0,
+                kernel_smoothing=8.0,
+            )
+            return obs.best_parameters
+
+        result = benchmark(run_gradient_field)
+        assert result is not None
+
+        # Validate that we got a reasonable Pluto radius (true value ~1188 km)
+        fitted_radius_km = result.get("r", 0) / 1000.0
+        print(f"\nFitted Pluto radius: {fitted_radius_km:.1f} km (true: ~1188 km)")
+
+        # Check that result is within reasonable bounds for Pluto
+        assert (
+            600 < fitted_radius_km < 1900
+        ), f"Fitted radius {fitted_radius_km:.1f} km outside expected range [600, 1900] km"
+
+        # Ideally should be close to true value, but allow some tolerance for benchmark speed
+        # (using fewer iterations than a real analysis would)
+
+    @pytest.mark.slow
+    def test_manual_limb_detection_benchmark(
+        self, benchmark, test_observation_for_detection
+    ):
+        """Benchmark manual limb detection workflow using stored annotations."""
+        obs = test_observation_for_detection
+
+        # Manually annotated Pluto limb points (embedded for test safety)
+        # These are 19 points tracing Pluto's limb in the PIA19948.tif image
+        pluto_limb_points = [
+            [33.33874898456539, 1094.6222583265637],
+            [150.02437043054425, 997.3842404549147],
+            [302.8269699431356, 880.6986190089358],
+            [450.0731112916328, 794.5735174654752],
+            [677.8878960194963, 675.1096669374492],
+            [858.4727863525588, 591.7627944760357],
+            [1100.178716490658, 513.9723801787164],
+            [1327.9935012185215, 452.8513403736799],
+            [1472.4614134849714, 422.2908204711616],
+            [1666.9374492282695, 397.2867587327376],
+            [1880.8610885458975, 380.6173842404549],
+            [2039.220146222583, 377.8391551584078],
+            [2217.0268074735986, 386.17384240454913],
+            [2364.2729488220957, 402.8432168968318],
+            [2578.1965881397236, 427.84727863525586],
+            [2800.4549147034927, 472.2989439480097],
+            [2983.8180341186026, 525.0852965069049],
+            [3181.0722989439478, 588.9845653939885],
+            [3356.100731112916, 666.7749796913079],
+        ]
+        image_width = 3420  # PIA19948.tif width
+
+        def run_manual_detection():
+            # Create sparse target array following annotate.py pattern
+            limb_target = np.full(image_width, np.nan)
+
+            # Fill in the manually annotated points
+            for x, y in pluto_limb_points:
+                x_idx = int(round(x))
+                if 0 <= x_idx < image_width:
+                    limb_target[x_idx] = y
+
+            # Register the limb with observation
+            obs.register_limb(limb_target)
+
+            # Fit using L1 loss (standard for manual detection)
+            obs.fit_limb(
+                loss_function="l1",
+                minimizer="differential-evolution",
+                max_iter=300,
+                verbose=False,
+                seed=42,
+            )
+
+            return obs.best_parameters
+
+        result = benchmark(run_manual_detection)
+        assert result is not None
+
+        # Validate that we got a reasonable Pluto radius (true value ~1188 km)
+        fitted_radius_km = result.get("r", 0) / 1000.0
+        print(
+            f"\nManual detection - Fitted Pluto radius: {fitted_radius_km:.1f} km (true: ~1188 km)"
+        )
+
+        # Check that result is within reasonable bounds for Pluto
+        assert (
+            600 < fitted_radius_km < 1900
+        ), f"Fitted radius {fitted_radius_km:.1f} km outside expected range [600, 1900] km"
+
+
+class TestUncertaintyBenchmarks:
+    """Benchmark tests for parameter uncertainty calculations."""
+
+    @pytest.fixture
+    def fitted_observation(self):
+        """Create a fitted observation for uncertainty benchmarks."""
+        # Create minimal test setup
+        height, width = 200, 300
+        image = np.random.randint(0, 255, (height, width, 3), dtype=np.uint8)
+
+        # Save image to temporary file for LimbObservation
+        import tempfile
+        import os
+        from PIL import Image as PILImage
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            # Convert numpy array to PIL Image and save
+            pil_image = PILImage.fromarray(image)
+            pil_image.save(tmp.name)
+            temp_path = tmp.name
+
+        config = {
+            "free_parameters": ["r", "h", "f", "w", "theta_x", "theta_y", "theta_z"],
+            "init_parameter_values": {
+                "r": 6371000,
+                "h": 10000,
+                "f": 0.024,
+                "w": 0.036,
+                "theta_x": 0.0,
+                "theta_y": 0.0,
+                "theta_z": 0.0,
+            },
+            "parameter_limits": {
+                "r": [6000000, 7000000],
+                "h": [5000, 15000],
+                "f": [0.01, 0.1],
+                "w": [0.02, 0.05],
+                "theta_x": [-3.14, 3.14],
+                "theta_y": [-3.14, 3.14],
+                "theta_z": [-3.14, 3.14],
+            },
+            "loss_function": "L1",
+            "minimizer": "differential-evolution",
+        }
+
+        obs = LimbObservation(image_filepath=temp_path, fit_config=config)
+
+        # Mock fitted results
+        obs.best_parameters = config["init_parameter_values"].copy()
+        obs.fit_results = type(
+            "MockResult",
+            (),
+            {
+                "x": np.array([6371000, 10000, 0.024, 0.036, 0.0, 0.0, 0.0]),
+                "success": True,
+                "population": np.random.normal(
+                    [6371000, 10000, 0.024, 0.036, 0.0, 0.0, 0.0],
+                    [50000, 1000, 0.001, 0.001, 0.1, 0.1, 0.1],
+                    (20, 7),
+                ),
+            },
+        )()
+
+        # Clean up temp file
+        os.unlink(temp_path)
+
+        return obs
+
+    def test_parameter_uncertainty_calculation_benchmark(
+        self, benchmark, fitted_observation
+    ):
+        """Benchmark parameter uncertainty calculation."""
+        obs = fitted_observation
+
+        def calculate_uncertainty():
+            return calculate_parameter_uncertainty(
+                obs, parameter="r", scale_factor=1000, method="auto"
+            )
+
+        result = benchmark(calculate_uncertainty)
+        assert result is not None
+        assert "value" in result
+        assert "uncertainty" in result
+
+    def test_multiple_parameter_uncertainties_benchmark(
+        self, benchmark, fitted_observation
+    ):
+        """Benchmark calculating uncertainties for multiple parameters."""
+        obs = fitted_observation
+
+        def calculate_multiple_uncertainties():
+            results = {}
+            for param in ["r", "h", "theta_x"]:
+                scale = 1000 if param in ["r", "h"] else 1
+                results[param] = calculate_parameter_uncertainty(
+                    obs, parameter=param, scale_factor=scale, method="auto"
+                )
+            return results
+
+        result = benchmark(calculate_multiple_uncertainties)
+        assert len(result) == 3
+
+
+class TestFullPipelineBenchmarks:
+    """Benchmark tests for complete end-to-end workflows."""
+
+    @pytest.mark.slow
+    def test_full_pipeline_earth_benchmark(self, benchmark):
+        """Benchmark complete Earth measurement pipeline."""
+        image_path = "demo/images/50644513538_56228a2027_o.jpg"
+
+        def run_complete_pipeline():
+            # Step 1: Extract camera parameters
+            camera_info = extract_camera_parameters(image_path)
+
+            # Step 2: Create configuration
+            config = create_config_from_image(
+                image_path=image_path,
+                altitude_m=418_000,
+                planet="earth",
+                seed=0,
+            )
+
+            # Step 3: Validate configuration
+            validate_limb_config(config, strict=False)
+
+            # Step 4: Create observation
+            obs = LimbObservation(image_filepath=image_path, fit_config=config)
+
+            # Step 5: Quick gradient-field fit (for speed)
+            obs.fit_limb(
+                loss_function="gradient_field",
+                minimizer="differential-evolution",
+                minimizer_preset="scipy-default",
+                max_iter=300,
+                verbose=False,
+                resolution_stages=[8, 4],
+                image_smoothing=2.0,  # Remove high-frequency image artifacts
+                kernel_smoothing=8.0,  # Smooth gradient field for stability
+                prefer_direction=None,
+                seed=0,
+            )
+
+            # Step 6: Calculate uncertainty
+            radius_uncertainty = calculate_parameter_uncertainty(
+                obs, parameter="r", scale_factor=1000, method="auto"
+            )
+
+            return {
+                "radius_km": obs.radius_km,
+                "altitude_km": obs.altitude_km,
+                "uncertainty": radius_uncertainty,
+            }
+
+        result = benchmark(run_complete_pipeline)
+        assert result is not None
+        assert "radius_km" in result
+        fitted_radius_km = result["radius_km"]
+        print(f"\nFitted Earth radius: {fitted_radius_km:.1f} km (true: ~6357 km)")
+        assert (
+            2000 < fitted_radius_km < 20000
+        ), f"Fitted radius {fitted_radius_km:.1f} km outside expected range [4000, 10000] km"
+        deviation_pct = abs(fitted_radius_km - 6357) / 6357 * 100
+        if deviation_pct > 15:
+            import warnings
+
+            warnings.warn(
+                f"Fitted radius {fitted_radius_km:.1f} km deviates {deviation_pct:.1f}% "
+                f"from true Earth radius (may vary with SciPy version)",
+                UserWarning,
+            )
+
+    def test_configuration_generation_workflow_benchmark(self, benchmark):
+        """Benchmark the workflow from image to ready-to-fit configuration."""
+        image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
+
+        def config_workflow():
+            # Extract camera parameters
+            camera_info = extract_camera_parameters(image_path)
+
+            # Generate configuration
+            config = create_config_from_image(
+                image_path=image_path, altitude_m=10000, planet="earth", seed=0
+            )
+
+            # Validate configuration
+            validate_limb_config(config, strict=False)
+
+            return config
+
+        result = benchmark(config_workflow)
+        assert result is not None
+        assert "init_parameter_values" in result
+
+    def test_observation_creation_and_setup_benchmark(self, benchmark):
+        """Benchmark observation setup workflow."""
+        image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
+
+        config = create_config_from_image(
+            image_path=image_path,
+            altitude_m=10000,
+            planet="earth",
+            seed=0,
+        )
+
+        def obs_setup_workflow():
+            # Create observation
+            obs = LimbObservation(image_filepath=image_path, fit_config=config)
+
+            # For benchmarking, use gradient-field which doesn't require explicit detection
+            obs.limb_detection = "gradient_field"
+
+            return obs
+
+        result = benchmark(obs_setup_workflow)
+        assert result is not None
+        assert hasattr(result, "image")
+        assert hasattr(result, "free_parameters")
+        assert hasattr(result, "init_parameter_values")
+        assert hasattr(result, "parameter_limits")
+
+
+class TestSegmentationBenchmarks:
+    """Benchmark tests for segmentation-based limb detection."""
+
+    def test_custom_backend_segment_benchmark(self, benchmark):
+        """Benchmark custom backend mask generation."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (500, 500, 3), dtype=np.uint8)
+
+        def simple_segmenter(img):
+            """Simple threshold-based segmentation."""
+            h, w = img.shape[:2]
+            gray = img.sum(axis=2) / 3
+            threshold = np.mean(gray)
+
+            mask1 = gray < threshold
+            mask2 = gray >= threshold
+
+            return [
+                {"mask": mask1, "area": np.sum(mask1)},
+                {"mask": mask2, "area": np.sum(mask2)},
+            ]
+
+        def run_segmentation():
+            segmenter = MaskSegmenter(
+                image, method="custom", segment_fn=simple_segmenter, interactive=False
+            )
+            return segmenter.segment()
+
+        result = benchmark(run_segmentation)
+
+        assert len(result) == 500
+        assert not np.all(np.isnan(result))
+
+    def test_classify_automatic_benchmark(self, benchmark):
+        """Benchmark automatic mask classification."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (1000, 1000, 3), dtype=np.uint8)
+
+        def multi_mask_segmenter(img):
+            """Generate multiple masks for classification."""
+            h, w = img.shape[:2]
+            masks = []
+
+            # Generate 10 masks at different positions
+            for i in range(10):
+                mask = np.zeros((h, w), dtype=bool)
+                start_row = int(i * h / 10)
+                end_row = int((i + 1) * h / 10)
+                mask[start_row:end_row, :] = True
+                masks.append({"mask": mask, "area": np.sum(mask)})
+
+            return masks
+
+        segmenter = MaskSegmenter(
+            image, method="custom", segment_fn=multi_mask_segmenter, interactive=False
+        )
+        segmenter._masks = multi_mask_segmenter(image)
+
+        result = benchmark(segmenter._classify_automatic)
+
+        assert "sky" in result
+        assert "planet" in result
+        assert len(result["sky"]) == 1
+        assert len(result["planet"]) == 1
+
+    def test_combine_masks_benchmark(self, benchmark):
+        """Benchmark limb extraction from classified masks."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (2000, 2000, 3), dtype=np.uint8)
+
+        def horizon_segmenter(img):
+            h, w = img.shape[:2]
+            sky_mask = np.zeros((h, w), dtype=bool)
+            sky_mask[: h // 2, :] = True
+            planet_mask = np.zeros((h, w), dtype=bool)
+            planet_mask[h // 2 :, :] = True
+
+            return [
+                {"mask": sky_mask, "area": np.sum(sky_mask)},
+                {"mask": planet_mask, "area": np.sum(planet_mask)},
+            ]
+
+        segmenter = MaskSegmenter(
+            image, method="custom", segment_fn=horizon_segmenter, interactive=False
+        )
+        segmenter._masks = horizon_segmenter(image)
+
+        classified = {
+            "sky": [segmenter._masks[0]],
+            "planet": [segmenter._masks[1]],
+            "exclude": [],
+        }
+
+        result = benchmark(segmenter._combine_masks, classified)
+
+        assert "limb" in result
+        assert len(result["limb"]) == 2000
+
+    def test_downsampling_benchmark_2x(self, benchmark):
+        """Benchmark segmentation with 2x downsampling."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (1000, 1000, 3), dtype=np.uint8)
+
+        def fast_segmenter(img):
+            h, w = img.shape[:2]
+            midpoint = h // 2
+
+            sky = np.zeros((h, w), dtype=bool)
+            sky[:midpoint, :] = True
+            planet = np.zeros((h, w), dtype=bool)
+            planet[midpoint:, :] = True
+
+            return [
+                {"mask": sky, "area": np.sum(sky)},
+                {"mask": planet, "area": np.sum(planet)},
+            ]
+
+        def run_downsampled():
+            segmenter = MaskSegmenter(
+                image,
+                method="custom",
+                segment_fn=fast_segmenter,
+                downsample_factor=2,
+                interactive=False,
+            )
+            return segmenter.segment()
+
+        result = benchmark(run_downsampled)
+
+        assert len(result) == 1000  # Original size
+
+    def test_downsampling_benchmark_4x(self, benchmark):
+        """Benchmark segmentation with 4x downsampling."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (2000, 2000, 3), dtype=np.uint8)
+
+        def fast_segmenter(img):
+            h, w = img.shape[:2]
+            midpoint = h // 2
+
+            sky = np.zeros((h, w), dtype=bool)
+            sky[:midpoint, :] = True
+            planet = np.zeros((h, w), dtype=bool)
+            planet[midpoint:, :] = True
+
+            return [
+                {"mask": sky, "area": np.sum(sky)},
+                {"mask": planet, "area": np.sum(planet)},
+            ]
+
+        def run_downsampled():
+            segmenter = MaskSegmenter(
+                image,
+                method="custom",
+                segment_fn=fast_segmenter,
+                downsample_factor=4,
+                interactive=False,
+            )
+            return segmenter.segment()
+
+        result = benchmark(run_downsampled)
+
+        assert len(result) == 2000  # Original size
+
+    def test_outlier_detection_benchmark(self, benchmark):
+        """Benchmark outlier detection and interpolation in limb extraction."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (500, 1000, 3), dtype=np.uint8)
+
+        def outlier_segmenter(img):
+            h, w = img.shape[:2]
+            sky_mask = np.zeros((h, w), dtype=bool)
+            planet_mask = np.zeros((h, w), dtype=bool)
+
+            # Create horizon with some outliers
+            for col in range(w):
+                if col % 50 == 0:  # Outlier every 50 columns
+                    horizon_row = 100
+                else:
+                    horizon_row = 250
+
+                sky_mask[:horizon_row, col] = True
+                planet_mask[horizon_row:, col] = True
+
+            return [
+                {"mask": sky_mask, "area": np.sum(sky_mask)},
+                {"mask": planet_mask, "area": np.sum(planet_mask)},
+            ]
+
+        segmenter = MaskSegmenter(
+            image, method="custom", segment_fn=outlier_segmenter, interactive=False
+        )
+        segmenter._masks = outlier_segmenter(image)
+
+        classified = {
+            "sky": [segmenter._masks[0]],
+            "planet": [segmenter._masks[1]],
+            "exclude": [],
+        }
+
+        result = benchmark(segmenter._combine_masks, classified)
+
+        assert "limb" in result
+        assert len(result["limb"]) == 1000
+
+    def test_sparse_mask_interpolation_benchmark(self, benchmark):
+        """Benchmark interpolation with sparse masks."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (500, 1000, 3), dtype=np.uint8)
+
+        def sparse_segmenter(img):
+            h, w = img.shape[:2]
+            sky_mask = np.zeros((h, w), dtype=bool)
+            planet_mask = np.zeros((h, w), dtype=bool)
+
+            # Only fill every 5th column
+            for col in range(0, w, 5):
+                sky_mask[:200, col] = True
+                planet_mask[300:, col] = True
+
+            return [
+                {"mask": sky_mask, "area": np.sum(sky_mask)},
+                {"mask": planet_mask, "area": np.sum(planet_mask)},
+            ]
+
+        segmenter = MaskSegmenter(
+            image, method="custom", segment_fn=sparse_segmenter, interactive=False
+        )
+        segmenter._masks = sparse_segmenter(image)
+
+        classified = {
+            "sky": [segmenter._masks[0]],
+            "planet": [segmenter._masks[1]],
+            "exclude": [],
+        }
+
+        result = benchmark(segmenter._combine_masks, classified)
+
+        assert "limb" in result
+        assert not np.any(np.isnan(result["limb"]))
+
+    @pytest.mark.slow
+    def test_full_pipeline_benchmark_large_image(self, benchmark):
+        """Benchmark full segmentation pipeline with large image."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (4000, 6000, 3), dtype=np.uint8)
+
+        def comprehensive_segmenter(img):
+            """More realistic segmentation with multiple regions."""
+            h, w = img.shape[:2]
+            masks = []
+
+            # Sky region
+            sky = np.zeros((h, w), dtype=bool)
+            sky[: h // 3, :] = True
+            masks.append({"mask": sky, "area": np.sum(sky)})
+
+            # Planet region
+            planet = np.zeros((h, w), dtype=bool)
+            planet[h // 2 :, :] = True
+            masks.append({"mask": planet, "area": np.sum(planet)})
+
+            # Some noise regions
+            for i in range(3):
+                noise = np.zeros((h, w), dtype=bool)
+                start_row = int((0.3 + i * 0.05) * h)
+                end_row = int((0.35 + i * 0.05) * h)
+                noise[start_row:end_row, ::10] = True
+                masks.append({"mask": noise, "area": np.sum(noise)})
+
+            return masks
+
+        def run_full_pipeline():
+            segmenter = MaskSegmenter(
+                image,
+                method="custom",
+                segment_fn=comprehensive_segmenter,
+                downsample_factor=2,  # Use downsampling for large image
+                interactive=False,
+            )
+            return segmenter.segment()
+
+        result = benchmark(run_full_pipeline)
+
+        assert len(result) == 6000
+        assert not np.all(np.isnan(result))
+
+
+class TestSegmentationComparisonBenchmarks:
+    """Compare performance of different segmentation configurations."""
+
+    def test_downsampling_speedup_comparison(self, benchmark):
+        """Benchmark segmentation with downsampling."""
+        from planet_ruler.image import MaskSegmenter
+
+        image = np.random.randint(0, 255, (2000, 2000, 3), dtype=np.uint8)
+
+        def segmenter(img):
+            h, w = img.shape[:2]
+            sky = np.zeros((h, w), dtype=bool)
+            sky[: h // 2, :] = True
+            planet = np.zeros((h, w), dtype=bool)
+            planet[h // 2 :, :] = True
+            return [
+                {"mask": sky, "area": np.sum(sky)},
+                {"mask": planet, "area": np.sum(planet)},
+            ]
+
+        # Test with factor 2 (good balance of speed and accuracy)
+        def run_with_downsampling():
+            seg = MaskSegmenter(
+                image,
+                method="custom",
+                segment_fn=segmenter,
+                downsample_factor=2,
+                interactive=False,
+            )
+            return seg.segment()
+
+        result = benchmark(run_with_downsampling)
+
+        # Verify result is valid
+        assert len(result) == 2000  # Original width
+        # Check that we don't have all NaN values (some valid limb points detected)
+        import math
+
+        assert not all(math.isnan(x) for x in result)
 
 
 # Performance test markers

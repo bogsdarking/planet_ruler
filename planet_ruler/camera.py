@@ -91,6 +91,7 @@ CAMERA_DB = {
     # Nikon cameras
     "NIKON D850": {"sensor_width": 35.9, "sensor_height": 23.9, "type": "dslr"},
     "NIKON D750": {"sensor_width": 35.9, "sensor_height": 24.0, "type": "dslr"},
+    "NIKON D4": {"sensor_width": 36.0, "type": "dslr"},
     # Sony cameras
     "ILCE-7RM3": {
         "sensor_width": 35.9,
@@ -360,12 +361,41 @@ def extract_camera_parameters(image_path: str) -> Dict:
     # Strategy 1: Known camera model (highest confidence)
     if camera_model and camera_model in CAMERA_DB:
         camera_data = CAMERA_DB[camera_model]
-        params["sensor_width_mm"] = camera_data["sensor_width"]
-        params["sensor_height_mm"] = camera_data["sensor_height"]
-        params["camera_type"] = camera_data["type"]
-        params["confidence"] = "high"
-        logger.info(f"Detected known camera: {camera_model} ({camera_data['type']})")
-        return params
+
+        params["sensor_width_mm"] = camera_data.get("sensor_width", None)
+        params["sensor_height_mm"] = camera_data.get("sensor_height", None)
+
+        if (params["sensor_width_mm"]) is None and (params["sensor_height_mm"] is None):
+            logger.warning(
+                f"Known camera missing critical parameter -- supply sensor_width and/or sensor_height for {camera_model}"
+            )
+        else:
+            if (
+                params["sensor_height_mm"] is None
+                and params["sensor_width_mm"] is not None
+            ):
+                params["sensor_height_mm"] = (
+                    params["sensor_width_mm"]
+                    * params["image_height_px"]
+                    / params["image_width_px"]
+                )
+
+            if (
+                params["sensor_width_mm"] is None
+                and params["sensor_height_mm"] is not None
+            ):
+                params["sensor_width_mm"] = (
+                    params["sensor_height_mm"]
+                    / params["image_height_px"]
+                    * params["image_width_px"]
+                )
+
+            params["camera_type"] = camera_data["type"]
+            params["confidence"] = "high"
+            logger.info(
+                f"Detected known camera: {camera_model} ({camera_data['type']})"
+            )
+            return params
 
     # Strategy 2: Calculate from focal length ratio (medium-high confidence)
     if focal_length_mm and focal_length_35mm:
@@ -463,26 +493,24 @@ PLANET_RADII = {
 }
 
 
-def get_initial_radius(planet: str, perturbation_factor: float = 0.5) -> float:
+def get_initial_radius(
+    planet: str = "earth", perturbation_factor: float = 0.5, seed: Optional[int] = None
+) -> float:
     """
-    Get initial radius guess with large random perturbation.
-
-    Perturbation is much larger than typical measurement errors (~10-20%)
-    to ensure results are data-driven, not artifacts of starting close to truth.
+    Get initial radius guess with perturbation.
 
     Args:
-        planet: Planet name (e.g., 'earth', 'mars')
-        perturbation_factor: Relative perturbation range (default: 0.5 = ±50%)
-
-    Returns:
-        Perturbed initial radius in meters
+        planet: Planet name
+        perturbation_factor: Relative perturbation (default: 0.5 = ±50%)
+        seed: Random seed for reproducibility (default: None = unseeded)
     """
     import random
 
+    if seed is not None:
+        random.seed(seed)
+
     if planet.lower() in PLANET_RADII:
         true_value = PLANET_RADII[planet.lower()]
-        # Perturb by ±perturbation_factor (default ±50%)
-        # Much larger than typical ~15-20% measurement error
         min_factor = 1.0 - perturbation_factor
         max_factor = 1.0 + perturbation_factor
         perturbation = random.uniform(min_factor, max_factor)
@@ -493,7 +521,7 @@ def get_initial_radius(planet: str, perturbation_factor: float = 0.5) -> float:
         return r_init
     else:
         logger.warning(f"Unknown planet '{planet}', using middle-range guess")
-        return 10_000_000  # 10,000 km - middle of parameter space
+        return 10_000_000  # 10,000 km
 
 
 def create_config_from_image(
@@ -502,6 +530,7 @@ def create_config_from_image(
     planet: str = "earth",
     param_tolerance: float = 0.1,
     perturbation_factor: float = 0.5,
+    seed: Optional[int] = None,
 ) -> Dict:
     """
     Create a complete planet_ruler configuration from an image.
@@ -513,6 +542,7 @@ def create_config_from_image(
         planet: Planet name for initial radius guess (default: 'earth')
         param_tolerance: Fractional tolerance for parameter limits (default: 0.1 = ±10%)
         perturbation_factor: Initial radius perturbation (default: 0.5 = ±50%)
+        seed: Random seed for reproducibility (default: None = unseeded)
 
     Returns:
         dict: Configuration ready for planet_ruler
@@ -542,7 +572,7 @@ def create_config_from_image(
         )
 
     # Get initial planet radius with perturbation to avoid local minima
-    r_init = get_initial_radius(planet, perturbation_factor)
+    r_init = get_initial_radius(planet, perturbation_factor, seed=seed)
 
     # Determine which camera parameters to use (pick 2 of 3)
     # Priority: focal_length > sensor_width > field_of_view

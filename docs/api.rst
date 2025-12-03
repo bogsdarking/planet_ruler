@@ -35,7 +35,7 @@ The image module handles computer vision tasks:
 * **Image loading**: `load_image` - loads and validates image files
 * **Gradient-field detection**: `gradient_field` - automated limb detection using directional blur and flux analysis
 * **Legacy detection**: `gradient_break` - simpler gradient-based detection
-* **Image segmentation**: `ImageSegmentation` class with Segment Anything integration (optional)
+* **Image segmentation**: `MaskSegmenter` class with pluggable backends including Segment Anything integration (optional)
 * **Limb processing**: `smooth_limb`, `fill_nans` - post-processing operations
 * **Interpolation**: `bilinear_interpolate` - sub-pixel image sampling
 
@@ -380,15 +380,15 @@ Complete workflow class for limb-based planetary radius determination. Default d
 * Flexible cost functions (gradient-field flux, L1, L2, log-L1)
 * Support for multiple minimizers (differential-evolution, dual-annealing, basinhopping)
 
-ImageSegmentation
-~~~~~~~~~~~~~~~~
+MaskSegmenter
+~~~~~~~~~~~~
 
-.. autoclass:: planet_ruler.image.ImageSegmentation
+.. autoclass:: planet_ruler.image.MaskSegmenter
    :members:
    :undoc-members:
    :show-inheritance:
 
-Advanced image segmentation using Segment Anything model (optional dependency). Provides automated mask generation and limb extraction from complex images.
+Advanced image segmentation with pluggable backends. Supports Segment Anything model (optional dependency) and custom segmentation functions. Provides automated mask generation, interactive classification, and limb extraction from complex images.
 
 TkLimbAnnotator
 ~~~~~~~~~~~~~~
