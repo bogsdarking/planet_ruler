@@ -1,6 +1,3 @@
-Tutorial: Choosing a Detection Method
-=====================================
-
 **How to decide between Manual Annotation, Gradient-Field, and ML Segmentation**
 
 Planet Ruler offers three distinct methods for horizon detection, each with different trade-offs. This guide helps you choose the best method for your specific use case.
