@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1764908139377,
+  "lastUpdate": 1764975114347,
   "repoUrl": "https://github.com/bogsdarking/planet_ruler",
   "entries": {
     "Python Benchmark": [
@@ -1348,6 +1348,338 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00035069295591370485",
             "extra": "mean: 28.623951305544576 msec\nrounds: 36"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "100499183+bogsdarking@users.noreply.github.com",
+            "name": "Brandon Anderson",
+            "username": "bogsdarking"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d750428906f6c917460fc9f1ca12a26ec49ad778",
+          "message": "1.6.2\n\n### Fixed\n\n- Restored missing doc image\n- Merged method tutorial with primary tutorial",
+          "timestamp": "2025-12-05T16:40:27-05:00",
+          "tree_id": "28b8db1ee2171ddc59f7e3a9f3f968fb08a10881",
+          "url": "https://github.com/bogsdarking/planet_ruler/commit/d750428906f6c917460fc9f1ca12a26ec49ad778"
+        },
+        "date": 1764975113853,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "tests/test_benchmark_performance.py::TestGeometryBenchmarks::test_horizon_distance_benchmark",
+            "value": 620396.7730584872,
+            "unit": "iter/sec",
+            "range": "stddev: 4.064804239965115e-7",
+            "extra": "mean: 1.611871697962114 usec\nrounds: 31270"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestGeometryBenchmarks::test_limb_camera_angle_benchmark",
+            "value": 1001865.0031881352,
+            "unit": "iter/sec",
+            "range": "stddev: 2.654213044434983e-7",
+            "extra": "mean: 998.1384685739093 nsec\nrounds: 67582"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestGeometryBenchmarks::test_horizon_distance_vectorized_benchmark",
+            "value": 858.162862297622,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000016897226866985834",
+            "extra": "mean: 1.165279976486779 msec\nrounds: 808"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestGeometryBenchmarks::test_limb_arc_benchmark_small",
+            "value": 6266.542864381203,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00000922574706972343",
+            "extra": "mean: 159.5776206501296 usec\nrounds: 1724"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestGeometryBenchmarks::test_limb_arc_benchmark_large",
+            "value": 3079.934746697074,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00001750312056008962",
+            "extra": "mean: 324.68220343707 usec\nrounds: 2502"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestGeometryBenchmarks::test_coordinate_transforms_benchmark",
+            "value": 8229.573901894399,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000006437316133057561",
+            "extra": "mean: 121.51297405201088 usec\nrounds: 5203"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestFitBenchmarks::test_parameter_packing_benchmark",
+            "value": 1394748.058323339,
+            "unit": "iter/sec",
+            "range": "stddev: 5.577744606094282e-8",
+            "extra": "mean: 716.9753662909627 nsec\nrounds: 68597"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestFitBenchmarks::test_parameter_unpacking_benchmark",
+            "value": 649960.0057599905,
+            "unit": "iter/sec",
+            "range": "stddev: 4.903439012513276e-7",
+            "extra": "mean: 1.538556205209445 usec\nrounds: 117151"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestFitBenchmarks::test_cost_function_evaluation_benchmark",
+            "value": 41848.96279585882,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000001663506506274152",
+            "extra": "mean: 23.89545482591878 usec\nrounds: 24405"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestFitBenchmarks::test_cost_function_different_losses_benchmark",
+            "value": 4411.448528504378,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00001455193485840642",
+            "extra": "mean: 226.68291232200588 usec\nrounds: 2532"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestImageProcessingBenchmarks::test_gradient_break_benchmark_small",
+            "value": 5.955976388612859,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0016311656253577048",
+            "extra": "mean: 167.89858366663188 msec\nrounds: 6"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestImageProcessingBenchmarks::test_gradient_break_benchmark_large",
+            "value": 1.3589359378971608,
+            "unit": "iter/sec",
+            "range": "stddev: 0.005613094713921323",
+            "extra": "mean: 735.8698611999444 msec\nrounds: 5"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestImageProcessingBenchmarks::test_gradient_break_benchmark_realistic",
+            "value": 3.562346717073487,
+            "unit": "iter/sec",
+            "range": "stddev: 0.001230219139438723",
+            "extra": "mean: 280.7138326000768 msec\nrounds: 5"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestImageProcessingBenchmarks::test_smooth_limb_benchmark_rolling_median",
+            "value": 1332.6994888517333,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000020058217925222224",
+            "extra": "mean: 750.3567070935171 usec\nrounds: 775"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestImageProcessingBenchmarks::test_smooth_limb_benchmark_savgol",
+            "value": 2836.637310045306,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000017369845275738343",
+            "extra": "mean: 352.5300878116238 usec\nrounds: 1731"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestImageProcessingBenchmarks::test_smooth_limb_methods_comparison_benchmark",
+            "value": 546.8656788254084,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00005209654478450966",
+            "extra": "mean: 1.8286025960668464 msec\nrounds: 458"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestObservationBenchmarks::test_planet_observation_initialization_benchmark",
+            "value": 5736.890615952923,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000013438201144250669",
+            "extra": "mean: 174.3104526377475 usec\nrounds: 2196"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestObservationBenchmarks::test_detect_limb_gradient_break_benchmark",
+            "value": 3.5580132577990082,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0019920792255648193",
+            "extra": "mean: 281.0557262000202 msec\nrounds: 5"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestIntegratedWorkflowBenchmarks::test_complete_geometry_pipeline_benchmark",
+            "value": 3677.6639481027564,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00001307759433129319",
+            "extra": "mean: 271.91173911250996 usec\nrounds: 2641"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestIntegratedWorkflowBenchmarks::test_image_processing_pipeline_benchmark",
+            "value": 3.8910408848229374,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0039782805530536895",
+            "extra": "mean: 257.00064059992656 msec\nrounds: 5"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestIntegratedWorkflowBenchmarks::test_parameter_optimization_simulation_benchmark",
+            "value": 539.6338822639013,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000030430219441237505",
+            "extra": "mean: 1.853108251477364 msec\nrounds: 509"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestCameraParameterBenchmarks::test_extract_exif_benchmark",
+            "value": 957.2634362975298,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001872727569783916",
+            "extra": "mean: 1.04464451694485 msec\nrounds: 118"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestCameraParameterBenchmarks::test_extract_camera_parameters_benchmark",
+            "value": 889.7094444355178,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00002177885178043797",
+            "extra": "mean: 1.1239624421818482 msec\nrounds: 787"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestCameraParameterBenchmarks::test_camera_model_detection_benchmark",
+            "value": 1045.9769768377118,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00001683322367988707",
+            "extra": "mean: 956.0439877207303 usec\nrounds: 977"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestCameraParameterBenchmarks::test_focal_length_extraction_benchmark",
+            "value": 1047.2663032222092,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000019493943203078694",
+            "extra": "mean: 954.8669683376796 usec\nrounds: 979"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestCameraParameterBenchmarks::test_gps_altitude_extraction_benchmark",
+            "value": 1060.019243472099,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00003620516060273016",
+            "extra": "mean: 943.3791001043475 usec\nrounds: 959"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestConfigurationBenchmarks::test_create_config_from_image_benchmark",
+            "value": 471.50285672728916,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000306423953382958",
+            "extra": "mean: 2.1208779241360705 msec\nrounds: 435"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestConfigurationBenchmarks::test_config_validation_benchmark",
+            "value": 436881.28632041847,
+            "unit": "iter/sec",
+            "range": "stddev: 4.80250616987941e-7",
+            "extra": "mean: 2.2889513268521595 usec\nrounds: 66854"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestLimbDetectionBenchmarks::test_gradient_field_detection_benchmark",
+            "value": 0.01494308139350183,
+            "unit": "iter/sec",
+            "range": "stddev: 1.698062279868554",
+            "extra": "mean: 66.92060182680002 sec\nrounds: 5"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestLimbDetectionBenchmarks::test_manual_limb_detection_benchmark",
+            "value": 0.06966030227532885,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03514159460838124",
+            "extra": "mean: 14.35537841979999 sec\nrounds: 5"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestUncertaintyBenchmarks::test_parameter_uncertainty_calculation_benchmark",
+            "value": 5189.637350199352,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000012320390032195964",
+            "extra": "mean: 192.69169163845072 usec\nrounds: 2283"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestUncertaintyBenchmarks::test_multiple_parameter_uncertainties_benchmark",
+            "value": 1745.0631596198482,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000022117863152433742",
+            "extra": "mean: 573.0451614243258 usec\nrounds: 1208"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestFullPipelineBenchmarks::test_full_pipeline_earth_benchmark",
+            "value": 0.009401202302534955,
+            "unit": "iter/sec",
+            "range": "stddev: 0.6225429719940989",
+            "extra": "mean: 106.36937359920003 sec\nrounds: 5"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestFullPipelineBenchmarks::test_configuration_generation_workflow_benchmark",
+            "value": 292.71041851886514,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0004964722425900278",
+            "extra": "mean: 3.416345769515375 msec\nrounds: 269"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestFullPipelineBenchmarks::test_observation_creation_and_setup_benchmark",
+            "value": 34.065624345761634,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00024522226420000743",
+            "extra": "mean: 29.355105600006937 msec\nrounds: 35"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestSegmentationBenchmarks::test_custom_backend_segment_benchmark",
+            "value": 86.78682168394998,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0004914195594693869",
+            "extra": "mean: 11.522486716263007 msec\nrounds: 74"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestSegmentationBenchmarks::test_classify_automatic_benchmark",
+            "value": 2057.378532530191,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00001356093413826034",
+            "extra": "mean: 486.05542645095403 usec\nrounds: 1815"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestSegmentationBenchmarks::test_combine_masks_benchmark",
+            "value": 44.62095955181585,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00033224398052240364",
+            "extra": "mean: 22.410992727279996 msec\nrounds: 44"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestSegmentationBenchmarks::test_downsampling_benchmark_2x",
+            "value": 105.58332071985743,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001507312154409629",
+            "extra": "mean: 9.471192923106523 msec\nrounds: 104"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestSegmentationBenchmarks::test_downsampling_benchmark_4x",
+            "value": 32.402363357654686,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00034845533134035116",
+            "extra": "mean: 30.86194636366737 msec\nrounds: 33"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestSegmentationBenchmarks::test_outlier_detection_benchmark",
+            "value": 184.12273071927572,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006836647938293937",
+            "extra": "mean: 5.431159944747172 msec\nrounds: 181"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestSegmentationBenchmarks::test_sparse_mask_interpolation_benchmark",
+            "value": 287.4969547508944,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010526629592415315",
+            "extra": "mean: 3.478297712288686 msec\nrounds: 285"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestSegmentationBenchmarks::test_full_pipeline_benchmark_large_image",
+            "value": 3.4983079947124662,
+            "unit": "iter/sec",
+            "range": "stddev: 0.005820014427201953",
+            "extra": "mean: 285.8524753999518 msec\nrounds: 5"
+          },
+          {
+            "name": "tests/test_benchmark_performance.py::TestSegmentationComparisonBenchmarks::test_downsampling_speedup_comparison",
+            "value": 34.035266424181934,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00035983262715949706",
+            "extra": "mean: 29.381289029355255 msec\nrounds: 34"
           }
         ]
       }
