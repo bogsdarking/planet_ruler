@@ -5,3 +5,4 @@ myst-parser>=0.18.0,<3.0.0
 sphinx-autodoc-typehints>=1.19.0,<2.0.0
 sphinxcontrib-napoleon>=0.7
 sphinxcontrib-bibtex>=2.4.0,<3.0.0
+sphinxcontrib-mermaid>=0.7.0,<1.0.0
