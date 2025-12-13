@@ -83,8 +83,12 @@ obs = pr.LimbObservation("photo.jpg", "camera_config.yaml")
 
 # Choose detection method:
 obs.detect_limb(method='manual')          # Interactive GUI (default)
-# obs.detect_limb(method='gradient-field')  # Automated gradient analysis
+# obs.detect_limb(method='gradient-break')  # Simple gradient-based detection
+# obs.detect_limb(method='gradient-field')  # Gradient flow analysis
 # obs.detect_limb(method='segmentation')    # AI-powered (requires PyTorch)
+
+# OR skip detection and use gradient-field optimization directly:
+# obs.fit_limb(loss_function='gradient_field')  # Direct gradient optimization
 
 obs.fit_limb()     # Multi-resolution parameter optimization
 obs.plot()         # Visualize results
@@ -104,7 +108,7 @@ planet-ruler measure photo.jpg --auto-config --altitude 10668
 # Auto-config with specific planet (affects initial radius guess)
 planet-ruler measure photo.jpg --auto-config --altitude 10668 --planet mars
 
-# Choose detection method (manual, gradient-field, or segmentation)
+# Choose detection method (manual, gradient-break, gradient-field, or segmentation)
 planet-ruler measure photo.jpg --auto-config --altitude 10668 --detection-method gradient-field
 
 # Try built-in examples
@@ -322,10 +326,13 @@ obs = pr.LimbObservation(
     "config/your_camera.yaml"
 )
 
-# Choose detection method: 'manual', 'gradient-field', or 'segmentation'
-obs.limb_detection = 'gradient-field'  # For automated detection without ML
-# or set during initialization:
-# obs = pr.LimbObservation("photo.jpg", "config.yaml", limb_detection='gradient-field')
+# Choose detection method: 'manual', 'gradient-break', 'gradient-field', or 'segmentation'
+obs.detect_limb(method='manual')  # Interactive GUI detection
+# obs.detect_limb(method='gradient-break')  # Simple gradient detection
+# obs.detect_limb(method='gradient-field')  # Gradient flow analysis
+
+# OR use gradient-field optimization (skips traditional detection):
+# obs.fit_limb(loss_function='gradient_field')  # Direct gradient optimization
 
 obs.detect_limb()
 obs.fit_limb()
@@ -405,8 +412,11 @@ obs = pr.LimbObservation(
 )
 
 # Full analysis pipeline
-obs.detect_limb(method='gradient-field')  # Automated gradient-based detection
+obs.detect_limb(method='gradient-break')  # Automated gradient-based detection
 obs.fit_limb()                             # Multi-resolution parameter optimization
+
+# OR use gradient-field optimization (more advanced):
+# obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
 obs.plot()                                 # Visualize results
 
 # Results
@@ -423,8 +433,11 @@ obs = pr.LimbObservation(
 )
 
 # Two-step analysis
-obs.detect_limb(method='gradient-field')  # Automated detection
+obs.detect_limb(method='gradient-break')  # Automated detection
 obs.fit_limb()                            # Multi-resolution fitting
+
+# OR single-step gradient-field optimization:
+# obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
 
 # Rich visualization
 from planet_ruler.plot import plot_3d_solution
@@ -451,9 +464,12 @@ pr.uncertainty.calculate_parameter_uncertainty(obs, 'r')         # Uncertainty e
 pr.plot.show_analysis(obs, style='comprehensive')                # Visualization
 
 # Key methods
-obs.detect_limb(method='gradient-field')  # Automated gradient-based detection
-obs.fit_limb(resolution_stages='auto')    # Multi-resolution optimization  
-obs.plot()                                 # Show results with uncertainty
+obs.detect_limb(method='manual')          # Interactive detection (default)
+obs.fit_limb(resolution_stages='auto')    # Multi-resolution optimization
+obs.plot()                                # Show results with uncertainty
+
+# Advanced gradient-field optimization:
+# obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
 ```
 
 ## Use Cases & Applications
