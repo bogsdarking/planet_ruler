@@ -42,6 +42,8 @@ __all__ = [
     "observation",
     "plot",
     "annotate",
+    "camera",
+    "validation",
     "uncertainty",
     "dashboard",
     # Main classes
@@ -52,4 +54,4 @@ __all__ = [
 ]
 
 # Version information
-__version__ = "1.6.2"
+__version__ = "1.6.3"

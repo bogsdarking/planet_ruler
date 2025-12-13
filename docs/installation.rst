@@ -39,37 +39,41 @@ From PyPI (Recommended)
 
 .. code-block:: bash
 
-   python -m pip install planet-ruler
+   python -m pip install planet_ruler
    
 **Optional: For AI segmentation support:**
 
 .. code-block:: bash
 
-   python -m pip install planet-ruler segment-anything torch
+   python -m pip install planet_ruler[ml]
 
 From Source
 ~~~~~~~~~~~
 
 .. code-block:: bash
 
-   git clone https://github.com/bogsdarking/planet-ruler.git
-   cd planet-ruler
+   git clone https://github.com/bogsdarking/planet_ruler.git
+   cd planet_ruler
    python -m pip install -e .
 
 For development with testing dependencies:
 
 .. code-block:: bash
 
-   git clone https://github.com/bogsdarking/planet-ruler.git
-   cd planet-ruler
+   git clone https://github.com/bogsdarking/planet_ruler.git
+   cd planet_ruler
    python -m pip install -e ".[dev]"
 
-Using Conda
-~~~~~~~~~~~
+Using Conda (Development)
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
-   conda install -c conda-forge planet-ruler
+   # Note: Not yet available on conda-forge, install from source:
+   git clone https://github.com/bogsdarking/planet_ruler.git
+   cd planet_ruler
+   conda install numpy scipy matplotlib pandas pillow pyyaml tqdm seaborn
+   pip install -e .
 
 Virtual Environment Setup
 -------------------------
@@ -82,7 +86,7 @@ We recommend using a virtual environment:
 
    python -m venv planet-ruler-env
    source planet-ruler-env/bin/activate  # On Windows: planet-ruler-env\Scripts\activate
-   python -m pip install planet-ruler
+   python -m pip install planet_ruler
 
 **Using conda:**
 
@@ -90,7 +94,7 @@ We recommend using a virtual environment:
 
    conda create -n planet-ruler python=3.9
    conda activate planet-ruler
-   python -m pip install planet-ruler
+   python -m pip install planet_ruler
 
 Verification
 -----------
