@@ -117,7 +117,7 @@ Examples:
     measure_parser.add_argument(
         "--detection-method",
         "-d",
-        choices=["manual", "gradient-break", "segmentation"],
+        choices=["manual", "gradient-break", "gradient-field", "segmentation"],
         default="manual",
         help="Limb detection method (default: manual)",
     )
@@ -159,7 +159,7 @@ Examples:
         help="Gaussian blur sigma for image preprocessing (removes artifacts like crater rims). Only applies to gradient_field loss.",
     )
     measure_parser.add_argument(
-        "--gradient-smoothing",
+        "--kernel-smoothing",
         type=float,
         default=5.0,
         help="Gaussian blur for gradient field estimation (default: 5.0). Only applies to gradient_field loss.",
@@ -377,7 +377,7 @@ def measure_command(args):
             "minimizer_preset": args.minimizer_preset,
             "warm_start": args.warm_start,
             "verbose": args.verbose,
-            "gradient_smoothing": args.gradient_smoothing,
+            "kernel_smoothing": args.kernel_smoothing,
             "dashboard": args.dashboard,
         }
 
