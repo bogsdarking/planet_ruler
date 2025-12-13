@@ -370,6 +370,7 @@ Complete workflow class for limb-based planetary radius determination. Default d
 **Detection Methods Available:**
 
 * **manual** (default): Interactive GUI for precise point selection
+* **gradient-break**: Simple gradient-based detection
 * **gradient-field**: Automated detection using gradient flow analysis with directional blur
 * **segmentation**: AI-powered automatic detection (requires PyTorch + Segment Anything)
 
