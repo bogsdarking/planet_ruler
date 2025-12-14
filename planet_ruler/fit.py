@@ -17,6 +17,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import math
+import warnings
 from planet_ruler.image import (
     bidirectional_gradient_blur,
     bilinear_interpolate,
@@ -616,3 +617,69 @@ def unpack_diff_evol_posteriors(observation) -> "pd.DataFrame":
     pop = pd.DataFrame.from_records(pop)
 
     return pop
+
+
+def _validate_fit_results(observation):
+    """
+    Validate fit results and issue warnings for problematic parameter combinations.
+
+    This function checks for common issues that suggest the data may be insufficient
+    to properly detect planetary curvature, helping users understand when their
+    results may be unreliable.
+
+    Args:
+        observation: LimbObservation object with best_parameters from fitting
+    """
+    # Skip validation if no fit results are available
+    if (
+        not hasattr(observation, "best_parameters")
+        or observation.best_parameters is None
+    ):
+        return
+
+    # Extract altitude and radius if available
+    h = observation.best_parameters.get("h")
+    r = observation.best_parameters.get("r")
+
+    # Skip if essential parameters are missing
+    if h is None or r is None:
+        return
+
+    # Individual parameter warnings
+    if h < 1000:  # Less than 1 km altitude
+        warnings.warn(
+            f"Fitted altitude ({h:.0f} m) is very low. At such low altitudes, "
+            "planetary curvature is difficult to detect and the fit may be unreliable. "
+            "Your data may be insufficient to accurately measure planetary radius.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+    if r < 1000000:  # Less than 1000 km radius
+        warnings.warn(
+            f"Fitted radius ({r/1000:.0f} km) is very small. This suggests the "
+            "optimization may have difficulty detecting planetary curvature in your data. "
+            "Consider checking your image scale or using a different approach.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+    if r > 100000000:  # Greater than 100,000 km radius
+        warnings.warn(
+            f"Fitted radius ({r/1000:.0f} km) is very large. This may indicate "
+            "calibration issues or that the observed curvature is too subtle to measure "
+            "reliably with the available data.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+    # Combined problematic conditions (less strict thresholds)
+    if h < 5000 and r > 50000000:  # 5 km altitude + 50,000 km radius
+        warnings.warn(
+            f"Combination of relatively low altitude ({h/1000:.1f} km) and large radius "
+            f"({r/1000:.0f} km) suggests the data may be insufficient to reliably detect "
+            "planetary curvature. The apparent 'flat' horizon may reflect measurement "
+            "limitations rather than actual planetary geometry.",
+            UserWarning,
+            stacklevel=3,
+        )

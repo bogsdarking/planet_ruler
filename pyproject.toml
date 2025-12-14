@@ -3,14 +3,15 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "planet_ruler"
+name = "planet-ruler"
 authors = [
     {name = "Brandon Anderson", email = "bogsdarking@proton.me"}
 ]
 description = "Measure planetary radii from horizon photographs using computer vision and geometry"
-version = "1.6.3"
+version = "1.7.0"
 readme = "README.md"
 requires-python = ">=3.8"
+license-expression = "Apache-2.0"
 dependencies = [
     "pandas>=1.3.0,<3.0.0",
     "matplotlib>=3.5.0,<4.0.0",
@@ -104,6 +105,18 @@ Documentation = "https://bogsdarking.github.io/planet_ruler/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["planet_ruler"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "docs",
+    "tests",
+    ".github",
+    ".pre-commit-config.yaml",
+    "*.egg-info",
+    "notebooks/build_demos.ipynb",
+    "notebooks/tutorials/quick_reference.md",
+    "demo/images/beach-ocean-panorama-187916.jpg"
+]
 
 [tool.coverage.run]
 omit = [
