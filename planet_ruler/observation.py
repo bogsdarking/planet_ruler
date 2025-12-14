@@ -19,6 +19,7 @@ import yaml
 import numpy as np
 import pandas as pd
 import logging
+import warnings
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import seaborn as sns
@@ -40,7 +41,7 @@ from planet_ruler.image import (
 )
 from planet_ruler.annotate import TkLimbAnnotator
 from planet_ruler.validation import validate_limb_config
-from planet_ruler.fit import CostFunction, unpack_parameters
+from planet_ruler.fit import CostFunction, unpack_parameters, _validate_fit_results
 from planet_ruler.geometry import limb_arc
 from planet_ruler.dashboard import FitDashboard
 
@@ -1128,6 +1129,9 @@ class LimbObservation(PlanetObservation):
             print("Optimization Complete!")
             print(f"{'='*60}\n")
 
+        # Validate fit results and issue warnings if needed
+        _validate_fit_results(self)
+
         # Finalize dashboard after all stages complete
         if dash is not None:
             success = (
@@ -1348,6 +1352,9 @@ class LimbObservation(PlanetObservation):
         self.best_parameters = working_parameters
         self.features["fitted_limb"] = self.cost_function.evaluate(self.best_parameters)
         self._plot_functions["fitted_limb"] = plot_limb
+
+        # Validate fit results and issue warnings if needed
+        _validate_fit_results(self)
 
         # Finalize dashboard only if we created it (single-stage)
         # Multi-stage will finalize after all stages complete

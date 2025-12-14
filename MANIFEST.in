@@ -1,0 +1,36 @@
+# MANIFEST.in - Include non-Python files in the distribution
+
+# Core documentation
+include README.md
+include LICENSE
+include CHANGELOG.md
+include CONTRIBUTING.md
+
+# Configuration files (examples for users)
+recursive-include config *.yaml *.yml
+
+# Demo data (example images for tutorials)
+recursive-include demo *.jpg *.jpeg *.png *.gif *.tif *.tiff
+
+# Tutorial notebooks
+recursive-include notebooks *.ipynb
+
+# But exclude internal/experimental ones
+exclude notebooks/build_demos.ipynb
+
+# And hidden documentation
+exclude notebooks/tutorials/quick_reference.md
+
+# Exclude unnecessary files
+global-exclude __pycache__
+global-exclude *.py[co]
+global-exclude .DS_Store
+global-exclude *.so
+global-exclude .git*
+global-exclude .coverage
+global-exclude .pytest_cache
+
+# Exclude test files from distribution
+recursive-exclude tests *
+recursive-exclude test_*.py *
+exclude conftest.py
