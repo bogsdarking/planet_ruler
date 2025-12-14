@@ -119,7 +119,7 @@ class TestLoadDemoParameters:
         expected_params = {
             "target": "Pluto",
             "true_radius": 1188,
-            "image_filepath": "../../demo/images/PIA19948.tif",
+            "image_filepath": "../../demo/images/PIA19948.jpg",
             "fit_config": "../../config/pluto-new-horizons.yaml",
             "limb_config": expected_limb_config,
             "limb_save": "pluto_limb.npy",

@@ -17,6 +17,7 @@ import pytest
 import numpy as np
 import pandas as pd
 import math
+import warnings
 from unittest.mock import MagicMock, Mock
 from planet_ruler.fit import (
     unpack_parameters,
@@ -24,6 +25,7 @@ from planet_ruler.fit import (
     CostFunction,
     calculate_parameter_uncertainty,
     format_parameter_result,
+    _validate_fit_results,
 )
 
 
@@ -1288,6 +1290,164 @@ class TestCostFunctionEdgeCases:
         # Should be approximately log(999+1) + log(1998+1) / 2
         expected = (math.log(999 + 1) + math.log(1998 + 1)) / 2
         assert np.isclose(cost, expected, rtol=1e-10)
+
+
+class TestFitValidation:
+    """Test the _validate_fit_results function"""
+
+    def test_low_altitude_warning(self):
+        """Test that low altitude triggers appropriate warning."""
+        # Create a mock observation with low altitude
+        from planet_ruler.observation import LimbObservation
+
+        obs = Mock(spec=LimbObservation)
+        obs.best_parameters = {
+            "h": 500,  # 500 meters (very low altitude)
+            "r": 6371000,  # Normal Earth radius
+        }
+
+        # Capture warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _validate_fit_results(obs)
+
+            # Check that warning was issued
+            assert len(w) == 1
+            assert "very low" in str(w[0].message)
+            assert "altitude" in str(w[0].message)
+
+    def test_small_radius_warning(self):
+        """Test that very small radius triggers appropriate warning."""
+        from planet_ruler.observation import LimbObservation
+
+        obs = Mock(spec=LimbObservation)
+        obs.best_parameters = {
+            "h": 10000,  # Normal altitude
+            "r": 100000,  # 100 km radius (very small)
+        }
+
+        # Capture warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _validate_fit_results(obs)
+
+            # Check that warning was issued
+            assert len(w) == 1
+            assert "very small" in str(w[0].message)
+            assert "radius" in str(w[0].message)
+
+    def test_large_radius_warning(self):
+        """Test that very large radius triggers appropriate warning."""
+        from planet_ruler.observation import LimbObservation
+
+        obs = Mock(spec=LimbObservation)
+        obs.best_parameters = {
+            "h": 10000,  # Normal altitude
+            "r": 150000000,  # 150,000 km radius (very large)
+        }
+
+        # Capture warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _validate_fit_results(obs)
+
+            # Check that warning was issued
+            assert len(w) == 1
+            assert "very large" in str(w[0].message)
+            assert "radius" in str(w[0].message)
+
+    def test_combined_problematic_warning(self):
+        """Test combined low altitude + large radius warning."""
+        from planet_ruler.observation import LimbObservation
+
+        obs = Mock(spec=LimbObservation)
+        obs.best_parameters = {
+            "h": 2000,  # 2 km altitude (triggers combined warning)
+            "r": 80000000,  # 80,000 km radius (triggers combined warning)
+        }
+
+        # Capture warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _validate_fit_results(obs)
+
+            # Should get the combined warning (these params don't trigger individual warnings)
+            # altitude 2km >= 1km (no individual low altitude warning)
+            # radius 80,000km < 100,000km (no individual large radius warning)
+            # but altitude 2km < 5km AND radius 80,000km > 50,000km (triggers combined warning)
+            assert len(w) == 1
+            messages = [str(warning.message) for warning in w]
+
+            # Check for combined warning
+            combined_warning = any("Combination" in msg for msg in messages)
+            assert (
+                combined_warning
+            ), "Expected combined warning for low altitude + large radius"
+
+    def test_no_warnings_for_normal_values(self):
+        """Test that normal values don't trigger warnings."""
+        from planet_ruler.observation import LimbObservation
+
+        obs = Mock(spec=LimbObservation)
+        obs.best_parameters = {
+            "h": 400000,  # 400 km altitude (ISS-like)
+            "r": 6371000,  # Earth radius
+        }
+
+        # Capture warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _validate_fit_results(obs)
+
+            # Should get no warnings
+            assert (
+                len(w) == 0
+            ), f"Unexpected warnings for normal values: {[str(warning.message) for warning in w]}"
+
+    def test_no_best_parameters(self):
+        """Test that function handles missing best_parameters gracefully."""
+        from planet_ruler.observation import LimbObservation
+
+        obs = Mock(spec=LimbObservation)
+        obs.best_parameters = None
+
+        # Should not raise an exception
+        try:
+            _validate_fit_results(obs)
+        except Exception as e:
+            pytest.fail(
+                f"Function should handle missing best_parameters gracefully, but raised: {e}"
+            )
+
+    def test_missing_altitude_parameter(self):
+        """Test graceful handling when altitude parameter is missing."""
+        from planet_ruler.observation import LimbObservation
+
+        obs = Mock(spec=LimbObservation)
+        obs.best_parameters = {
+            "r": 6371000,  # Only radius, no altitude
+        }
+
+        # Should not raise an exception
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _validate_fit_results(obs)
+            # Should work without crashing, though no warnings expected
+
+    def test_missing_radius_parameter(self):
+        """Test graceful handling when radius parameter is missing."""
+        from planet_ruler.observation import LimbObservation
+
+        obs = Mock(spec=LimbObservation)
+        obs.best_parameters = {
+            "h": 10000,  # Only altitude, no radius
+        }
+
+        # Should not raise an exception
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _validate_fit_results(obs)
+            # Should work without crashing, though no warnings expected
 
 
 if __name__ == "__main__":

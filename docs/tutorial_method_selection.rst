@@ -318,7 +318,7 @@ Visual Examples
 
 **Example 2: New Horizons Photo**
 
-.. figure:: ../demo/images/PIA19948.tif
+.. figure:: ../demo/images/PIA19948.jpg
    Caption: Hazy atmospheric boundary detected accurately. Multi-resolution helps.
 
 **Example 3: Failure Case**
