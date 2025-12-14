@@ -1375,8 +1375,26 @@ class TestObservationMultiResolution:
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
             with patch("planet_ruler.observation.logging") as mock_logging:
-                with patch("planet_ruler.observation.CostFunction"):
-                    with patch("planet_ruler.observation.differential_evolution"):
+                with patch(
+                    "planet_ruler.observation.CostFunction"
+                ) as mock_cost_function_class:
+                    with patch(
+                        "planet_ruler.observation.differential_evolution"
+                    ) as mock_diff_evolution:
+                        # Mock cost function
+                        mock_cost_function = Mock()
+                        mock_cost_function_class.return_value = mock_cost_function
+
+                        # Mock differential evolution results with proper numeric values
+                        mock_result = Mock()
+                        mock_result.x = np.array([6500000.0, 15000.0])  # r, h
+                        mock_result.success = True
+                        mock_diff_evolution.return_value = mock_result
+
+                        # Mock fitted limb
+                        fitted_limb = np.random.random(image_data.shape[1])
+                        mock_cost_function.evaluate.return_value = fitted_limb
+
                         obs.fit_limb(
                             loss_function="l2",  # Traditional loss
                             resolution_stages="auto",  # Should be ignored

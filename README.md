@@ -2,6 +2,7 @@
 
 **Measure planetary radii with nothing but a camera and science!**
 
+[![PyPI version](https://badge.fury.io/py/planet-ruler.svg)](https://badge.fury.io/py/planet-ruler)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://bogsdarking.github.io/planet_ruler/)
 [![CI/CD Pipeline](https://github.com/bogsdarking/planet_ruler/actions/workflows/ci.yml/badge.svg)](https://github.com/bogsdarking/planet_ruler/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/bogsdarking/planet_ruler/branch/dev/graph/badge.svg)](https://codecov.io/gh/bogsdarking/planet_ruler)
@@ -17,7 +18,7 @@
 ```python
 import planet_ruler as pr
 obs = pr.LimbObservation("horizon_photo.jpg", "config/camera.yaml")
-obs.detect_limb().fit_limb()  # → Planet radius: 6,234 km
+obs.detect_limb().fit_limb()  # â†’ Planet radius: 6,234 km
 ```
 
 <div align="center">
@@ -62,15 +63,43 @@ Dramatic spherical curvature
 ## Quick Start
 
 ### Installation
+
+**From PyPI (recommended):**
 ```bash
-# From source (development)
+pip install planet-ruler
+```
+
+The package name is `planet-ruler` (with hyphen), but you import it with an underscore:
+```python
+import planet_ruler as pr  # Import uses underscore
+```
+
+**Optional dependencies:**
+
+For ML segmentation:
+```bash
+pip install planet-ruler[ml]
+```
+
+For Jupyter notebooks:
+```bash
+pip install planet-ruler[jupyter]
+```
+
+For everything:
+```bash
+pip install planet-ruler[all]
+```
+
+**From source (development):**
+```bash
 git clone https://github.com/bogsdarking/planet_ruler.git
 cd planet_ruler
+pip install -e .
+```
 
-# Install using current Python environment (recommended)
-python -m pip install -e .
-
-# Command-line tool is now available
+After installation, the command-line tool is available:
+```bash
 planet-ruler --help
 ```
 
@@ -501,6 +530,8 @@ obs.plot()                                # Show results with uncertainty
 ## Contributing
 
 **We welcome contributions from astronomers, developers, educators, and enthusiasts!**
+
+Planet Ruler is maintained by one developer in their spare time. Issue responses may take 3-7 days. Before opening an issue, please check the [documentation](https://bogsdarking.github.io/planet_ruler/) and [existing issues](https://github.com/bogsdarking/planet_ruler/issues).
 
 ### Quick Contribution Setup
 ```bash

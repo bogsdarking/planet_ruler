@@ -31,7 +31,7 @@ def load_demo_parameters(demo):
         demo_parameters = {
             "target": "Pluto",
             "true_radius": 1188,
-            "image_filepath": "../../demo/images/PIA19948.tif",
+            "image_filepath": "../../demo/images/PIA19948.jpg",
             "fit_config": "../../config/pluto-new-horizons.yaml",
             "limb_config": {
                 "log": False,
