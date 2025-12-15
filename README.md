@@ -2,7 +2,7 @@
 
 **Measure planetary radii with nothing but a camera and science!**
 
-[![PyPI version](https://badge.fury.io/py/planet-ruler.svg)](https://badge.fury.io/py/planet-ruler)
+[![PyPI version](https://img.shields.io/pypi/v/planet-ruler.svg)](https://pypi.org/project/planet-ruler/)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://bogsdarking.github.io/planet_ruler/)
 [![CI/CD Pipeline](https://github.com/bogsdarking/planet_ruler/actions/workflows/ci.yml/badge.svg)](https://github.com/bogsdarking/planet_ruler/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/bogsdarking/planet_ruler/branch/dev/graph/badge.svg)](https://codecov.io/gh/bogsdarking/planet_ruler)
