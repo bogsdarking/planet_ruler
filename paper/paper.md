@@ -83,6 +83,6 @@ print(f"Radius: {obs.radius_km:.0f} ± {obs.radius_uncertainty_km:.0f} km")
 
 # Acknowledgments
 
-This work was developed independently without institutional funding. Development relied on open-source tools including NumPy, SciPy, Matplotlib, OpenCV, and Meta AI's Segment Anything Model. AI assistance (Claude, Anthropic) was used to develop and expand the core project via code generation, documentation, and manuscript preparation.
+This work was developed independently without institutional funding. Development relied on open-source tools including NumPy, SciPy, Matplotlib, OpenCV, and Meta AI's Segment Anything Model. AI assistance (Claude, Anthropic) was used to expand the core project via code generation, documentation, and manuscript preparation.
 
 # References
