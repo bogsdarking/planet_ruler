@@ -1,5 +1,5 @@
 ---
-title: 'Planet Ruler: An Open-Source Tool for Measuring Planetary Curvature from Images'
+title: 'Planet Ruler: Measuring Planetary Curvature from Consumer Imagery'
 tags:
   - Python
   - astronomy
