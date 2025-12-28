@@ -129,6 +129,7 @@ class CostFunction:
 
             # Store the gradient field components as instance variables
             self.grad_mag = grad_data["grad_mag"]
+            self.mean_grad_mag = np.mean(self.grad_mag)
             self.grad_angle = grad_data["grad_angle"]
             self.grad_x = grad_data["grad_x"]
             self.grad_y = grad_data["grad_y"]
@@ -288,8 +289,7 @@ class CostFunction:
         flux_density = net_flux / (arc_length + 1e-10)
 
         # Normalize by typical gradient magnitude (contrast-invariant)
-        typical_mag = np.mean(self.grad_mag)
-        normalized_flux = flux_density / (typical_mag + 1e-10)
+        normalized_flux = flux_density / (self.mean_grad_mag + 1e-10)
 
         # Cost = negative absolute flux
         # Maximize |flux| = prefer coherent gradients
@@ -406,8 +406,7 @@ class CostFunction:
         flux_density = net_flux / (arc_length + 1e-10)
 
         # Normalize by typical gradient magnitude (contrast-invariant)
-        typical_mag = np.mean(self.grad_mag)
-        normalized_flux = flux_density / (typical_mag + 1e-10)
+        normalized_flux = flux_density / (self.mean_grad_mag + 1e-10)
 
         # Cost = negative absolute flux (unless direction preferred)
         # Maximize |flux| = prefer coherent gradients in either direction
