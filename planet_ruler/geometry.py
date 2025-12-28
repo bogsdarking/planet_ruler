@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
 import numpy as np
 
 
@@ -428,6 +429,7 @@ def limb_arc(
     origin_y: float = 0,
     origin_z: float = 0,
     return_full: bool = False,
+    x_coords: Optional[np.ndarray] = None,
     **kwargs,  # Ignore num_sample - not needed!
 ) -> np.ndarray:
     """
@@ -442,10 +444,39 @@ def limb_arc(
     3. This reduces to: a·cos(phi) + b·sin(phi) = c
     4. Standard analytical solution exists!
 
-    Args: (same as original limb_arc)
+    Args:
+        n_pix_x (int): Width of image (pixels).
+        n_pix_y (int): Height of image (pixels).
+        r (float): Radius of the body in question.
+        h (float): Height above surface (units should match radius).
+        f (float): Focal length of the camera (m).
+        fov (float): Field of view, assuming square (degrees).
+        w (float): detector size (float): Width of CCD (m).
+        x0 (float): The x-axis principle point.
+        y0 (float): The y-axis principle point.
+        theta_x (float): Rotation around the x (horizontal) axis,
+            AKA pitch. (radians)
+        theta_y (float): Rotation around the y (toward the limb) axis,
+            AKA roll. (radians)
+        theta_z (float): Rotation around the z (vertical) axis,
+            AKA yaw. (radians)
+        origin_x (float): Horizontal offset from the object in question
+            to the camera (m).
+        origin_y (float): Distance from the object in question to the
+            camera (m).
+        origin_z (float): Height difference from the object in question
+            to the camera (m).
+        return_full (bool): Return both the x and y coordinates of the limb
+            in camera space. Note these will *not* be interpolated back on
+            to the pixel grid.
+        x_coords: Optional array of x-coordinates to compute (default: all pixels).
+                  For sparse computation (e.g., manual annotation), pass only
+                  the x-coordinates where you have data. Dramatically speeds up
+                  fitting when only a few points are annotated.
 
     Returns:
         y_pixel: Array of y-coordinates for each x-pixel column
+                 Length matches len(x_coords) if provided, else n_pix_x
     """
     # Setup (same as original)
     assert (
@@ -499,9 +530,13 @@ def limb_arc(
     #   b = (x_pixel - x0)*px*D3 - f*C3
     #   c = f*C2 - (x_pixel - x0)*px*D2
 
-    x_pixel_arr = np.arange(n_pix_x)
-    y_pixel = np.zeros(n_pix_x)
-    phi_solutions = np.zeros(n_pix_x)
+    if x_coords is None:
+        x_pixel_arr = np.arange(n_pix_x)
+    else:
+        x_pixel_arr = x_coords  # Use sparse coordinates!
+    
+    y_pixel = np.zeros(len(x_pixel_arr))
+    phi_solutions = np.zeros(len(x_pixel_arr))
 
     # Vectorize over all x_pixel values
     a = (x_pixel_arr - x0) * pxy * D1 - f * C1
