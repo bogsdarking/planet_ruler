@@ -88,6 +88,7 @@ CAMERA_DB = {
         "sensor_height": 14.9,
         "type": "dslr",
     },
+    "Canon EOS RP": {"sensor_width": 36, "sensor_height": 24, "type": "dslr"},
     # Nikon cameras
     "NIKON D850": {"sensor_width": 35.9, "sensor_height": 23.9, "type": "dslr"},
     "NIKON D750": {"sensor_width": 35.9, "sensor_height": 24.0, "type": "dslr"},
@@ -214,6 +215,140 @@ def get_image_dimensions(image_path: str) -> Tuple[int, int]:
     """Get image width and height in pixels."""
     with Image.open(image_path) as img:
         return img.size  # (width, height)
+
+
+def get_image_orientation_from_exif(exif_data: Optional[Dict] = None) -> Optional[str]:
+    """
+    Determine orientation from EXIF Orientation tag only.
+    
+    Args:
+        exif_data: Pre-extracted EXIF data
+    
+    Returns:
+        'portrait', 'landscape', or None if can't determine
+    """
+    if exif_data is None:
+        return None
+    
+    try:
+        from PIL.ExifTags import TAGS
+        
+        # Find Orientation tag
+        orientation = None
+        for tag_id, value in exif_data.items():
+            tag_name = TAGS.get(tag_id, tag_id)
+            if tag_name == "Orientation":
+                orientation = value
+                break
+        
+        if orientation is not None:
+            # Values 5, 6, 7, 8 indicate 90° or 270° rotation
+            if orientation in [5, 6, 7, 8]:
+                logger.info(f"EXIF Orientation={orientation}: portrait mode detected")
+                return 'portrait'
+            else:
+                logger.info(f"EXIF Orientation={orientation}: landscape mode detected")
+                return 'landscape'
+    except Exception as e:
+        logger.debug(f"Could not read EXIF Orientation tag: {e}")
+    
+    return None
+
+
+def get_image_orientation_from_dimensions(width: int, height: int) -> str:
+    """
+    Determine orientation from image dimensions (heuristic).
+    
+    Args:
+        width: Image width in pixels
+        height: Image height in pixels
+    
+    Returns:
+        'portrait' or 'landscape'
+    """
+    if height > width:
+        logger.info(f"Image dimensions {width}×{height}: portrait mode (heuristic)")
+        return 'portrait'
+    else:
+        logger.info(f"Image dimensions {width}×{height}: landscape mode (heuristic)")
+        return 'landscape'
+
+
+def apply_orientation_correction(params: Dict, exif_data: Optional[Dict] = None) -> Dict:
+    """
+    Apply orientation correction to camera parameters.
+    
+    This modifies params in-place and returns it.
+    Call this RIGHT BEFORE each return statement in extract_camera_parameters().
+    
+    Args:
+        params: Camera parameters dict (must have image_width_px, image_height_px)
+        exif_data: Optional pre-extracted EXIF data
+    
+    Returns:
+        params: Modified parameters (same object, modified in-place)
+    """
+    # Detect orientation (try EXIF first, fall back to dimensions)
+    orientation = get_image_orientation_from_exif(exif_data)
+    
+    if orientation is None:
+        # Fall back to dimensions (already in params, no file I/O needed!)
+        if params.get("image_width_px") and params.get("image_height_px"):
+            orientation = get_image_orientation_from_dimensions(
+                params["image_width_px"],
+                params["image_height_px"]
+            )
+        else:
+            # Can't determine orientation, skip correction
+            logger.debug("Cannot determine orientation - skipping sensor correction")
+            return params
+    
+    # Correct sensor dimensions
+    if params["sensor_width_mm"] is not None and params["sensor_height_mm"] is not None:
+        sensor_is_landscape = params["sensor_width_mm"] > params["sensor_height_mm"]
+        
+        # If orientations don't match, swap dimensions
+        if orientation == 'portrait' and sensor_is_landscape:
+            logger.info(
+                f"Portrait image with landscape sensor: swapping dimensions "
+                f"{params['sensor_width_mm']:.1f}mm × {params['sensor_height_mm']:.1f}mm → "
+                f"{params['sensor_height_mm']:.1f}mm × {params['sensor_width_mm']:.1f}mm"
+            )
+            params["sensor_width_mm"], params["sensor_height_mm"] = (
+                params["sensor_height_mm"], 
+                params["sensor_width_mm"]
+            )
+        elif orientation == 'landscape' and not sensor_is_landscape:
+            logger.info(
+                f"Landscape image with portrait sensor: swapping dimensions "
+                f"{params['sensor_width_mm']:.1f}mm × {params['sensor_height_mm']:.1f}mm → "
+                f"{params['sensor_height_mm']:.1f}mm × {params['sensor_width_mm']:.1f}mm"
+            )
+            params["sensor_width_mm"], params["sensor_height_mm"] = (
+                params["sensor_height_mm"],
+                params["sensor_width_mm"]
+            )
+    
+    # Also correct min/max ranges if they exist
+    if params.get("sensor_width_min") and params.get("sensor_height_min"):
+        sensor_min_is_landscape = params["sensor_width_min"] > params["sensor_height_min"]
+        if (orientation == 'portrait' and sensor_min_is_landscape) or \
+           (orientation == 'landscape' and not sensor_min_is_landscape):
+            params["sensor_width_min"], params["sensor_height_min"] = (
+                params["sensor_height_min"],
+                params["sensor_width_min"]
+            )
+    
+    if params.get("sensor_width_max") and params.get("sensor_height_max"):
+        sensor_max_is_landscape = params["sensor_width_max"] > params["sensor_height_max"]
+        if (orientation == 'portrait' and sensor_max_is_landscape) or \
+           (orientation == 'landscape' and not sensor_max_is_landscape):
+            params["sensor_width_max"], params["sensor_height_max"] = (
+                params["sensor_height_max"],
+                params["sensor_width_max"]
+            )
+    
+    return params
 
 
 def calculate_sensor_dimensions(
@@ -395,7 +530,7 @@ def extract_camera_parameters(image_path: str) -> Dict:
             logger.info(
                 f"Detected known camera: {camera_model} ({camera_data['type']})"
             )
-            return params
+            return apply_orientation_correction(params, exif_data)
 
     # Strategy 2: Calculate from focal length ratio (medium-high confidence)
     if focal_length_mm and focal_length_35mm:
@@ -409,7 +544,7 @@ def extract_camera_parameters(image_path: str) -> Dict:
         logger.info(
             f"Calculated sensor dimensions from focal length ratio: {sensor_width:.1f}mm × {sensor_height:.1f}mm"
         )
-        return params
+        return apply_orientation_correction(params, exif_data)
 
     # Strategy 3: Infer from camera type (medium-low confidence)
     inferred_type = infer_camera_type(exif_data)
@@ -430,7 +565,7 @@ def extract_camera_parameters(image_path: str) -> Dict:
             logger.info(
                 f"  Sensor width range: [{stats['sensor_width_min']:.1f}, {stats['sensor_width_max']:.1f}] mm (from {stats['count']} cameras)"
             )
-            return params
+            return apply_orientation_correction(params, exif_data)
 
     # Strategy 4: Use defaults (low confidence)
     logger.warning(
@@ -445,7 +580,7 @@ def extract_camera_parameters(image_path: str) -> Dict:
     )  # typical compact camera focal length
     params["confidence"] = "low"
 
-    return params
+    return apply_orientation_correction(params, exif_data)
 
 
 def get_gps_altitude(image_path: str) -> Optional[float]:
