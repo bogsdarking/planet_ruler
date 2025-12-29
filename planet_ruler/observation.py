@@ -189,6 +189,184 @@ class PlanetObservation:
         if show:
             plt.show()
 
+    def crop_image(
+        self,
+        save_cropped: bool = True,
+        update_parameters: bool = True,
+    ) -> "PlanetObservation":
+        """
+        Interactively crop the observation image with automatic parameter scaling.
+
+        Opens a GUI tool allowing the user to select a rectangular region to crop.
+        If the observation has camera parameters (e.g., LimbObservation), they are
+        automatically scaled to match the cropped region.
+
+        Note: The principal point may end up outside the cropped region bounds
+        (negative coordinates). This is geometrically valid - it means the camera's
+        optical axis was pointing at a location not visible in the cropped image.
+
+        Args:
+            save_cropped: If True, save the cropped image to disk
+            update_parameters: If True and parameters exist, scale them for the crop
+
+        Returns:
+            self: For method chaining
+
+        Example:
+            >>> obs = LimbObservation("airplane.jpg", "config.yaml")
+            >>> obs.crop_image()  # Opens interactive crop tool
+            >>> obs.detect_limb()
+            >>> obs.fit_limb()
+
+        Notes:
+            - Works for any PlanetObservation subclass
+            - For LimbObservation: automatically scales detector_size, principal_point, etc.
+            - Principal point can be outside cropped bounds (mathematically valid)
+        """
+        from planet_ruler.crop import TkImageCropper
+        from pathlib import Path
+        import logging
+        import numpy as np
+        from PIL import Image as PILImage
+
+        logger = logging.getLogger(__name__)
+
+        # Check if this observation has camera parameters (duck typing)
+        has_parameters = hasattr(self, 'init_parameter_values') and self.init_parameter_values is not None
+
+        # Prepare current parameters for the cropper (if they exist)
+        current_params = {}
+        if has_parameters:
+            current_params = {
+                'w': self.init_parameter_values.get('w'),
+                'n_pix_x': self.image.shape[1],
+                'n_pix_y': self.image.shape[0],
+                'x0': self.init_parameter_values.get('x0', self.image.shape[1] / 2),
+                'y0': self.init_parameter_values.get('y0', self.image.shape[0] / 2),
+            }
+
+            # Include h_detector if present
+            if 'h_detector' in self.init_parameter_values:
+                current_params['h_detector'] = self.init_parameter_values['h_detector']
+
+            logger.info("Opening interactive crop tool...")
+            logger.info(f"Current detector width: {current_params['w']*1000:.3f}mm")
+            logger.info(f"Current image size: {current_params['n_pix_x']}×{current_params['n_pix_y']}px")
+            logger.info(f"Current principal point: ({current_params['x0']:.0f}, {current_params['y0']:.0f})")
+        else:
+            logger.info("Opening interactive crop tool (no parameter scaling)...")
+            logger.info(f"Current image size: {self.image.shape[1]}×{self.image.shape[0]}px")
+
+        # Run the crop tool
+        cropper = TkImageCropper(self.image_filepath, current_params if has_parameters else None)
+        cropper.run()
+
+        # Check if user completed the crop
+        if cropper.cropped_image is None:
+            logger.warning("Crop cancelled - no changes made")
+            return self
+
+        # Get results
+        cropped_image = cropper.cropped_image
+        crop_bounds = cropper.get_crop_bounds()
+        logger.info(f"Crop complete: {crop_bounds}")
+
+        # Update the image (always happens)
+        if isinstance(cropped_image, PILImage.Image):
+            self.image = np.array(cropped_image)
+        else:
+            self.image = cropped_image
+
+        # Update original image reference
+        self._original_image = self.image.copy()
+
+        # Save cropped image to disk (optional)
+        if save_cropped:
+            output_path = (
+                Path(self.image_filepath).parent / 
+                f"{Path(self.image_filepath).stem}_cropped.jpg"
+            )
+            PILImage.fromarray(self.image).save(output_path, quality=95)
+            logger.info(f"Saved cropped image to: {output_path}")
+            
+            # Update filepath to point to cropped version
+            self.image_filepath = str(output_path)
+
+        # Update parameters (only if they exist and user wants to)
+        if has_parameters and update_parameters:
+            scaled_params = cropper.scaled_parameters
+            
+            logger.info("Updating observation parameters...")
+            logger.info(f"New detector width: {scaled_params['w']*1000:.3f}mm")
+            logger.info(f"New image size: {scaled_params['n_pix_x']}×{scaled_params['n_pix_y']}px")
+            
+            # ================================================================
+            # CHECK: Inform user if principal point is out of bounds
+            # (But don't change it - the math works fine)
+            # ================================================================
+            x0_in_bounds = 0 <= scaled_params['x0'] < scaled_params['n_pix_x']
+            y0_in_bounds = 0 <= scaled_params['y0'] < scaled_params['n_pix_y']
+            
+            if not x0_in_bounds or not y0_in_bounds:
+                logger.info(
+                    f"Principal point ({scaled_params['x0']:.0f}, {scaled_params['y0']:.0f}) "
+                    f"is outside cropped image bounds (0-{scaled_params['n_pix_x']}, "
+                    f"0-{scaled_params['n_pix_y']}.  Should still be geometrically valid.)"
+                )
+            else:
+                logger.info(f"New principal point: ({scaled_params['x0']:.0f}, {scaled_params['y0']:.0f}) [✓ in bounds]")
+            
+            # Update pixel dimensions
+            self.init_parameter_values['n_pix_x'] = scaled_params['n_pix_x']
+            self.init_parameter_values['n_pix_y'] = scaled_params['n_pix_y']
+            
+            # Update principal point
+            self.init_parameter_values['x0'] = scaled_params['x0']
+            self.init_parameter_values['y0'] = scaled_params['y0']
+            
+            # Update detector size (CRITICAL)
+            if 'w' in scaled_params:
+                old_w = self.init_parameter_values.get('w', 0)
+                self.init_parameter_values['w'] = scaled_params['w']
+                logger.info(
+                    f"  Scaled detector width: {old_w*1000:.3f}mm → "
+                    f"{scaled_params['w']*1000:.3f}mm"
+                )
+            
+            # Update detector height if present
+            if 'h_detector' in scaled_params:
+                self.init_parameter_values['h_detector'] = scaled_params['h_detector']
+            
+            # Update parameter limits for detector width if they exist
+            if hasattr(self, 'parameter_limits') and self.parameter_limits is not None:
+                if 'w' in self.parameter_limits and 'w' in scaled_params and 'w' in current_params:
+                    # Scale the limits proportionally
+                    crop_ratio = scaled_params['w'] / current_params['w']
+                    old_limits = self.parameter_limits['w']
+                    self.parameter_limits['w'] = [
+                        old_limits[0] * crop_ratio,
+                        old_limits[1] * crop_ratio
+                    ]
+                    logger.info(
+                        f"  Scaled detector width limits: "
+                        f"[{old_limits[0]*1000:.3f}, {old_limits[1]*1000:.3f}]mm → "
+                        f"[{self.parameter_limits['w'][0]*1000:.3f}, "
+                        f"{self.parameter_limits['w'][1]*1000:.3f}]mm"
+                    )
+
+            # Note: Focal length (f) is NOT updated - it's a lens property
+            # Field of view will automatically update via geometry.field_of_view(f, w)
+
+            logger.info("Parameters updated successfully")
+
+        elif has_parameters and not update_parameters:
+            logger.info("Parameters NOT updated (update_parameters=False)")
+
+        elif not has_parameters:
+            logger.info("No parameters to update (observation type has no camera parameters)")
+
+        return self
+
 
 class LimbObservation(PlanetObservation):
     """
@@ -1335,7 +1513,12 @@ class LimbObservation(PlanetObservation):
         best_parameters = unpack_parameters(self.fit_results.x, self.free_parameters)
         working_parameters.update(best_parameters)
         self.best_parameters = working_parameters
-        self.features["fitted_limb"] = self.cost_function.evaluate(self.best_parameters)
+
+        # Use limb_arc directly to avoid possibly sparse array
+        kwargs = self.init_parameter_values.copy()
+        kwargs.update(self.best_parameters)
+        self.features["fitted_limb"] = limb_arc(**kwargs)
+
         self._plot_functions["fitted_limb"] = plot_limb
 
         # Validate fit results and issue warnings if needed
