@@ -167,6 +167,11 @@ class CostFunction:
 
         # Traditional loss functions
         y = self.evaluate(params)
+        
+        # Handle sparse evaluation (NaN filtering)
+        # If function doesn't support sparse evaluation, filter predictions manually
+        if hasattr(self, 'is_sparse') and self.is_sparse and y is not None and len(y) != len(self.target):
+            y = y[self.x]  # Filter predictions to match sparse target coordinates
 
         if self.loss_function == "l2":
             cost = np.mean(pow(y - self.target, 2))

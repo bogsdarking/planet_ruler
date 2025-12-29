@@ -31,30 +31,290 @@ logger = logging.getLogger(__name__)
 # Camera database - sensor dimensions in mm
 # Includes phones, point-and-shoot, DSLRs, etc.
 CAMERA_DB = {
-    # iPhone models
-    "iPhone 14 Pro": {"sensor_width": 9.8, "sensor_height": 7.3, "type": "phone"},
-    "iPhone 14": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
-    "iPhone 13 Pro": {"sensor_width": 9.8, "sensor_height": 7.3, "type": "phone"},
-    "iPhone 13": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
-    "iPhone 12 Pro": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
-    "iPhone 12": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
-    "iPhone 11 Pro": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
-    "iPhone 11": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
-    "iPhone SE": {"sensor_width": 4.8, "sensor_height": 3.6, "type": "phone"},
-    # Samsung Galaxy models
-    "SM-G998U": {
-        "sensor_width": 8.8,
-        "sensor_height": 6.6,
+    # ========================================================================
+    # Multi-Camera Phones
+    # ========================================================================
+    
+    # Samsung Galaxy S22+ (SM-S906E/B/U variants)
+    "SM-S906E": {
         "type": "phone",
-    },  # S21 Ultra
-    "SM-G991U": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},  # S21
-    "SM-G996U": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},  # S21+
-    "SM-G981U": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},  # S20
-    # Google Pixel models
-    "Pixel 7 Pro": {"sensor_width": 8.0, "sensor_height": 6.0, "type": "phone"},
-    "Pixel 7": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
-    "Pixel 6 Pro": {"sensor_width": 8.0, "sensor_height": 6.0, "type": "phone"},
-    "Pixel 6": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.4,
+                "aperture": 1.8,
+                "sensor_width": 7.6,
+                "sensor_height": 5.7,
+                "notes": "50MP main camera",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 7.0,
+                "aperture": 2.4,
+                "sensor_width": 5.16,
+                "sensor_height": 3.87,
+                "notes": "10MP 3x optical zoom",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.2,
+                "aperture": 2.2,
+                "sensor_width": 6.4,
+                "sensor_height": 4.8,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    
+    # Samsung Galaxy S22 Ultra (SM-S908E/B/U)
+    "SM-S908E": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.4,
+                "aperture": 1.8,
+                "sensor_width": 8.0,
+                "sensor_height": 6.0,
+                "notes": "108MP main camera",
+            },
+            {
+                "name": "telephoto_3x",
+                "focal_length_mm": 6.9,
+                "aperture": 2.4,
+                "sensor_width": 5.16,
+                "sensor_height": 3.87,
+                "notes": "10MP 3x optical zoom",
+            },
+            {
+                "name": "telephoto_10x",
+                "focal_length_mm": 23.0,
+                "aperture": 4.9,
+                "sensor_width": 4.32,
+                "sensor_height": 3.24,
+                "notes": "10MP 10x optical zoom",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.2,
+                "aperture": 2.2,
+                "sensor_width": 6.4,
+                "sensor_height": 4.8,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    
+    # iPhone 13 (base model)
+    "iPhone 13": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.1,
+                "aperture": 1.6,
+                "sensor_width": 7.6,
+                "sensor_height": 5.7,
+                "notes": "12MP main camera",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 1.54,
+                "aperture": 2.4,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    
+    # iPhone 13 Pro/Pro Max
+    "iPhone 13 Pro": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.7,
+                "aperture": 1.5,
+                "sensor_width": 8.47,
+                "sensor_height": 6.35,
+                "notes": "12MP main camera",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 9.0,
+                "aperture": 2.8,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP 3x optical zoom",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 1.8,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    
+    # iPhone 14 Pro/Pro Max
+    "iPhone 14 Pro": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.9,
+                "aperture": 1.78,
+                "sensor_width": 9.8,
+                "sensor_height": 7.35,
+                "notes": "48MP main camera",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 9.0,
+                "aperture": 2.8,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP 3x optical zoom",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 2.2,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    
+    # iPhone 15 Pro/Pro Max
+    "iPhone 15 Pro": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.86,
+                "aperture": 1.78,
+                "sensor_width": 9.8,
+                "sensor_height": 7.35,
+                "notes": "48MP main camera",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 9.0,  # Pro
+                "aperture": 2.8,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP 3x optical zoom (Pro)",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 2.2,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    
+    # iPhone 15 Pro Max (different telephoto)
+    "iPhone 15 Pro Max": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.86,
+                "aperture": 1.78,
+                "sensor_width": 9.8,
+                "sensor_height": 7.35,
+                "notes": "48MP main camera",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 12.7,  # Pro Max
+                "aperture": 2.8,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP 5x optical zoom (Pro Max)",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 2.2,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    
+    # Google Pixel 7 Pro
+    "Pixel 7 Pro": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.81,
+                "aperture": 1.85,
+                "sensor_width": 8.0,
+                "sensor_height": 6.0,
+                "notes": "50MP main camera",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 12.0,
+                "aperture": 3.5,
+                "sensor_width": 5.76,
+                "sensor_height": 4.29,
+                "notes": "48MP 5x optical zoom",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.2,
+                "aperture": 2.2,
+                "sensor_width": 6.4,
+                "sensor_height": 4.8,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    # Realme 9 Pro+ (RMX3393)
+    "RMX3393": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.7,  # Calculated from 24mm equiv. and sensor size
+                "aperture": 1.8,
+                "sensor_width": 8.19,
+                "sensor_height": 6.14,
+                "notes": "50MP Sony IMX766 with OIS",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.2,  # Estimated from 15mm equiv.
+                "aperture": 2.2,
+                "sensor_width": 6.4,  # Typical 8MP ultrawide
+                "sensor_height": 4.8,
+                "notes": "8MP ultra-wide, 119° FOV",
+            },
+            {
+                "name": "macro",
+                "focal_length_mm": 3.1,  # Estimated from 21.8mm equiv.
+                "aperture": 2.4,
+                "sensor_width": 2.76,  # Typical 2MP macro
+                "sensor_height": 2.07,
+                "notes": "2MP macro, fixed focus 4cm",
+            },
+        ],
+    },
+    # ========================================================================
+    # Traditional Digital
+    # ========================================================================
     # Canon PowerShot series
     "Canon PowerShot G12": {
         "sensor_width": 7.6,
@@ -173,12 +433,22 @@ def get_camera_model(exif_data: Dict) -> Optional[str]:
     if model and model in CAMERA_DB:
         return model
 
-    # Try partial matches
+    # Try partial matches (avoid matching sensor size entries like "1", "1/1.7", etc.)
+    # Sort by length descending to prefer longer, more specific matches
+    candidate_models = []
     for known_model in CAMERA_DB:
+        # Skip sensor size entries and very short entries that might cause false matches
+        if len(known_model) <= 3 or known_model in ["1", "1/1.7", "1/2.3", "APS-C", "Full Frame", "default"]:
+            continue
+            
         if known_model.lower() in full_model.lower():
-            return known_model
-        if known_model.lower() in model.lower():
-            return known_model
+            candidate_models.append(known_model)
+        elif known_model.lower() in model.lower():
+            candidate_models.append(known_model)
+    
+    if candidate_models:
+        # Return the longest match (most specific)
+        return max(candidate_models, key=len)
 
     # Check LensModel as fallback (for some cameras)
     if "LensModel" in exif_data:
@@ -188,6 +458,116 @@ def get_camera_model(exif_data: Dict) -> Optional[str]:
 
     logger.info(f"Camera model '{full_model}' not in database")
     return None
+
+
+def get_aperture(exif_data: Dict) -> Optional[float]:
+    """
+    Extract aperture (f-number) from EXIF data.
+    
+    Args:
+        exif_data: EXIF dictionary
+    
+    Returns:
+        Aperture as float (e.g., 2.4 for f/2.4), or None if not found
+    """
+    if not exif_data:
+        return None
+    
+    try:
+        from PIL.ExifTags import TAGS
+        
+        # Look for FNumber or ApertureValue tags
+        for tag_id, value in exif_data.items():
+            tag_name = TAGS.get(tag_id, tag_id)
+            
+            if tag_name == "FNumber":
+                # FNumber is typically stored as rational (numerator, denominator)
+                if isinstance(value, tuple):
+                    return value[0] / value[1]
+                else:
+                    return float(value)
+            
+            elif tag_name == "ApertureValue":
+                # ApertureValue is stored as APEX value: f-number = 2^(value/2)
+                if isinstance(value, tuple):
+                    apex = value[0] / value[1]
+                else:
+                    apex = float(value)
+                return 2 ** (apex / 2)
+        
+    except Exception as e:
+        logger.debug(f"Could not extract aperture: {e}")
+    
+    return None
+
+
+def match_camera_module(camera_data: Dict, focal_length_mm: float, aperture: Optional[float] = None) -> Dict:
+    """
+    Match specific camera module for multi-camera phones.
+    
+    Uses focal length as primary matcher, aperture as secondary confirmation.
+    Falls back to main camera if no match found.
+    
+    Args:
+        camera_data: Camera entry from CAMERA_DB
+        focal_length_mm: Actual focal length from EXIF
+        aperture: F-number from EXIF (optional)
+    
+    Returns:
+        Camera module dict with sensor_width, sensor_height, etc.
+    """
+    # Legacy format: single camera (no "cameras" array)
+    if "cameras" not in camera_data:
+        return camera_data
+    
+    # Multi-camera phone: match based on focal length + aperture
+    cameras = camera_data["cameras"]
+    
+    # Tolerance for focal length matching (±0.3mm accounts for manufacturing variance)
+    FOCAL_LENGTH_TOLERANCE = 0.3
+    
+    best_match = None
+    best_score = -1
+    
+    for cam in cameras:
+        score = 0
+        
+        # Primary: Focal length match
+        focal_diff = abs(cam["focal_length_mm"] - focal_length_mm)
+        if focal_diff <= FOCAL_LENGTH_TOLERANCE:
+            score += 100  # Strong match
+            score -= focal_diff * 10  # Prefer closer matches
+        else:
+            continue  # Skip if focal length doesn't match
+        
+        # Secondary: Aperture match (if available)
+        if aperture is not None and "aperture" in cam:
+            aperture_diff = abs(cam["aperture"] - aperture)
+            if aperture_diff < 0.1:
+                score += 50  # Confirms correct camera
+            elif aperture_diff < 0.5:
+                score += 20  # Close enough
+            # Larger diff doesn't disqualify, just doesn't add points
+        
+        if score > best_score:
+            best_score = score
+            best_match = cam
+    
+    if best_match:
+        logger.info(
+            f"Matched '{best_match['name']}' camera: "
+            f"f={best_match['focal_length_mm']:.1f}mm, f/{best_match['aperture']}"
+        )
+        return best_match
+    
+    # No match found - fall back to main camera with warning
+    main_camera = cameras[0]  # Convention: main camera is first
+    logger.warning(
+        f"Could not match camera module (f={focal_length_mm:.1f}mm"
+        + (f", f/{aperture}" if aperture else "")
+        + f") - using '{main_camera['name']}' camera as fallback"
+    )
+    return main_camera
 
 
 def get_focal_length_mm(exif_data: Dict) -> Optional[float]:
@@ -372,7 +752,7 @@ def calculate_sensor_dimensions(
     return sensor_width, sensor_height
 
 
-def get_sensor_statistics_by_type(camera_type: str) -> Dict:
+def get_sensor_statistics_by_type(camera_type: str) -> Optional[Dict]:
     """
     Calculate sensor dimension statistics for a given camera type.
     Returns median, min, and max for sensor width and height.
@@ -382,8 +762,27 @@ def get_sensor_statistics_by_type(camera_type: str) -> Dict:
     if not cameras_of_type:
         return None
 
-    widths = [cam["sensor_width"] for cam in cameras_of_type]
-    heights = [cam["sensor_height"] for cam in cameras_of_type]
+    # Collect sensor dimensions, handling both old and new camera database formats
+    widths = []
+    heights = []
+    
+    for cam in cameras_of_type:
+        # Multi-camera format
+        if "cameras" in cam:
+            for camera_module in cam["cameras"]:
+                if "sensor_width" in camera_module:
+                    widths.append(camera_module["sensor_width"])
+                if "sensor_height" in camera_module:
+                    heights.append(camera_module["sensor_height"])
+        # Single-camera format
+        else:
+            if "sensor_width" in cam:
+                widths.append(cam["sensor_width"])
+            if "sensor_height" in cam:
+                heights.append(cam["sensor_height"])
+
+    if not widths or not heights:
+        return None
 
     import numpy as np
 
@@ -394,7 +793,7 @@ def get_sensor_statistics_by_type(camera_type: str) -> Dict:
         "sensor_height_median": float(np.median(heights)),
         "sensor_height_min": float(np.min(heights)),
         "sensor_height_max": float(np.max(heights)),
-        "count": len(cameras_of_type),
+        "count": len(widths),  # Count individual camera modules, not camera models
     }
 
     return stats
@@ -496,9 +895,17 @@ def extract_camera_parameters(image_path: str) -> Dict:
     # Strategy 1: Known camera model (highest confidence)
     if camera_model and camera_model in CAMERA_DB:
         camera_data = CAMERA_DB[camera_model]
-
-        params["sensor_width_mm"] = camera_data.get("sensor_width", None)
-        params["sensor_height_mm"] = camera_data.get("sensor_height", None)
+        
+        # For multi-camera phones, match specific camera module
+        aperture = get_aperture(exif_data)
+        if focal_length_mm is not None:
+            camera_module = match_camera_module(camera_data, focal_length_mm, aperture)
+        else:
+            # If no focal length, use first camera (main) as fallback
+            camera_module = camera_data.get("cameras", [camera_data])[0] if "cameras" in camera_data else camera_data
+        
+        params["sensor_width_mm"] = camera_module.get("sensor_width", None)
+        params["sensor_height_mm"] = camera_module.get("sensor_height", None)
 
         if (params["sensor_width_mm"]) is None and (params["sensor_height_mm"] is None):
             logger.warning(
@@ -750,8 +1157,8 @@ def create_config_from_image(
 
     # Constrain altitude with tolerance since precision altitude is rare
     param_limits["h"] = [
-        altitude_m * (1 - param_tolerance),
-        altitude_m * (1 + param_tolerance),
+        float(altitude_m * (1 - param_tolerance)),
+        float(altitude_m * (1 + param_tolerance)),
     ]
 
     # Calculate initial theta_x using geometry
