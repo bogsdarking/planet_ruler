@@ -1105,24 +1105,9 @@ class LimbObservation(PlanetObservation):
             full_res_params = self.best_parameters.copy()
             full_res_params.update(inferred_parameters)
 
-            self.cost_function = CostFunction(
-                target=(
-                    full_res_image
-                    if "gradient_field" in loss_function
-                    else self.features.get("limb")
-                ),
-                function=limb_arc,
-                free_parameters=self.free_parameters,
-                init_parameter_values=full_res_params,
-                loss_function=loss_function,
-                kernel_smoothing=kernel_smoothing,
-                directional_smoothing=directional_smoothing,
-                directional_decay_rate=directional_decay_rate,
-                prefer_direction=prefer_direction,
-            )
-            self.features["fitted_limb"] = self.cost_function.evaluate(
-                self.best_parameters
-            )
+            kwargs = self.init_parameter_values.copy()
+            kwargs.update(full_res_params)
+            self.features["fitted_limb"] = limb_arc(**kwargs)
 
         if verbose:
             print(f"\n{'='*60}")
