@@ -66,7 +66,8 @@ class TestCameraDatabase:
         for model, specs in CAMERA_DB.items():
             if model == "default":
                 continue
-            assert "sensor_width" in specs or "sensor_height" in specs
+                
+            # All cameras must have a type
             assert "type" in specs
             assert specs["type"] in [
                 "phone",
@@ -75,6 +76,16 @@ class TestCameraDatabase:
                 "mirrorless",
                 "unknown",
             ]
+            
+            # Check sensor dimensions (either directly or in cameras array)
+            if "cameras" in specs:
+                # Multi-camera format: check each camera module
+                assert len(specs["cameras"]) > 0, f"Camera {model} has empty cameras array"
+                for cam in specs["cameras"]:
+                    assert "sensor_width" in cam or "sensor_height" in cam, f"Camera {model} missing sensor dimensions in camera module"
+            else:
+                # Single-camera format: check top level
+                assert "sensor_width" in specs or "sensor_height" in specs, f"Camera {model} missing sensor dimensions"
 
     def test_database_has_known_cameras(self):
         """Test that database includes some known cameras."""
@@ -85,8 +96,15 @@ class TestCameraDatabase:
     def test_sensor_dimensions_positive(self):
         """Test that all sensor dimensions are positive."""
         for model, specs in CAMERA_DB.items():
-            assert specs.get("sensor_width", 1) > 0
-            assert specs.get("sensor_height", 1) > 0
+            if "cameras" in specs:
+                # Multi-camera format: check each camera module
+                for cam in specs["cameras"]:
+                    assert cam.get("sensor_width", 1) > 0, f"Camera {model} has non-positive sensor_width"
+                    assert cam.get("sensor_height", 1) > 0, f"Camera {model} has non-positive sensor_height"
+            else:
+                # Single-camera format: check top level
+                assert specs.get("sensor_width", 1) > 0, f"Camera {model} has non-positive sensor_width"
+                assert specs.get("sensor_height", 1) > 0, f"Camera {model} has non-positive sensor_height"
 
 
 class TestPlanetDatabase:

@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.7.1] - 2026-XX-XX
 
+### Added
+
+- Ability to handle phones with multiple cameras (infer which via EXIF aperture tag)
+
 ### Fixed
 
 - Small speedup to gradient-field eval function by caching the mean rather than recomputing
+- Restored a missing image referenced in the README
+- Large speedup to gradient-field detection by removing an unused full-resolution field calculation
+- Faster fitting on manual annotation by only calculating the limb at labeled points
 
 ## [1.7.0] - 2025-12-13
 
