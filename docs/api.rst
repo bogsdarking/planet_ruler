@@ -39,6 +39,44 @@ The image module handles computer vision tasks:
 * **Limb processing**: `smooth_limb`, `fill_nans` - post-processing operations
 * **Interpolation**: `bilinear_interpolate` - sub-pixel image sampling
 
+Crop Module
+~~~~~~~~~~~
+
+.. automodule:: planet_ruler.crop
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+The crop module provides interactive image cropping with automatic camera parameter scaling:
+
+* **Interactive cropping**: `TkImageCropper` - GUI tool for selecting crop regions
+* **Parameter scaling**: Automatic adjustment of detector size, principal point, and FOV
+* **Convenience function**: `crop_observation_image` - high-level interface
+* **Validation**: Ensures geometric consistency after cropping
+
+Key features:
+
+* Drag-to-select rectangular crop regions
+* Zoom/pan for precise selection
+* Automatic scaling of physical sensor dimensions
+* Handles out-of-bounds principal points correctly
+* Preserves pixel physical dimensions
+
+The crop operation scales camera parameters using the following rules::
+
+   detector_width_new = detector_width_old × (crop_width / image_width)
+   detector_height_new = detector_height_old × (crop_height / image_height)  
+   focal_length_new = focal_length_old (unchanged)
+   principal_point_x_new = principal_point_x_old - crop_x_offset
+   principal_point_y_new = principal_point_y_old - crop_y_offset
+   field_of_view_new = 2 × arctan(detector_width_new / (2 × focal_length))
+
+Physical pixel size remains constant: px = detector_width / n_pixels_x
+
+Principal points may be outside image bounds after cropping; this is
+geometrically valid and represents the camera pointing outside the
+cropped region.
+
 Observation Module
 ~~~~~~~~~~~~~~~~~
 
