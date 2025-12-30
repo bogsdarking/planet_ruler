@@ -3,7 +3,7 @@ Planet Ruler Documentation
 
 **A tool to infer the radius of the planet you are sitting on, just by taking a picture of the horizon!**
 
-.. image:: ../demo/images/beach-ocean-panorama-187916.jpg
+.. image:: images/beach-ocean-panorama-187916.jpg
    :alt: Beach horizon panorama
    :class: with-border
    :width: 600
