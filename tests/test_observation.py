@@ -457,12 +457,14 @@ class TestLimbObservation:
 
             os.unlink(tmp_file.name)
 
+    @patch("planet_ruler.observation.limb_arc")
     @patch("planet_ruler.observation.differential_evolution")
     @patch("planet_ruler.observation.CostFunction")
     def test_fit_limb(
         self,
         mock_cost_function_class,
         mock_diff_evolution,
+        mock_limb_arc,
         sample_horizon_image,
         config_file,
     ):
@@ -488,9 +490,9 @@ class TestLimbObservation:
             mock_result.x = np.array([6500000.0, 15000.0])  # Best fit parameters
             mock_diff_evolution.return_value = mock_result
 
-            # Mock cost function evaluation
+            # Mock limb_arc (which is what actually gets called for fitted_limb)
             fitted_limb = np.random.random(image_data.shape[1])
-            mock_cost_function.evaluate.return_value = fitted_limb
+            mock_limb_arc.return_value = fitted_limb
 
             obs.fit_limb(loss_function="l2", max_iter=100, n_jobs=1, seed=42)
 
