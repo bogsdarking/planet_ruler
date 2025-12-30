@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Ability to handle phones with multiple cameras (infer which via EXIF aperture tag)
+- Cropping tool that allows subselection of images while preserving camera properties
 
 ### Fixed
 
