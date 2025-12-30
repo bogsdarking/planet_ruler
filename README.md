@@ -539,7 +539,26 @@ Planet Ruler is maintained by one developer in their spare time. Issue responses
 git clone https://github.com/YOUR_USERNAME/planet_ruler.git
 cd planet_ruler
 python -m pip install -e . && python -m pip install -r requirements.txt && python -m pip install -r requirements-test.txt
-pytest tests/ -v  # Verify everything works
+python -m pytest tests/ -v -m "not slow" -m "not real_data" # Verify everything works
+```
+
+### Advanced Testing
+
+More comprehensive tests/suites require images stored in Git LFS. To run these:
+```bash
+# Install Git LFS (one-time)
+git lfs install
+
+# Pull test images
+git lfs pull
+
+# Run tests
+python -m pytest tests/
+```
+
+To skip tests requiring images:
+```bash
+python -m pytest -m "not real_data"
 ```
 
 ### Ways to Contribute
