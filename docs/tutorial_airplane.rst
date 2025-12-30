@@ -37,18 +37,18 @@ Best Timing
 
 **What makes a good photo:**
 
-✅ Clear, unobstructed horizon line
-✅ Minimal clouds at horizon level  
-✅ Camera roughly level with horizon (not tilted)
-✅ Horizon in middle third of frame
-✅ Good lighting (avoid shooting into sun)
+| ✅ Clear, unobstructed horizon line
+| ✅ Minimal clouds at horizon level
+| ✅ Camera roughly level with horizon (not tilted)
+| ✅ Horizon in middle third of frame
+| ✅ Good lighting (avoid shooting into sun)
 
 **What to avoid:**
 
-❌ Wing blocking the view
-❌ Heavy cloud layer at horizon
-❌ Scratched or dirty windows (some OK, but avoid major obstructions)
-❌ Excessive zoom (normal or wide-angle is best)
+| ❌ Wing blocking the view
+| ❌ Heavy cloud layer at horizon
+| ❌ Scratched or dirty windows (some OK, but avoid major obstructions)
+| ❌ Excessive zoom (normal or wide-angle is best)
 
 Photography Tips
 ^^^^^^^^^^^^^^^
@@ -73,7 +73,21 @@ Photography Tips
    * Turn off digital zoom
    * Let auto-exposure handle brightness
 
-Part 2: Finding Your Altitude
+
+.. Part 2: Cropping Your Photo (Optional)
+.. ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. Sometimes obstructions are unavoidable. If you end up with a photo that contains a window frame,
+.. airplane wing, or other object that either obscures the horizon directly or could confuse the fit, 
+.. cropping is a great option. To get started, simply run the 'crop' method
+
+.. .. code-block:: python
+
+..    import planet_ruler as pr
+..    photo_path = "airplane_horizon.jpg"
+
+
+Part 3: Finding Your Altitude
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You need to know your altitude when you took the photo. Here are four methods, from most to least accurate:
@@ -151,7 +165,7 @@ If you can't get exact altitude, use these typical values:
 .. warning::
    Altitude uncertainty of ±2,000 feet typically adds 5-10% error to your final radius measurement. Try to be as accurate as possible, but don't worry if you can only estimate.
 
-Part 3: Analysis with Planet Ruler
+Part 4: Analysis with Planet Ruler
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Now for the fun part - let's measure Earth's radius!
@@ -186,28 +200,87 @@ Planet Ruler's auto-config feature extracts camera parameters from your photo's 
    print(f"  Sensor width: {camera['sensor_width_mm']:.1f} mm")
    print(f"  Field of view: {config['observation']['field_of_view_deg']:.1f}°")
 
-Horizon Detection
-^^^^^^^^^^^^^^^^
+   # Create observation
+   obs = pr.LimbObservation(photo_path, config)
 
-Use manual annotation for precise, user-controlled detection:
+Image Cropping (Optional)
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Sometimes obstructions are unavoidable. If you end up with a photo that contains a window frame,
+airplane wing, or other object that either obscures the horizon directly or could confuse the fit, 
+cropping is a great option. To get started, simply run the `crop_image` method. You'll get a pop-up GUI 
+containing your image where you can drag a rectangle that will contain the area you want to keep.
+Try to get as much of the horizon as you can while avoiding whatever is obscuring it.
 
 .. code-block:: python
 
-   # Create observation
-   obs = pr.LimbObservation(photo_path, config)
+   obs.crop_image()
+
+GUI controls
+
+.. code-block:: text
+
+   Crop Tool Controls:
+   Click & Drag     Select crop region
+   Scroll Wheel     Zoom in/out
+   +/- Keys         Zoom in/out
+   Esc              Clear selection
    
-   # Interactive horizon detection
-   print("\nClick points along the horizon curve.")
-   print("Controls:")
-   print("  • Left click: Add point")
-   print("  • Right click: Remove nearest point")
-   print("  • 'g': Generate smooth curve")
-   print("  • 'q': Finish and close")
+   Buttons:
+   Crop & Save      Apply crop and save to disk
+   Crop (No Save)   Crop in-memory only
+   Clear Selection  Remove crop region
+
+.. figure:: images/crop.png
+   :width: 100%
+
+   Drag the crop rectangle to select a region without obstuctions.
+
+.. note::
+   Cropping the image implicitly changes the camera parameters (field of view, for one). Planet-ruler compensates for this by automatically re-scaling those parameters appropriately after you crop.
+
+
+Horizon Detection
+^^^^^^^^^^^^^^^^
+
+Use manual annotation for precise, user-controlled detection.
+
+.. code-block:: python
    
-   obs.detect_limb(method="manual")
+   obs.detect_limb(detection_method="manual")
+
+GUI controls
+
+.. code-block:: text
+
+   Crop Tool Controls:
+   Left Click        Place horizon point
+   Right Click       Remove previous point
+   Scroll Wheel      Zoom in/out
+   +/- Keys          Zoom in/out
+   
+   Zoom Buttons:
+   Generate Target   Save points to memory (ok to close window after)
+   Save Points       Save points to disk for usage later
+   Load Points       Load a previous set of points
+   Clear all         Remove all points
+   Zoom In/Out       Zoom in/out
+   Fit to Window     Zoom to fit image vertically
+   100% (1:1)        Zoom to full resolution
+
+   Vertical Stretch Buttons:
+   Increase          Stretch image vertically (increases apparent curvature)
+   Decrease          Relax image vertically (decreases apparent curvature)
+   Reset (1x)        Restore original vertical ratio
+
 
 .. tip::
-   **Clicking strategy:** Click 15-25 points spread evenly across the horizon. More points near areas of high curvature, fewer where horizon is straighter. The spline will interpolate smoothly between your points.
+   **Clicking strategy:** Click 10-15 points spread evenly across the horizon. More points near areas of high curvature, fewer where horizon is straighter. Don't be shy with the vertical stretch button -- this makes it dramatically easier to see the curve and place points accurately.
+
+.. figure:: images/annotated.png
+   :width: 100%
+
+   Annotating using a 4.5x vertical stretch.
 
 Parameter Fitting
 ^^^^^^^^^^^^^^^^
@@ -288,7 +361,7 @@ Expected Output
    Your error: 137 km (2.2%)
    🎉 Excellent measurement!
 
-Part 4: Understanding Your Results
+Part 5: Understanding Your Results
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 What to Expect
@@ -401,7 +474,7 @@ For more consistent results across multiple photos:
        maxiter=800
    )
 
-Part 5: Educational Extensions
+Part 6: Educational Extensions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Class Projects
@@ -484,7 +557,7 @@ Advanced Challenges
    3. Could achieve <5% accuracy
    4. Great science fair project!
 
-Part 6: Troubleshooting
+Part 7: Troubleshooting
 ~~~~~~~~~~~~~~~~~~~~~~
 
 Common Issues
@@ -519,6 +592,34 @@ Override with manual field-of-view:
        planet="earth",
        override_fov_deg=75  # Typical smartphone FOV
    )
+
+**"My photo has the aircraft wing in it"**
+
+Use the crop tool to remove obstructions:
+
+.. code-block:: python
+
+   from planet_ruler.crop import crop_observation_image
+   
+   # Interactive crop to remove wing
+   cropped_img, scaled_params, crop_bounds = crop_observation_image(
+       image_path="airplane_photo.jpg",
+       initial_parameters=config['observation']
+   )
+   
+   # Instructions will appear:
+   # - Drag to select region without wing
+   # - Ensure full horizon arc is included
+   # - Click "Crop & Save" when done
+   
+   # Save cropped image
+   cropped_img.save("airplane_photo_cropped.jpg")
+   
+   # Update config with scaled parameters
+   config['observation'].update(scaled_params)
+   
+   # Continue with normal workflow
+   obs = pr.LimbObservation("airplane_photo_cropped.jpg", config)
 
 **"Result varies between photos"**
 
@@ -592,7 +693,7 @@ Even if your measurement had 20% error, you:
 * Quantified uncertainty in your data
 * Connected ancient science to modern tools
 
-That's what science is about. Well done! 🌍✈️🔬
+That's what science is about. Well done!
 
 .. tip::
    **For Educators:** This tutorial aligns with NGSS standards for Earth and Space Sciences (ESS1), Engineering Design (ETS1), and Common Core Math standards for Geometry and Statistics. Consider using as a semester-long project with data collection, analysis, and presentation components.
