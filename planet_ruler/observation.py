@@ -232,33 +232,44 @@ class PlanetObservation:
         logger = logging.getLogger(__name__)
 
         # Check if this observation has camera parameters (duck typing)
-        has_parameters = hasattr(self, 'init_parameter_values') and self.init_parameter_values is not None
+        has_parameters = (
+            hasattr(self, "init_parameter_values")
+            and self.init_parameter_values is not None
+        )
 
         # Prepare current parameters for the cropper (if they exist)
         current_params = {}
         if has_parameters:
             current_params = {
-                'w': self.init_parameter_values.get('w'),
-                'n_pix_x': self.image.shape[1],
-                'n_pix_y': self.image.shape[0],
-                'x0': self.init_parameter_values.get('x0', self.image.shape[1] / 2),
-                'y0': self.init_parameter_values.get('y0', self.image.shape[0] / 2),
+                "w": self.init_parameter_values.get("w"),
+                "n_pix_x": self.image.shape[1],
+                "n_pix_y": self.image.shape[0],
+                "x0": self.init_parameter_values.get("x0", self.image.shape[1] / 2),
+                "y0": self.init_parameter_values.get("y0", self.image.shape[0] / 2),
             }
 
             # Include h_detector if present
-            if 'h_detector' in self.init_parameter_values:
-                current_params['h_detector'] = self.init_parameter_values['h_detector']
+            if "h_detector" in self.init_parameter_values:
+                current_params["h_detector"] = self.init_parameter_values["h_detector"]
 
             logger.info("Opening interactive crop tool...")
             logger.info(f"Current detector width: {current_params['w']*1000:.3f}mm")
-            logger.info(f"Current image size: {current_params['n_pix_x']}×{current_params['n_pix_y']}px")
-            logger.info(f"Current principal point: ({current_params['x0']:.0f}, {current_params['y0']:.0f})")
+            logger.info(
+                f"Current image size: {current_params['n_pix_x']}×{current_params['n_pix_y']}px"
+            )
+            logger.info(
+                f"Current principal point: ({current_params['x0']:.0f}, {current_params['y0']:.0f})"
+            )
         else:
             logger.info("Opening interactive crop tool (no parameter scaling)...")
-            logger.info(f"Current image size: {self.image.shape[1]}×{self.image.shape[0]}px")
+            logger.info(
+                f"Current image size: {self.image.shape[1]}×{self.image.shape[0]}px"
+            )
 
         # Run the crop tool
-        cropper = TkImageCropper(self.image_filepath, current_params if has_parameters else None)
+        cropper = TkImageCropper(
+            self.image_filepath, current_params if has_parameters else None
+        )
         cropper.run()
 
         # Check if user completed the crop
@@ -283,30 +294,32 @@ class PlanetObservation:
         # Save cropped image to disk (optional)
         if save_cropped:
             output_path = (
-                Path(self.image_filepath).parent / 
-                f"{Path(self.image_filepath).stem}_cropped.jpg"
+                Path(self.image_filepath).parent
+                / f"{Path(self.image_filepath).stem}_cropped.jpg"
             )
             PILImage.fromarray(self.image).save(output_path, quality=95)
             logger.info(f"Saved cropped image to: {output_path}")
-            
+
             # Update filepath to point to cropped version
             self.image_filepath = str(output_path)
 
         # Update parameters (only if they exist and user wants to)
         if has_parameters and update_parameters:
             scaled_params = cropper.scaled_parameters
-            
+
             logger.info("Updating observation parameters...")
             logger.info(f"New detector width: {scaled_params['w']*1000:.3f}mm")
-            logger.info(f"New image size: {scaled_params['n_pix_x']}×{scaled_params['n_pix_y']}px")
-            
+            logger.info(
+                f"New image size: {scaled_params['n_pix_x']}×{scaled_params['n_pix_y']}px"
+            )
+
             # ================================================================
             # CHECK: Inform user if principal point is out of bounds
             # (But don't change it - the math works fine)
             # ================================================================
-            x0_in_bounds = 0 <= scaled_params['x0'] < scaled_params['n_pix_x']
-            y0_in_bounds = 0 <= scaled_params['y0'] < scaled_params['n_pix_y']
-            
+            x0_in_bounds = 0 <= scaled_params["x0"] < scaled_params["n_pix_x"]
+            y0_in_bounds = 0 <= scaled_params["y0"] < scaled_params["n_pix_y"]
+
             if not x0_in_bounds or not y0_in_bounds:
                 logger.info(
                     f"Principal point ({scaled_params['x0']:.0f}, {scaled_params['y0']:.0f}) "
@@ -314,38 +327,44 @@ class PlanetObservation:
                     f"0-{scaled_params['n_pix_y']}.  Should still be geometrically valid.)"
                 )
             else:
-                logger.info(f"New principal point: ({scaled_params['x0']:.0f}, {scaled_params['y0']:.0f}) [✓ in bounds]")
-            
+                logger.info(
+                    f"New principal point: ({scaled_params['x0']:.0f}, {scaled_params['y0']:.0f}) [✓ in bounds]"
+                )
+
             # Update pixel dimensions
-            self.init_parameter_values['n_pix_x'] = scaled_params['n_pix_x']
-            self.init_parameter_values['n_pix_y'] = scaled_params['n_pix_y']
-            
+            self.init_parameter_values["n_pix_x"] = scaled_params["n_pix_x"]
+            self.init_parameter_values["n_pix_y"] = scaled_params["n_pix_y"]
+
             # Update principal point
-            self.init_parameter_values['x0'] = scaled_params['x0']
-            self.init_parameter_values['y0'] = scaled_params['y0']
-            
+            self.init_parameter_values["x0"] = scaled_params["x0"]
+            self.init_parameter_values["y0"] = scaled_params["y0"]
+
             # Update detector size (CRITICAL)
-            if 'w' in scaled_params:
-                old_w = self.init_parameter_values.get('w', 0)
-                self.init_parameter_values['w'] = scaled_params['w']
+            if "w" in scaled_params:
+                old_w = self.init_parameter_values.get("w", 0)
+                self.init_parameter_values["w"] = scaled_params["w"]
                 logger.info(
                     f"  Scaled detector width: {old_w*1000:.3f}mm → "
                     f"{scaled_params['w']*1000:.3f}mm"
                 )
-            
+
             # Update detector height if present
-            if 'h_detector' in scaled_params:
-                self.init_parameter_values['h_detector'] = scaled_params['h_detector']
-            
+            if "h_detector" in scaled_params:
+                self.init_parameter_values["h_detector"] = scaled_params["h_detector"]
+
             # Update parameter limits for detector width if they exist
-            if hasattr(self, 'parameter_limits') and self.parameter_limits is not None:
-                if 'w' in self.parameter_limits and 'w' in scaled_params and 'w' in current_params:
+            if hasattr(self, "parameter_limits") and self.parameter_limits is not None:
+                if (
+                    "w" in self.parameter_limits
+                    and "w" in scaled_params
+                    and "w" in current_params
+                ):
                     # Scale the limits proportionally
-                    crop_ratio = scaled_params['w'] / current_params['w']
-                    old_limits = self.parameter_limits['w']
-                    self.parameter_limits['w'] = [
+                    crop_ratio = scaled_params["w"] / current_params["w"]
+                    old_limits = self.parameter_limits["w"]
+                    self.parameter_limits["w"] = [
                         old_limits[0] * crop_ratio,
-                        old_limits[1] * crop_ratio
+                        old_limits[1] * crop_ratio,
                     ]
                     logger.info(
                         f"  Scaled detector width limits: "
@@ -363,7 +382,9 @@ class PlanetObservation:
             logger.info("Parameters NOT updated (update_parameters=False)")
 
         elif not has_parameters:
-            logger.info("No parameters to update (observation type has no camera parameters)")
+            logger.info(
+                "No parameters to update (observation type has no camera parameters)"
+            )
 
         return self
 

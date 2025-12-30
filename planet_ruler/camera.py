@@ -34,7 +34,6 @@ CAMERA_DB = {
     # ========================================================================
     # Multi-Camera Phones
     # ========================================================================
-    
     # Samsung Galaxy S22+ (SM-S906E/B/U variants)
     "SM-S906E": {
         "type": "phone",
@@ -65,7 +64,6 @@ CAMERA_DB = {
             },
         ],
     },
-    
     # Samsung Galaxy S22 Ultra (SM-S908E/B/U)
     "SM-S908E": {
         "type": "phone",
@@ -104,7 +102,6 @@ CAMERA_DB = {
             },
         ],
     },
-    
     # iPhone 13 (base model)
     "iPhone 13": {
         "type": "phone",
@@ -127,7 +124,6 @@ CAMERA_DB = {
             },
         ],
     },
-    
     # iPhone 13 Pro/Pro Max
     "iPhone 13 Pro": {
         "type": "phone",
@@ -158,7 +154,6 @@ CAMERA_DB = {
             },
         ],
     },
-    
     # iPhone 14 Pro/Pro Max
     "iPhone 14 Pro": {
         "type": "phone",
@@ -189,7 +184,6 @@ CAMERA_DB = {
             },
         ],
     },
-    
     # iPhone 15 Pro/Pro Max
     "iPhone 15 Pro": {
         "type": "phone",
@@ -220,7 +214,6 @@ CAMERA_DB = {
             },
         ],
     },
-    
     # iPhone 15 Pro Max (different telephoto)
     "iPhone 15 Pro Max": {
         "type": "phone",
@@ -251,7 +244,6 @@ CAMERA_DB = {
             },
         ],
     },
-    
     # Google Pixel 7 Pro
     "Pixel 7 Pro": {
         "type": "phone",
@@ -438,14 +430,21 @@ def get_camera_model(exif_data: Dict) -> Optional[str]:
     candidate_models = []
     for known_model in CAMERA_DB:
         # Skip sensor size entries and very short entries that might cause false matches
-        if len(known_model) <= 3 or known_model in ["1", "1/1.7", "1/2.3", "APS-C", "Full Frame", "default"]:
+        if len(known_model) <= 3 or known_model in [
+            "1",
+            "1/1.7",
+            "1/2.3",
+            "APS-C",
+            "Full Frame",
+            "default",
+        ]:
             continue
-            
+
         if known_model.lower() in full_model.lower():
             candidate_models.append(known_model)
         elif known_model.lower() in model.lower():
             candidate_models.append(known_model)
-    
+
     if candidate_models:
         # Return the longest match (most specific)
         return max(candidate_models, key=len)
@@ -463,30 +462,30 @@ def get_camera_model(exif_data: Dict) -> Optional[str]:
 def get_aperture(exif_data: Dict) -> Optional[float]:
     """
     Extract aperture (f-number) from EXIF data.
-    
+
     Args:
         exif_data: EXIF dictionary
-    
+
     Returns:
         Aperture as float (e.g., 2.4 for f/2.4), or None if not found
     """
     if not exif_data:
         return None
-    
+
     try:
         from PIL.ExifTags import TAGS
-        
+
         # Look for FNumber or ApertureValue tags
         for tag_id, value in exif_data.items():
             tag_name = TAGS.get(tag_id, tag_id)
-            
+
             if tag_name == "FNumber":
                 # FNumber is typically stored as rational (numerator, denominator)
                 if isinstance(value, tuple):
                     return value[0] / value[1]
                 else:
                     return float(value)
-            
+
             elif tag_name == "ApertureValue":
                 # ApertureValue is stored as APEX value: f-number = 2^(value/2)
                 if isinstance(value, tuple):
@@ -494,44 +493,46 @@ def get_aperture(exif_data: Dict) -> Optional[float]:
                 else:
                     apex = float(value)
                 return 2 ** (apex / 2)
-        
+
     except Exception as e:
         logger.debug(f"Could not extract aperture: {e}")
-    
+
     return None
 
 
-def match_camera_module(camera_data: Dict, focal_length_mm: float, aperture: Optional[float] = None) -> Dict:
+def match_camera_module(
+    camera_data: Dict, focal_length_mm: float, aperture: Optional[float] = None
+) -> Dict:
     """
     Match specific camera module for multi-camera phones.
-    
+
     Uses focal length as primary matcher, aperture as secondary confirmation.
     Falls back to main camera if no match found.
-    
+
     Args:
         camera_data: Camera entry from CAMERA_DB
         focal_length_mm: Actual focal length from EXIF
         aperture: F-number from EXIF (optional)
-    
+
     Returns:
         Camera module dict with sensor_width, sensor_height, etc.
     """
     # Legacy format: single camera (no "cameras" array)
     if "cameras" not in camera_data:
         return camera_data
-    
+
     # Multi-camera phone: match based on focal length + aperture
     cameras = camera_data["cameras"]
-    
+
     # Tolerance for focal length matching (±0.3mm accounts for manufacturing variance)
     FOCAL_LENGTH_TOLERANCE = 0.3
-    
+
     best_match = None
     best_score = -1
-    
+
     for cam in cameras:
         score = 0
-        
+
         # Primary: Focal length match
         focal_diff = abs(cam["focal_length_mm"] - focal_length_mm)
         if focal_diff <= FOCAL_LENGTH_TOLERANCE:
@@ -539,7 +540,7 @@ def match_camera_module(camera_data: Dict, focal_length_mm: float, aperture: Opt
             score -= focal_diff * 10  # Prefer closer matches
         else:
             continue  # Skip if focal length doesn't match
-        
+
         # Secondary: Aperture match (if available)
         if aperture is not None and "aperture" in cam:
             aperture_diff = abs(cam["aperture"] - aperture)
@@ -548,18 +549,18 @@ def match_camera_module(camera_data: Dict, focal_length_mm: float, aperture: Opt
             elif aperture_diff < 0.5:
                 score += 20  # Close enough
             # Larger diff doesn't disqualify, just doesn't add points
-        
+
         if score > best_score:
             best_score = score
             best_match = cam
-    
+
     if best_match:
         logger.info(
             f"Matched '{best_match['name']}' camera: "
             f"f={best_match['focal_length_mm']:.1f}mm, f/{best_match['aperture']}"
         )
         return best_match
-    
+
     # No match found - fall back to main camera with warning
     main_camera = cameras[0]  # Convention: main camera is first
     logger.warning(
@@ -600,19 +601,19 @@ def get_image_dimensions(image_path: str) -> Tuple[int, int]:
 def get_image_orientation_from_exif(exif_data: Optional[Dict] = None) -> Optional[str]:
     """
     Determine orientation from EXIF Orientation tag only.
-    
+
     Args:
         exif_data: Pre-extracted EXIF data
-    
+
     Returns:
         'portrait', 'landscape', or None if can't determine
     """
     if exif_data is None:
         return None
-    
+
     try:
         from PIL.ExifTags import TAGS
-        
+
         # Find Orientation tag
         orientation = None
         for tag_id, value in exif_data.items():
@@ -620,85 +621,86 @@ def get_image_orientation_from_exif(exif_data: Optional[Dict] = None) -> Optiona
             if tag_name == "Orientation":
                 orientation = value
                 break
-        
+
         if orientation is not None:
             # Values 5, 6, 7, 8 indicate 90° or 270° rotation
             if orientation in [5, 6, 7, 8]:
                 logger.info(f"EXIF Orientation={orientation}: portrait mode detected")
-                return 'portrait'
+                return "portrait"
             else:
                 logger.info(f"EXIF Orientation={orientation}: landscape mode detected")
-                return 'landscape'
+                return "landscape"
     except Exception as e:
         logger.debug(f"Could not read EXIF Orientation tag: {e}")
-    
+
     return None
 
 
 def get_image_orientation_from_dimensions(width: int, height: int) -> str:
     """
     Determine orientation from image dimensions (heuristic).
-    
+
     Args:
         width: Image width in pixels
         height: Image height in pixels
-    
+
     Returns:
         'portrait' or 'landscape'
     """
     if height > width:
         logger.info(f"Image dimensions {width}×{height}: portrait mode (heuristic)")
-        return 'portrait'
+        return "portrait"
     else:
         logger.info(f"Image dimensions {width}×{height}: landscape mode (heuristic)")
-        return 'landscape'
+        return "landscape"
 
 
-def apply_orientation_correction(params: Dict, exif_data: Optional[Dict] = None) -> Dict:
+def apply_orientation_correction(
+    params: Dict, exif_data: Optional[Dict] = None
+) -> Dict:
     """
     Apply orientation correction to camera parameters.
-    
+
     This modifies params in-place and returns it.
     Call this RIGHT BEFORE each return statement in extract_camera_parameters().
-    
+
     Args:
         params: Camera parameters dict (must have image_width_px, image_height_px)
         exif_data: Optional pre-extracted EXIF data
-    
+
     Returns:
         params: Modified parameters (same object, modified in-place)
     """
     # Detect orientation (try EXIF first, fall back to dimensions)
     orientation = get_image_orientation_from_exif(exif_data)
-    
+
     if orientation is None:
         # Fall back to dimensions (already in params, no file I/O needed!)
         if params.get("image_width_px") and params.get("image_height_px"):
             orientation = get_image_orientation_from_dimensions(
-                params["image_width_px"],
-                params["image_height_px"]
+                params["image_width_px"], params["image_height_px"]
             )
         else:
             # Can't determine orientation, skip correction
             logger.debug("Cannot determine orientation - skipping sensor correction")
             return params
-    
+
     # Correct sensor dimensions
     if params["sensor_width_mm"] is not None and params["sensor_height_mm"] is not None:
         sensor_is_landscape = params["sensor_width_mm"] > params["sensor_height_mm"]
-        
+
         # If orientations don't match, swap dimensions
-        if orientation == 'portrait' and sensor_is_landscape:
+        if orientation == "portrait" and sensor_is_landscape:
             logger.info(
                 f"Portrait image with landscape sensor: swapping dimensions "
                 f"{params['sensor_width_mm']:.1f}mm × {params['sensor_height_mm']:.1f}mm → "
                 f"{params['sensor_height_mm']:.1f}mm × {params['sensor_width_mm']:.1f}mm"
             )
             params["sensor_width_mm"], params["sensor_height_mm"] = (
-                params["sensor_height_mm"], 
-                params["sensor_width_mm"]
+                params["sensor_height_mm"],
+                params["sensor_width_mm"],
             )
-        elif orientation == 'landscape' and not sensor_is_landscape:
+        elif orientation == "landscape" and not sensor_is_landscape:
             logger.info(
                 f"Landscape image with portrait sensor: swapping dimensions "
                 f"{params['sensor_width_mm']:.1f}mm × {params['sensor_height_mm']:.1f}mm → "
@@ -706,28 +708,34 @@ def apply_orientation_correction(params: Dict, exif_data: Optional[Dict] = None)
             )
             params["sensor_width_mm"], params["sensor_height_mm"] = (
                 params["sensor_height_mm"],
-                params["sensor_width_mm"]
+                params["sensor_width_mm"],
             )
-    
+
     # Also correct min/max ranges if they exist
     if params.get("sensor_width_min") and params.get("sensor_height_min"):
-        sensor_min_is_landscape = params["sensor_width_min"] > params["sensor_height_min"]
-        if (orientation == 'portrait' and sensor_min_is_landscape) or \
-           (orientation == 'landscape' and not sensor_min_is_landscape):
+        sensor_min_is_landscape = (
+            params["sensor_width_min"] > params["sensor_height_min"]
+        )
+        if (orientation == "portrait" and sensor_min_is_landscape) or (
+            orientation == "landscape" and not sensor_min_is_landscape
+        ):
             params["sensor_width_min"], params["sensor_height_min"] = (
                 params["sensor_height_min"],
-                params["sensor_width_min"]
+                params["sensor_width_min"],
             )
-    
+
     if params.get("sensor_width_max") and params.get("sensor_height_max"):
-        sensor_max_is_landscape = params["sensor_width_max"] > params["sensor_height_max"]
-        if (orientation == 'portrait' and sensor_max_is_landscape) or \
-           (orientation == 'landscape' and not sensor_max_is_landscape):
+        sensor_max_is_landscape = (
+            params["sensor_width_max"] > params["sensor_height_max"]
+        )
+        if (orientation == "portrait" and sensor_max_is_landscape) or (
+            orientation == "landscape" and not sensor_max_is_landscape
+        ):
             params["sensor_width_max"], params["sensor_height_max"] = (
                 params["sensor_height_max"],
-                params["sensor_width_max"]
+                params["sensor_width_max"],
             )
-    
+
     return params
 
 
@@ -765,7 +773,7 @@ def get_sensor_statistics_by_type(camera_type: str) -> Optional[Dict]:
     # Collect sensor dimensions, handling both old and new camera database formats
     widths = []
     heights = []
-    
+
     for cam in cameras_of_type:
         # Multi-camera format
         if "cameras" in cam:
@@ -895,15 +903,19 @@ def extract_camera_parameters(image_path: str) -> Dict:
     # Strategy 1: Known camera model (highest confidence)
     if camera_model and camera_model in CAMERA_DB:
         camera_data = CAMERA_DB[camera_model]
-        
+
         # For multi-camera phones, match specific camera module
         aperture = get_aperture(exif_data)
         if focal_length_mm is not None:
             camera_module = match_camera_module(camera_data, focal_length_mm, aperture)
         else:
             # If no focal length, use first camera (main) as fallback
-            camera_module = camera_data.get("cameras", [camera_data])[0] if "cameras" in camera_data else camera_data
-        
+            camera_module = (
+                camera_data.get("cameras", [camera_data])[0]
+                if "cameras" in camera_data
+                else camera_data
+            )
+
         params["sensor_width_mm"] = camera_module.get("sensor_width", None)
         params["sensor_height_mm"] = camera_module.get("sensor_height", None)
 
