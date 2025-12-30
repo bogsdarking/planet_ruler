@@ -127,7 +127,7 @@ class TkImageCropper:
             **button_config,
         )
         btn_crop.pack(side=tk.LEFT, padx=3)
-        
+
         btn_crop_only = tk.Button(
             top_frame,
             text="Crop (No Save)",
@@ -139,7 +139,10 @@ class TkImageCropper:
         clear_config = button_config.copy()
         clear_config.update({"bg": "#f44336", "activebackground": "#da190b"})
         btn_clear = tk.Button(
-            top_frame, text="Clear Selection", command=self.clear_selection, **clear_config
+            top_frame,
+            text="Clear Selection",
+            command=self.clear_selection,
+            **clear_config,
         )
         btn_clear.pack(side=tk.LEFT, padx=3)
 
@@ -327,7 +330,7 @@ class TkImageCropper:
         """Redraw crop rectangle at current zoom."""
         # Delete old crop rectangle first (prevents echoes during drag)
         self.canvas.delete("crop_rect")
-        
+
         if self.crop_rect is None:
             return
 
@@ -352,10 +355,17 @@ class TkImageCropper:
 
         # Draw corner handles
         r = 5  # handle radius
-        for x, y in [(x1_disp, y1_disp), (x2_disp, y1_disp), 
-                     (x1_disp, y2_disp), (x2_disp, y2_disp)]:
+        for x, y in [
+            (x1_disp, y1_disp),
+            (x2_disp, y1_disp),
+            (x1_disp, y2_disp),
+            (x2_disp, y2_disp),
+        ]:
             self.canvas.create_oval(
-                x - r, y - r, x + r, y + r,
+                x - r,
+                y - r,
+                x + r,
+                y + r,
                 fill="yellow",
                 outline="black",
                 width=2,
@@ -416,15 +426,17 @@ class TkImageCropper:
         self.drag_start = None
         self.canvas.delete("crop_rect")
         self.update_status()
-    
+
     def update_status(self):
         """Update status text."""
         self.status_label.config(text=self.get_status_text())
 
     def get_status_text(self) -> str:
         """Generate status text."""
-        base = f"Original: {self.width}×{self.height}px | Zoom: {self.zoom_level*100:.0f}%"
-        
+        base = (
+            f"Original: {self.width}×{self.height}px | Zoom: {self.zoom_level*100:.0f}%"
+        )
+
         if self.crop_rect:
             x1, y1, x2, y2 = self.crop_rect
             w = int(x2 - x1)
@@ -432,7 +444,7 @@ class TkImageCropper:
             base += f" | Crop: {w}×{h}px ({100*w/self.width:.1f}% × {100*h/self.height:.1f}%)"
         else:
             base += " | No selection"
-        
+
         return base
 
     def calculate_scaled_parameters(self) -> Dict:
@@ -457,35 +469,35 @@ class TkImageCropper:
         scaled = self.initial_parameters.copy()
 
         # Update pixel dimensions
-        scaled['n_pix_x'] = int(crop_width)
-        scaled['n_pix_y'] = int(crop_height)
+        scaled["n_pix_x"] = int(crop_width)
+        scaled["n_pix_y"] = int(crop_height)
 
         # Update principal point (shift and scale)
-        if 'x0' in scaled:
-            scaled['x0'] = (scaled['x0'] - x1)
+        if "x0" in scaled:
+            scaled["x0"] = scaled["x0"] - x1
         else:
             # Default principal point is center
-            scaled['x0'] = crop_width / 2
+            scaled["x0"] = crop_width / 2
 
-        if 'y0' in scaled:
-            scaled['y0'] = (scaled['y0'] - y1)
+        if "y0" in scaled:
+            scaled["y0"] = scaled["y0"] - y1
         else:
-            scaled['y0'] = crop_height / 2
+            scaled["y0"] = crop_height / 2
 
         # CRITICAL: Update detector size (effective field of view)
         # The detector width represents the physical sensor dimension
         # When cropping, we're using a fraction of that sensor
-        if 'w' in scaled:
+        if "w" in scaled:
             # Scale detector width by crop fraction
-            scaled['w'] = scaled['w'] * scale_x
+            scaled["w"] = scaled["w"] * scale_x
             logger.info(
                 f"Scaled detector width: {self.initial_parameters['w']*1000:.3f}mm "
                 f"→ {scaled['w']*1000:.3f}mm (crop ratio: {scale_x:.3f})"
             )
-        
+
         # Similarly for height if provided
-        if 'h_detector' in scaled:
-            scaled['h_detector'] = scaled['h_detector'] * scale_y
+        if "h_detector" in scaled:
+            scaled["h_detector"] = scaled["h_detector"] * scale_y
 
         # Focal length (f) does NOT change - it's a lens property
         # Field of view will automatically update via: fov = 2 * arctan(w / (2*f))
@@ -495,9 +507,7 @@ class TkImageCropper:
     def crop_and_save(self):
         """Perform crop and optionally save results."""
         if self.crop_rect is None:
-            messagebox.showwarning(
-                "No Selection", "Please select a crop region first"
-            )
+            messagebox.showwarning("No Selection", "Please select a crop region first")
             return
 
         x1, y1, x2, y2 = self.crop_rect
@@ -527,7 +537,7 @@ class TkImageCropper:
             f"Saved to: {output_path}\n\n"
         )
 
-        if 'w' in self.scaled_parameters:
+        if "w" in self.scaled_parameters:
             msg += (
                 f"Scaled Parameters:\n"
                 f"  detector_width: {self.initial_parameters['w']*1000:.3f}mm "
@@ -541,15 +551,13 @@ class TkImageCropper:
             )
 
         messagebox.showinfo("Crop Complete", msg)
-        
+
         # Don't close window - let user close manually like annotate tool
-    
+
     def crop_only(self):
         """Perform crop without saving to disk (in-memory only)."""
         if self.crop_rect is None:
-            messagebox.showwarning(
-                "No Selection", "Please select a crop region first"
-            )
+            messagebox.showwarning("No Selection", "Please select a crop region first")
             return
 
         x1, y1, x2, y2 = self.crop_rect
@@ -572,7 +580,7 @@ class TkImageCropper:
             f"Crop region: ({x1}, {y1}) to ({x2}, {y2})\n\n"
         )
 
-        if 'w' in self.scaled_parameters:
+        if "w" in self.scaled_parameters:
             msg += (
                 f"Scaled Parameters:\n"
                 f"  detector_width: {self.initial_parameters['w']*1000:.3f}mm "
@@ -586,7 +594,7 @@ class TkImageCropper:
             )
 
         messagebox.showinfo("Crop Complete", msg)
-        
+
         # Don't close window - let user close manually like annotate tool
 
     def run(self):
@@ -597,7 +605,7 @@ class TkImageCropper:
         """Get crop bounds in original coordinates."""
         if self.crop_rect is None:
             return None
-        
+
         x1, y1, x2, y2 = self.crop_rect
         return (int(x1), int(y1), int(x2), int(y2))
 
@@ -664,11 +672,11 @@ if __name__ == "__main__":
 
     # Example parameters
     example_params = {
-        'w': 0.0236,  # 23.6mm detector width
-        'n_pix_x': 4000,
-        'n_pix_y': 3000,
-        'x0': 2000,
-        'y0': 1500,
+        "w": 0.0236,  # 23.6mm detector width
+        "n_pix_x": 4000,
+        "n_pix_y": 3000,
+        "x0": 2000,
+        "y0": 1500,
     }
 
     cropper = TkImageCropper(image_path, example_params)

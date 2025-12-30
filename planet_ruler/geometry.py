@@ -534,7 +534,7 @@ def limb_arc(
         x_pixel_arr = np.arange(n_pix_x)
     else:
         x_pixel_arr = x_coords  # Use sparse coordinates!
-    
+
     y_pixel = np.zeros(len(x_pixel_arr))
     phi_solutions = np.zeros(len(x_pixel_arr))
 
