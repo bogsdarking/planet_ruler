@@ -115,7 +115,8 @@ exclude = [
     "*.egg-info",
     "notebooks/build_demos.ipynb",
     "notebooks/tutorials/quick_reference.md",
-    "demo/images/beach-ocean-panorama-187916.jpg"
+    "demo/images/beach-ocean-panorama-187916.jpg",
+    "planet_ruler/benchmarks",
 ]
 
 [tool.coverage.run]
