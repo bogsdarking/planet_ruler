@@ -86,6 +86,8 @@ docs/generated/
 *.pickle
 *.h5
 *.hdf5
+*.db
+*.json
 
 # Temporary files
 *.tmp

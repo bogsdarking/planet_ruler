@@ -1,0 +1,43 @@
+# Smoke Test Configuration
+
+scenarios:
+  - name: "smoke_manual_default"
+    images: ["pexels-claiton-17217951_exif"]
+    detection_method: "manual"
+    annotation_file: "pexels-claiton-17217951_exif.json"
+    planet_name: "Earth"
+    expected_radius: 6371000
+    uncertainty_radius: 10000
+    perturbation_factor: 0.5
+    fit_params:
+      max_iter: 100
+    minimizer: "differential-evolution"
+
+  - name: "smoke_gradient_fast"
+    images: ["pexels-claiton-17217951_exif"]
+    detection_method: "gradient-field"
+    planet_name: "Earth"
+    expected_radius: 6371000
+    uncertainty_radius: 10000
+    perturbation_factor: 0.5
+    fit_params:
+      max_iter: 50
+      resolution_stages: [4]
+    minimizer: "differential-evolution"
+
+  - name: "smoke_gradient_multires"
+    images: ["pexels-claiton-17217951_exif"]
+    detection_method: "gradient-field"
+    planet_name: "Earth"
+    expected_radius: 6371000
+    uncertainty_radius: 10000
+    perturbation_factor: 0.5
+    fit_params:
+      max_iter: 100
+      resolution_stages: [8, 4, 2, 1]
+    minimizer: "differential-evolution"
+
+thresholds:
+  max_time: 15.0
+  max_relative_error: 0.20
+  min_success_rate: 0.90
