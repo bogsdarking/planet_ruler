@@ -18,31 +18,31 @@ When to Use Gradient-Field
 * Complex cloud structures (use segmentation or manual)
 
 Prerequisites
-~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 * Python 3.8+ with Planet Ruler installed
 * Clear horizon photograph
 * Camera configuration file or auto-config
 
 Step 1: Basic Gradient-Field Measurement
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-   import planet_ruler.observation as obs
+   from planet_ruler.observation import LimbObservation
    from planet_ruler.uncertainty import calculate_parameter_uncertainty
    
    # Load observation
-   observation = obs.LimbObservation(
+   obs = LimbObservation(
        image_filepath="demo/images/ISS_Earth_horizon.jpg",
        fit_config="config/earth_iss_1.yaml"
    )
    
    # Gradient-field detection will do nothing (it isn't needed!)
-   observation.detect_limb(detection_method="gradient-field")
+   obs.detect_limb(detection_method="gradient-field")
    
    # Fitting is where the magic happens instead
-   observation.fit_limb(
+   obs.fit_limb(
        loss_function="gradient_field", # Need to specify this!
        minimizer='dual-annealing',
        resolution_stages='auto',  # Multi-resolution optimization
@@ -51,23 +51,23 @@ Step 1: Basic Gradient-Field Measurement
    
    # Calculate uncertainty
    result = calculate_parameter_uncertainty(
-       observation, "r",
+       obs, "r",
        scale_factor=1000,
        method='auto'
    )
    
-   print(f"Radius: {result['uncertainty']:.1f} km")
-   observation.plot()
+   print(f"Radius: {result['value']:.1f} ± {result['uncertainty']:.1f} km")
+   obs.plot()
 
 Step 2: Understanding Gradient-Field Parameters
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The gradient-field method has several configurable parameters:
 
 .. code-block:: python
 
    # Configure gradient-field detection
-    observation.fit_limb(
+    obs.fit_limb(
         minimizer = "dual-annealing",
         loss_function="gradient_field",
         image_smoothing=2.0,
@@ -100,14 +100,14 @@ The gradient-field method has several configurable parameters:
   * Smaller values: Slower decay, includes more distant pixels
 
 Step 3: Multi-Resolution Optimization
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Gradient-field detection benefits greatly from multi-resolution optimization:
 
 .. code-block:: python
 
    # Automatic multi-resolution (recommended)
-   observation.fit_limb(
+   obs.fit_limb(
        minimizer="dual-annealing",
        loss_function="gradient_field",
        resolution_stages='auto',  # Automatically generates stages
@@ -115,15 +115,15 @@ Gradient-field detection benefits greatly from multi-resolution optimization:
    )
    
    # Manual multi-resolution configuration
-   observation.fit_limb(
-       minimizer="dual-annealing"
+   obs.fit_limb(
+       minimizer="dual-annealing",
        loss_function="gradient_field",
        resolution_stages=[4, 2, 1],  # Downsample factors: 4x → 2x → 1x
        maxiter=1000
    )
    
    # Single resolution (faster but may miss global optimum)
-   observation.fit_limb(
+   obs.fit_limb(
        minimizer="dual-annealing",
        loss_function="gradient_field",
        resolution_stages=None,  # No multi-resolution
@@ -145,7 +145,7 @@ Different minimizers have different characteristics:
 .. code-block:: python
 
    # Differential evolution: Best for complex problems
-   observation.fit_limb(
+   obs.fit_limb(
        minimizer='differential-evolution',
        resolution_stages='auto',
        popsize=15,
@@ -156,7 +156,7 @@ Different minimizers have different characteristics:
    # Cons: Slowest
    
    # Dual annealing: Good balance
-   observation.fit_limb(
+   obs.fit_limb(
        minimizer='dual-annealing',
        resolution_stages='auto',
        maxiter=1000,
@@ -166,7 +166,7 @@ Different minimizers have different characteristics:
    # Cons: No population (use Hessian for uncertainty)
    
    # Basinhopping: Fastest
-   observation.fit_limb(
+   obs.fit_limb(
        minimizer='basinhopping',
        resolution_stages='auto',
        niter=100,
@@ -176,43 +176,44 @@ Different minimizers have different characteristics:
    # Cons: May miss global optimum, use with multi-resolution
 
 Step 5: Visualizing Gradient-Field Results
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
    import matplotlib.pyplot as plt
    import numpy as np
+   import planet_ruler.geometry
    
    # Create comprehensive visualization
    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
    
    # Original image
-   axes[0, 0].imshow(observation.image_data)
+   axes[0, 0].imshow(obs.image_data)
    axes[0, 0].set_title("Original Image")
    axes[0, 0].axis('off')
    
    # Gradient field
-   observation.plot(gradient=True, ax=axes[0, 1], show=False)
+   obs.plot(gradient=True, ax=axes[0, 1], show=False)
    axes[0, 1].set_title("Gradient Field")
    
    # Detected limb overlay
-   axes[1, 0].imshow(observation.image_data)
-   x = np.arange(len(observation.features["limb"]))
-   axes[1, 0].plot(x, observation.features["limb"], 'r-', linewidth=2)
+   axes[1, 0].imshow(obs.image_data)
+   x = np.arange(len(obs.features["limb"]))
+   axes[1, 0].plot(x, obs.features["limb"], 'r-', linewidth=2)
    axes[1, 0].set_title("Detected Limb")
    axes[1, 0].axis('off')
    
    # Fit quality
-   x = np.arange(len(observation.features["limb"]))
-   axes[1, 1].plot(x, observation.features["limb"], 'b-', 
+   x = np.arange(len(obs.features["limb"]))
+   axes[1, 1].plot(x, obs.features["limb"], 'b-', 
                    linewidth=2, label="Detected")
    
    # Theoretical limb
-   final_params = observation.init_parameter_values.copy()
-   final_params.update(observation.best_parameters)
+   final_params = obs.init_parameter_values.copy()
+   final_params.update(obs.best_parameters)
    theoretical = planet_ruler.geometry.limb_arc(
-       n_pix_x=len(observation.features["limb"]),
-       n_pix_y=observation.image_data.shape[0],
+       n_pix_x=len(obs.features["limb"]),
+       n_pix_y=obs.image_data.shape[0],
        **final_params
    )
    axes[1, 1].plot(x, theoretical, 'r--', 
@@ -227,7 +228,7 @@ Step 5: Visualizing Gradient-Field Results
    plt.show()
 
 Step 6: Batch Processing with Gradient-Field
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The gradient-field method is ideal for batch processing:
 
@@ -247,7 +248,7 @@ The gradient-field method is ideal for batch processing:
        
        try:
            # Load and process
-           obs = obs.LimbObservation(
+           obs = LimbObservation(
                str(image_file),
                "config/earth_iss_1.yaml"
            )
@@ -267,7 +268,8 @@ The gradient-field method is ideal for batch processing:
            
            results.append({
                'file': image_file.name,
-               'radius_km': result['uncertainty'],
+               'radius_km': result['value'],
+               'uncertainty_km': result['uncertainty'],
                'status': 'success'
            })
            

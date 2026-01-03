@@ -1,7 +1,7 @@
 This tutorial shows how to calculate Earth's radius using a horizon photograph with known altitude and camera parameters via the default interactive manual annotation method.
 
 Prerequisites
-~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 * Python 3.8+ with Planet Ruler installed (no additional dependencies needed)
 * A horizon photograph (we'll use the demo Earth image)
@@ -17,7 +17,8 @@ Step 1: Setup and Imports
 
    import planet_ruler.observation as obs
    import planet_ruler.geometry as geom
-   from planet_ruler.fit import calculate_parameter_uncertainty, format_parameter_result
+   from planet_ruler.uncertainty import calculate_parameter_uncertainty
+   from planet_ruler.fit import format_parameter_result
    import matplotlib.pyplot as plt
 
 Step 2: Load Configuration and Image
@@ -98,7 +99,7 @@ For long optimizations, enable the live progress dashboard:
 
    # Enable dashboard for real-time monitoring
    observation.fit_limb(
-       method="differential-evolution",
+       minimizer="differential-evolution",
        dashboard=True  # Shows live progress
    )
    
@@ -120,7 +121,7 @@ The dashboard shows:
 - Adaptive refresh rate (fast during descent, slow at convergence)
 
 Step 5: Calculate Uncertainty
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Planet Ruler provides multiple uncertainty estimation methods:
 
@@ -178,7 +179,7 @@ Planet Ruler provides multiple uncertainty estimation methods:
        print(f"{int(cl*100)}% CI: ± {result['uncertainty']:.1f} km")
 
 Step 6: Validate Results
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 Compare your results with the known Earth radius:
 

@@ -2,7 +2,7 @@ Installation
 ============
 
 System Requirements
-------------------
+-------------------
 
 Planet Ruler requires Python 3.8 or higher and supports the following platforms:
 
@@ -11,7 +11,7 @@ Planet Ruler requires Python 3.8 or higher and supports the following platforms:
 * **Windows**: 10+ with Python 3.8+
 
 Python Dependencies
-------------------
+-------------------
 
 Core dependencies include:
 
@@ -32,10 +32,10 @@ Optional dependencies for advanced features:
 * **IPython** ≥7.16.0: Interactive computing (for notebooks)
 
 Installation Methods
--------------------
+--------------------
 
 From PyPI (Recommended)
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
@@ -97,7 +97,7 @@ We recommend using a virtual environment:
    python -m pip install planet_ruler
 
 Verification
------------
+------------
 
 Test your installation:
 
@@ -113,10 +113,10 @@ Test your installation:
    # Should output: ISS horizon distance: 2290.7 km
 
 Troubleshooting
---------------
+---------------
 
 Common Installation Issues
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **ImportError: No module named 'torch'**
 
