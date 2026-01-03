@@ -1,7 +1,7 @@
 The fastest way to get started using your own images with Planet Ruler by using automatic camera parameter detection from EXIF data.
 
 Prerequisites
-~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 * Python 3.8+ with Planet Ruler installed
 * A horizon photograph with EXIF data (from phone, DSLR, mirrorless camera)
@@ -19,7 +19,7 @@ Planet Ruler can automatically extract camera parameters from image EXIF data:
    # Automatically generate config from image EXIF
    auto_config = create_config_from_image(
        image_path="your_horizon_photo.jpg",
-       altitude_m=10_000,  # Your altitude in kilometers
+       altitude_m=10_000,  # Your altitude in meters
        planet="earth"
    )
    

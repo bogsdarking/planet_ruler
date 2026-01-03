@@ -3,7 +3,7 @@
 This tutorial shows you how to measure Earth's radius using nothing but your smartphone camera from an airplane window. It's the perfect introduction to practical astronomy and demonstrates why Planet Ruler exists: to make planetary science accessible to everyone.
 
 Prerequisites
-~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 * A smartphone or camera with EXIF data
 * A window seat on a commercial flight
@@ -14,7 +14,7 @@ Prerequisites
    **Perfect for:** Students, teachers, curious travelers, anyone with a window seat and a sense of wonder! No special equipment needed.
 
 The Science: Why This Works
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 From the ground, Earth's horizon appears flat. But climb to 35,000 feet in an airplane, and you'll see the horizon curve. This isn't an optical illusion - you're seeing Earth's actual roundness.
 
@@ -23,7 +23,7 @@ The higher you go, the more curvature becomes visible. By measuring how much the
 **Historical Context**: Ancient Greek scientist Eratosthenes measured Earth's circumference using a stick and the sun around 240 BCE. You're doing something conceptually similar, but with modern tools that fit in your pocket!
 
 Part 1: Taking Your Photo
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Best Timing
 ^^^^^^^^^^^
@@ -51,7 +51,7 @@ Best Timing
 | ❌ Excessive zoom (normal or wide-angle is best)
 
 Photography Tips
-^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^
 
 .. code-block:: text
 
@@ -88,12 +88,12 @@ Photography Tips
 
 
 Part 3: Finding Your Altitude
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You need to know your altitude when you took the photo. Here are four methods, from most to least accurate:
 
 Method 1: FlightRadar24 (Recommended)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 **Real-time tracking:**
 
@@ -116,7 +116,7 @@ Method 1: FlightRadar24 (Recommended)
    Example: "AA1234 on Nov 4 at 14:23 UTC: 35,000 feet"
 
 Method 2: In-Flight Display
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Many aircraft show altitude on seatback screens or overhead displays.
 
@@ -129,7 +129,7 @@ Many aircraft show altitude on seatback screens or overhead displays.
    Example: 35,000 feet = 10,668 meters
 
 Method 3: Ask the Flight Crew
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Flight attendants usually know the cruising altitude:
 
@@ -141,7 +141,7 @@ Flight attendants usually know the cruising altitude:
    Typical answer: "We're at 37,000 feet today."
 
 Method 4: Estimate from Flight Type
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you can't get exact altitude, use these typical values:
 
@@ -166,12 +166,12 @@ If you can't get exact altitude, use these typical values:
    Altitude uncertainty of ±2,000 feet typically adds 5-10% error to your final radius measurement. Try to be as accurate as possible, but don't worry if you can only estimate.
 
 Part 4: Analysis with Planet Ruler
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Now for the fun part - let's measure Earth's radius!
 
 Zero-Config Workflow
-^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^
 
 Planet Ruler's auto-config feature extracts camera parameters from your photo's EXIF data:
 
@@ -179,7 +179,8 @@ Planet Ruler's auto-config feature extracts camera parameters from your photo's 
 
    import planet_ruler as pr
    from planet_ruler.camera import create_config_from_image
-   from planet_ruler.fit import calculate_parameter_uncertainty, format_parameter_result
+   from planet_ruler.uncertainty import calculate_parameter_uncertainty
+   from planet_ruler.fit import format_parameter_result
    
    # Your airplane photo and altitude
    photo_path = "airplane_horizon.jpg"  # Your actual photo filename
@@ -204,7 +205,7 @@ Planet Ruler's auto-config feature extracts camera parameters from your photo's 
    obs = pr.LimbObservation(photo_path, config)
 
 Image Cropping (Optional)
-^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Sometimes obstructions are unavoidable. If you end up with a photo that contains a window frame,
 airplane wing, or other object that either obscures the horizon directly or could confuse the fit, 
@@ -241,7 +242,7 @@ GUI controls
 
 
 Horizon Detection
-^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^
 
 Use manual annotation for precise, user-controlled detection.
 
@@ -283,7 +284,7 @@ GUI controls
    Annotating using a 4.5x vertical stretch.
 
 Parameter Fitting
-^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^
 
 Now fit the planetary radius to match your detected horizon:
 
@@ -300,7 +301,7 @@ Now fit the planetary radius to match your detected horizon:
    print("✓ Fit completed!")
 
 Results and Uncertainty
-^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^
 
 Extract your measurement with uncertainty quantification:
 
@@ -336,7 +337,7 @@ Extract your measurement with uncertainty quantification:
        print("📊 Try another photo for better accuracy")
 
 Expected Output
-^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^
 
 .. code-block:: text
 
@@ -362,10 +363,10 @@ Expected Output
    🎉 Excellent measurement!
 
 Part 5: Understanding Your Results
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 What to Expect
-^^^^^^^^^^^^^
+^^^^^^^^^^^^^^
 
 **Typical Results:**
 
@@ -377,7 +378,7 @@ What to Expect
    Even with 10-25% error, you've measured something the size of a **planet** using just your phone! That's remarkable. Professional measurements use satellites and achieve centimeter precision, but your result is scientifically meaningful.
 
 Sources of Error
-^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^
 
 Understanding why your measurement isn't exactly 6,371 km:
 
@@ -417,7 +418,7 @@ Understanding why your measurement isn't exactly 6,371 km:
    **The key insight:** Despite these errors, you successfully measured a planetary-scale object! Understanding error sources is as educational as getting the "right" answer.
 
 Improving Your Accuracy
-^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^
 
 Want better results? Try these techniques:
 
@@ -432,7 +433,7 @@ Want better results? Try these techniques:
    for photo in photos:
        config = create_config_from_image(photo, altitude_m=10668, planet="earth")
        obs = pr.LimbObservation(photo, config)
-       obs.detect_limb(method="manual")
+       obs.detect_limb(detection_method="manual")
        obs.smooth_limb()
        obs.fit_limb(maxiter=1000)
        
@@ -466,7 +467,7 @@ For more consistent results across multiple photos:
 .. code-block:: python
 
    # Gradient-field detection (no manual clicking)
-   obs.detect_limb(method="gradient-field")
+   obs.detect_limb(detection_method="gradient-field")
    obs.smooth_limb()
    obs.fit_limb(
        loss_function='gradient_field',
@@ -475,10 +476,10 @@ For more consistent results across multiple photos:
    )
 
 Part 6: Educational Extensions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Class Projects
-^^^^^^^^^^^^^
+^^^^^^^^^^^^^^
 
 **Individual Project:**
 
@@ -495,7 +496,7 @@ Class Projects
 * Statistical analysis of combined data
 
 Discussion Questions
-^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^
 
 1. **Measurement Comparison**
    
@@ -522,7 +523,7 @@ Discussion Questions
    * Could you measure Mars this way if you were there?
 
 Advanced Challenges
-^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^
 
 **Challenge 1: Altitude vs. Accuracy**
 
@@ -558,10 +559,10 @@ Advanced Challenges
    4. Great science fair project!
 
 Part 7: Troubleshooting
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Common Issues
-^^^^^^^^^^^^
+^^^^^^^^^^^^^
 
 **"The detection isn't finding my horizon"**
 
@@ -629,7 +630,7 @@ Normal! Try:
 * Ensure photos are all from similar altitude
 
 Command Line Alternative
-^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 For batch processing or simpler workflow:
 
@@ -651,13 +652,13 @@ For batch processing or simpler workflow:
        airplane_photo.jpg
 
 Next Steps
-~~~~~~~~~
+~~~~~~~~~~
 
 **Continue Learning:**
 
 * Try :doc:`examples` for real spacecraft data
 * Explore :doc:`api` for advanced techniques  
-* Read about :ref:`Method Comparison<tutorial-4-detection-method-comparison>` to understand trade-offs
+* Read about :doc:`tutorial_method_selection` to understand trade-offs
 
 **Share Your Science:**
 

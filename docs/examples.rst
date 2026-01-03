@@ -4,12 +4,12 @@ Examples
 This section provides real-world examples using actual mission data and spacecraft observations.
 
 Example 0: Zero-Configuration Workflow (Auto-Config from EXIF)
--------------------------------------------------------------
+--------------------------------------------------------------
 
 New in Planet Ruler: Automatic camera configuration generation from image EXIF data, eliminating the need for manual camera config files.
 
 Dataset Details
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 * **Any image with EXIF data**: Works with photos from phones, DSLRs, mirrorless cameras
 * **Altitude**: User-specified or estimated from GPS/flight data
@@ -18,13 +18,14 @@ Dataset Details
 * **Supported cameras**: iPhones, Android phones, Canon, Nikon, Sony, and hundreds more
 
 Complete Auto-Config Analysis
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-   import planet_ruler.observation as obs
+   from planet_ruler.observation import LimbObservation
    from planet_ruler.camera import create_config_from_image
-   from planet_ruler.fit import calculate_parameter_uncertainty, format_parameter_result
+   from planet_ruler.uncertainty import calculate_parameter_uncertainty
+   from planet_ruler.fit import format_parameter_result
    
    # Auto-generate camera config from image EXIF data
    image_path = "demo/images/your_horizon_photo.jpg"
@@ -37,7 +38,7 @@ Complete Auto-Config Analysis
    # Create configuration automatically from image
    auto_config = create_config_from_image(
        image_path=image_path,
-       altitude_km=altitude_km,
+       altitude_m=altitude_km * 1000,  # Convert km to meters for API
        planet="earth"
    )
    
@@ -49,24 +50,24 @@ Complete Auto-Config Analysis
    print(f"  Field of view: {auto_config['observation']['field_of_view_deg']:.1f}°")
    
    # Create observation using auto-generated config
-   observation = obs.LimbObservation(
+   obs = LimbObservation(
        image_filepath=image_path,
        fit_config=auto_config  # Use dict instead of file path
    )
    
    # Standard analysis workflow
    print("\nDetecting horizon...")
-   observation.detect_limb(method="manual")  # Opens GUI for point selection
-   observation.smooth_limb()
+   obs.detect_limb(detection_method="manual")  # Opens GUI for point selection
+   obs.smooth_limb()
    print("✓ Horizon detected and smoothed")
    
    print("\nFitting planetary parameters...")
-   observation.fit_limb(maxiter=1000, seed=42)
+   obs.fit_limb(maxiter=1000, seed=42)
    print("✓ Parameter fitting completed")
    
    # Calculate results
    radius_result = calculate_parameter_uncertainty(
-       observation, "r", scale_factor=1000, uncertainty_type="std"
+       obs, "r", scale_factor=1000, method="auto"
    )
    
    print("\nRESULTS:")
@@ -79,7 +80,7 @@ Complete Auto-Config Analysis
 * **No manual camera configuration**: EXIF data provides focal length, camera make/model
 * **Automatic sensor size lookup**: Built-in database of camera sensor dimensions
 * **Parameter override support**: Manually specify field-of-view or focal length if needed
-* **Same analysis workflow**: Use with existing [`detect_limb()`](planet_ruler/observation.py) and [`fit_limb()`](planet_ruler/observation.py) methods
+* **Same analysis workflow**: Use with existing [`detect_limb()`](planet_ruler/obs.py) and [`fit_limb()`](planet_ruler/obs.py) methods
 
 **CLI Usage:**
 
@@ -102,14 +103,14 @@ Monitor optimization progress in real-time with an adaptive dashboard:
 .. code-block:: python
 
    # Basic usage
-   observation.fit_limb(
+   obs.fit_limb(
        loss_function='gradient_field',
        resolution_stages='auto',
        dashboard=True  # Enable dashboard
    )
    
    # Configure dashboard display
-   observation.fit_limb(
+   obs.fit_limb(
        dashboard=True,
        dashboard_kwargs={
            'width': 80,           # Wider dashboard
@@ -126,7 +127,7 @@ Example 1: Earth from International Space Station
 Calculating Earth's radius using ISS photography with interactive manual annotation.
 
 Dataset Details
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 * **Mission**: International Space Station (ISS)
 * **Altitude**: ~418 km above Earth's surface
@@ -135,16 +136,18 @@ Dataset Details
 * **Expected radius**: 6,371 km (Earth mean radius)
 
 Complete Analysis
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-   import planet_ruler.observation as obs
-   from planet_ruler.fit import calculate_parameter_uncertainty, format_parameter_result
+   from planet_ruler.observation import LimbObservation
+   from planet_ruler.uncertainty import calculate_parameter_uncertainty
+   from planet_ruler.fit import format_parameter_result
    import matplotlib.pyplot as plt
+   import planet_ruler.geometry
    
    # Load ISS Earth observation
-   observation = obs.LimbObservation(
+   obs = LimbObservation(
        image_filepath="demo/images/ISS_Earth_horizon.jpg",
        fit_config="config/earth_iss_1.yaml"
    )
@@ -155,7 +158,7 @@ Complete Analysis
    
    # Display initial parameters
    print("Initial parameters:")
-   for key, value in observation.init_parameter_values.items():
+   for key, value in obs.init_parameter_values.items():
        if key == "r":
            print(f"  Initial radius: {value/1000:.0f} km")
        elif key == "h":
@@ -165,26 +168,26 @@ Complete Analysis
    
    # Detect horizon using interactive manual annotation (default)
    print("\nDetecting horizon...")
-   observation.detect_limb(method="manual")  # Opens GUI for point selection
-   observation.smooth_limb()
+   obs.detect_limb(detection_method="manual")  # Opens GUI for point selection
+   obs.smooth_limb()
    print("✓ Horizon detected and smoothed")
    
    # Alternative detection methods available:
-   # observation.detect_limb(method="gradient-field")   # Automated gradient-based detection
-   # observation.detect_limb(method="segmentation")     # AI-powered (requires PyTorch)
+   # obs.detect_limb(method="gradient-field")   # Automated gradient-based detection
+   # obs.detect_limb(method="segmentation")     # AI-powered (requires PyTorch)
    
    # Fit planetary parameters
    print("\nFitting planetary parameters...")
-   observation.fit_limb(maxiter=1000, seed=42)
+   obs.fit_limb(maxiter=1000, seed=42)
    print("✓ Parameter fitting completed")
    
    # Calculate uncertainties
    radius_result = calculate_parameter_uncertainty(
-       observation, "r", scale_factor=1000, uncertainty_type="std"
+       obs, "r", scale_factor=1000, method="auto"
    )
    
    altitude_result = calculate_parameter_uncertainty(
-       observation, "h", scale_factor=1000, uncertainty_type="std"
+       obs, "h", scale_factor=1000, method="auto"
    )
    
    # Display results
@@ -204,26 +207,26 @@ Complete Analysis
    plt.figure(figsize=(12, 4))
    
    plt.subplot(1, 3, 1)
-   observation.plot(show=False)
+   obs.plot(show=False)
    plt.title("Original Image")
    
    plt.subplot(1, 3, 2)
-   observation.plot(gradient=True, show=False)  
+   obs.plot(gradient=True, show=False)  
    plt.title("Detected Horizon")
    
    plt.subplot(1, 3, 3)
    # Plot theoretical vs fitted limb
    import numpy as np
-   x = np.arange(len(observation.features["limb"]))
-   plt.plot(x, observation.features["limb"], 'b-', label="Detected limb")
+   x = np.arange(len(obs.features["limb"]))
+   plt.plot(x, obs.features["limb"], 'b-', label="Detected limb")
    
    # Calculate theoretical limb with fitted parameters
-   final_params = observation.init_parameter_values.copy()
-   final_params.update(observation.best_parameters)
+   final_params = obs.init_parameter_values.copy()
+   final_params.update(obs.best_parameters)
    
    theoretical_limb = planet_ruler.geometry.limb_arc(
-       n_pix_x=len(observation.features["limb"]),
-       n_pix_y=observation.image_data.shape[0],
+       n_pix_x=len(obs.features["limb"]),
+       n_pix_y=obs.image_data.shape[0],
        **final_params
    )
    plt.plot(x, theoretical_limb, 'r--', label="Fitted model")
@@ -261,12 +264,12 @@ Expected Output::
    Relative error: 13.4%
 
 Example 1.5: Gradient-Field Automated Detection
-----------------------------------------------
+-----------------------------------------------
 
 Using automated gradient-field detection for horizon identification without requiring ML dependencies or manual annotation.
 
 Dataset Details
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 * **Mission**: International Space Station (ISS) or similar clear-horizon imagery
 * **Detection method**: Gradient-field with directional blur and flux analysis
@@ -274,16 +277,18 @@ Dataset Details
 * **Best for**: Batch processing, clear atmospheric limbs, automated pipelines
 
 Complete Gradient-Field Analysis
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-   import planet_ruler.observation as obs
-   from planet_ruler.fit import calculate_parameter_uncertainty, format_parameter_result
+   from planet_ruler.observation import LimbObservation
+   from planet_ruler.uncertainty import calculate_parameter_uncertainty
+   from planet_ruler.fit import format_parameter_result
    import matplotlib.pyplot as plt
+   import planet_ruler.geometry
    
    # Load observation
-   observation = obs.LimbObservation(
+   obs = LimbObservation(
        image_filepath="demo/images/ISS_Earth_horizon.jpg",
        fit_config="config/earth_iss_1.yaml"
    )
@@ -292,16 +297,14 @@ Complete Gradient-Field Analysis
    print("GRADIENT-FIELD AUTOMATED DETECTION")
    print("="*50)
    
-   # Gradient-field detection (automated, no user interaction)
-   print("\nDetecting horizon using gradient-field method...")
-   observation.detect_limb(method="gradient-field")
-   observation.smooth_limb()
+   # Note we can run or skip limb detection here as it does nothing
+   # obs.detect_limb(detection_method="gradient-field")
    print("✓ Horizon detected automatically")
    
    # Fit with multi-resolution optimization
    print("\nFitting planetary parameters with multi-resolution optimization...")
-   observation.fit_limb(
-       minimizer='dual-annealing',
+   obs.fit_limb(
+       loss_function='gradient_field', # This is what engages the gradient-field method
        resolution_stages='auto',  # Automatic coarse-to-fine refinement
        maxiter=1000,
        seed=42
@@ -310,14 +313,14 @@ Complete Gradient-Field Analysis
    
    # Calculate uncertainties using Hessian approximation
    radius_result = calculate_parameter_uncertainty(
-       observation, "r", 
+       obs, "r", 
        scale_factor=1000, 
        method='hessian',  # Fast uncertainty estimate
        confidence_level=0.68  # 1-sigma
    )
    
    altitude_result = calculate_parameter_uncertainty(
-       observation, "h",
+       obs, "h",
        scale_factor=1000,
        method='hessian',
        confidence_level=0.68
@@ -340,25 +343,25 @@ Complete Gradient-Field Analysis
    plt.figure(figsize=(15, 5))
    
    plt.subplot(1, 3, 1)
-   observation.plot(show=False)
+   obs.plot(show=False)
    plt.title("Original Image")
    
    plt.subplot(1, 3, 2)
-   observation.plot(gradient=True, show=False)
+   obs.plot(gradient=True, show=False)
    plt.title("Gradient Field")
    
    plt.subplot(1, 3, 3)
    # Plot detected vs theoretical limb
    import numpy as np
-   x = np.arange(len(observation.features["limb"]))
-   plt.plot(x, observation.features["limb"], 'b-', linewidth=2, label="Detected limb")
+   x = np.arange(len(obs.features["limb"]))
+   plt.plot(x, obs.features["limb"], 'b-', linewidth=2, label="Detected limb")
    
    # Calculate theoretical limb
-   final_params = observation.init_parameter_values.copy()
-   final_params.update(observation.best_parameters)
+   final_params = obs.init_parameter_values.copy()
+   final_params.update(obs.best_parameters)
    theoretical_limb = planet_ruler.geometry.limb_arc(
-       n_pix_x=len(observation.features["limb"]),
-       n_pix_y=observation.image_data.shape[0],
+       n_pix_x=len(obs.features["limb"]),
+       n_pix_y=obs.image_data.shape[0],
        **final_params
    )
    plt.plot(x, theoretical_limb, 'r--', linewidth=2, label="Fitted model")
@@ -411,12 +414,12 @@ Expected Output::
    Relative error: 13.4%
 
 Example 2: Pluto from New Horizons Spacecraft
---------------------------------------------
+---------------------------------------------
 
 Analyzing Pluto's size using the historic New Horizons flyby images.
 
 Dataset Details
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 * **Mission**: New Horizons flyby of Pluto (2015)
 * **Distance**: ~18 million km from Pluto
@@ -425,12 +428,12 @@ Dataset Details
 * **Challenge**: Very distant observation with small apparent size
 
 Analysis Code
-~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 .. code-block:: python
 
    # Load Pluto New Horizons observation
-   pluto_obs = obs.LimbObservation(
+   pluto_obs = LimbObservation(
        image_filepath="demo/images/pluto_new_horizons.jpg",
        fit_config="config/pluto-new-horizons.yaml"
    )
@@ -440,26 +443,26 @@ Analysis Code
    print("="*50)
    
    # Pluto is small and distant - careful manual annotation recommended
-   pluto_obs.detect_limb(method="manual")  # Interactive point selection GUI
+   pluto_obs.detect_limb(detection_method="manual")  # Interactive point selection GUI
    
    # Alternative: AI segmentation (requires PyTorch)
    # pluto_obs.detect_limb(
-   #     method="segmentation",
+   #     detection_method="segmentation",
    #     points_per_side=32,  # Higher resolution for small objects
    #     pred_iou_thresh=0.90,  # Higher quality threshold
    #     stability_score_thresh=0.95
    # )
-   
-   pluto_obs.smooth_limb()
+   # pluto_obs.smooth_limb()
+
    pluto_obs.fit_limb(maxiter=1500, popsize=20)  # More thorough fitting
    
    # Calculate results
    pluto_radius = calculate_parameter_uncertainty(
-       pluto_obs, "r", scale_factor=1000, uncertainty_type="std"
+       pluto_obs, "r", scale_factor=1000, method="auto"
    )
    
    distance = calculate_parameter_uncertainty(
-       pluto_obs, "h", scale_factor=1000000, uncertainty_type="std"  # Megameters
+       pluto_obs, "h", scale_factor=1000000, method="auto"  # Megameters
    )
    
    print("RESULTS:")
@@ -489,12 +492,12 @@ Expected Output::
    Relative error: 20.6%
 
 Example 3: Saturn from Cassini Spacecraft
-----------------------------------------
+-----------------------------------------
 
 Measuring Saturn's equatorial radius using Cassini's distant observations.
 
 Dataset Details
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 * **Mission**: Cassini-Huygens mission to Saturn
 * **Distance**: ~1.2 billion km (very distant observation)  
@@ -503,12 +506,12 @@ Dataset Details
 * **Challenge**: Extreme distance, potentially complex limb shape
 
 Analysis Code
-~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 .. code-block:: python
 
    # Load Saturn Cassini observation
-   saturn_obs = obs.LimbObservation(
+   saturn_obs = LimbObservation(
        image_filepath="demo/images/saturn_cassini.jpg", 
        fit_config="config/saturn-cassini-1.yaml"
    )
@@ -518,18 +521,17 @@ Analysis Code
    print("="*50)
    
    # Detect limb using manual annotation (default)
-   saturn_obs.detect_limb(method="manual")  # Interactive GUI
-   saturn_obs.smooth_limb()
+   saturn_obs.detect_limb(detection_method="manual")  # Interactive GUI
    
    # Alternative: AI segmentation (requires PyTorch + Segment Anything)
-   # saturn_obs.detect_limb(method="segmentation")
+   # saturn_obs.detect_limb(detection_method="segmentation")
    
    # Fit with additional iterations for distant object
    saturn_obs.fit_limb(maxiter=1500, seed=42)
    
    # Results
    saturn_radius = calculate_parameter_uncertainty(
-       saturn_obs, "r", scale_factor=1000, uncertainty_type="ci"  # Confidence interval
+       saturn_obs, "r", scale_factor=1000, method="profile", confidence_level=0.95  # 95% confidence interval
    )
    
    print("RESULTS:")
@@ -572,12 +574,12 @@ Expected Output::
    ⚠ Known radius outside confidence interval
 
 Example 4: Comparative Analysis Across Planets
----------------------------------------------
+----------------------------------------------
 
 Analyzing multiple planetary scenarios in a single workflow.
 
 Multi-Planet Comparison
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -629,11 +631,10 @@ Multi-Planet Comparison
        
        try:
            # Load observation
-           obs_obj = obs.LimbObservation(scenario['image'], scenario['config'])
+           obs_obj = LimbObservation(scenario['image'], scenario['config'])
            
            # Detect with manual annotation (default, no dependencies)
-           obs_obj.detect_limb(method="manual")  # Opens interactive GUI
-           obs_obj.smooth_limb()
+           obs_obj.detect_limb(detection_method="manual")  # Opens interactive GUI
            obs_obj.fit_limb()
            
            # Alternative: AI segmentation (requires PyTorch + Segment Anything)
@@ -641,11 +642,11 @@ Multi-Planet Comparison
            
            # Calculate uncertainties  
            radius_result = calculate_parameter_uncertainty(
-               obs_obj, "r", scale_factor=1000, uncertainty_type="std"
+               obs_obj, "r", scale_factor=1000, method="auto"
            )
            
            distance_result = calculate_parameter_uncertainty(
-               obs_obj, "h", scale_factor=1000, uncertainty_type="std"
+               obs_obj, "h", scale_factor=1000, method="auto"
            )
            
            # Calculate errors
@@ -691,7 +692,7 @@ Multi-Planet Comparison
        print(f"\nSuccess Rate: {successful}/{len(results)} ({success_rate:.0f}%)")
 
 Example 5: Advanced Uncertainty Analysis
----------------------------------------
+----------------------------------------
 
 Comprehensive uncertainty quantification using multiple methods: population spread, Hessian approximation, and profile likelihood.
 
@@ -700,21 +701,20 @@ Advanced Uncertainty Quantification
 
 .. code-block:: python
 
-   import planet_ruler.observation as obs
+   from planet_ruler.observation import LimbObservation
    from planet_ruler.uncertainty import calculate_parameter_uncertainty
+   from planet_ruler.fit import format_parameter_result
    import matplotlib.pyplot as plt
    import numpy as np
    
    # Load observation
-   observation = obs.LimbObservation(
+   obs = LimbObservation(
        "demo/images/earth_iss.jpg",
        "config/earth_iss_1.yaml"
    )
    
    # Standard analysis
-   observation.detect_limb(method="gradient-field")  # Automated detection
-   observation.smooth_limb()
-   observation.fit_limb(minimizer='differential-evolution', maxiter=1000)
+   obs.fit_limb(loss_function='gradient_field', maxiter=1000)
    
    print("="*60)
    print("COMPREHENSIVE UNCERTAINTY ANALYSIS")
@@ -723,7 +723,7 @@ Advanced Uncertainty Quantification
    # Method 1: Population spread (differential-evolution only)
    print("\n1. POPULATION SPREAD (from differential evolution)")
    pop_result = calculate_parameter_uncertainty(
-       observation, "r", 
+       obs, "r", 
        scale_factor=1000, 
        method='population',
        confidence_level=0.68
@@ -735,7 +735,7 @@ Advanced Uncertainty Quantification
    # Method 2: Hessian approximation (works with all minimizers)
    print("\n2. HESSIAN APPROXIMATION (inverse curvature at optimum)")
    hess_result = calculate_parameter_uncertainty(
-       observation, "r",
+       obs, "r",
        scale_factor=1000,
        method='hessian',
        confidence_level=0.68
@@ -748,7 +748,7 @@ Advanced Uncertainty Quantification
    print("\n3. PROFILE LIKELIHOOD (re-optimize at fixed values)")
    print("   Computing... (this takes longer)")
    profile_result = calculate_parameter_uncertainty(
-       observation, "r",
+       obs, "r",
        scale_factor=1000,
        method='profile',
        confidence_level=0.68,
@@ -762,7 +762,7 @@ Advanced Uncertainty Quantification
    # Auto method selection
    print("\n4. AUTO-SELECT (chooses best method for minimizer)")
    auto_result = calculate_parameter_uncertainty(
-       observation, "r",
+       obs, "r",
        scale_factor=1000,
        method='auto',  # Automatically picks population or hessian
        confidence_level=0.68
@@ -779,7 +779,7 @@ Advanced Uncertainty Quantification
    
    for cl in confidence_levels:
        result = calculate_parameter_uncertainty(
-           observation, "r",
+           obs, "r",
            scale_factor=1000,
            method='population',
            confidence_level=cl
@@ -789,7 +789,7 @@ Advanced Uncertainty Quantification
        print(f"{int(cl*100)}% CI ({sigma_equiv[cl]}): {pop_result['additional_info']['mean']:.0f} ± {result['uncertainty']:.0f} km")
    
    # Parameter correlation analysis (if using differential-evolution)
-   if observation.minimizer == 'differential-evolution':
+   if obs.minimizer == 'differential-evolution':
        from planet_ruler.fit import unpack_diff_evol_posteriors
        
        population_df = unpack_diff_evol_posteriors(observation)
@@ -843,18 +843,18 @@ Example 6: Advanced Optimization Workflows
 Leveraging warm start, multi-resolution, and advanced loss functions for improved convergence and accuracy.
 
 Warm Start Optimization
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 The warm start feature allows you to use results from a previous fit as the starting point for subsequent optimizations, enabling iterative refinement and parameter exploration.
 
 .. code-block:: python
 
-  import planet_ruler.observation as obs
+  from planet_ruler.observation import LimbObservation
   from planet_ruler.fit import calculate_parameter_uncertainty, format_parameter_result
   import matplotlib.pyplot as plt
   
   # Load observation
-  observation = obs.LimbObservation(
+  obs = LimbObservation(
       "demo/images/earth_iss.jpg",
       "config/earth_iss_1.yaml"
   )
@@ -863,20 +863,16 @@ The warm start feature allows you to use results from a previous fit as the star
   print("WARM START OPTIMIZATION WORKFLOW")
   print("="*60)
   
-  # Initial detection and coarse fit
-  print("\n1. INITIAL COARSE FIT")
-  observation.detect_limb(method="gradient-field")
-  observation.smooth_limb()
-  
   # Fast initial fit to get in the right ballpark
-  observation.fit_limb(
+  obs.fit_limb(
       minimizer='basinhopping',    # Fast local-global hybrid
+      loss_function='gradient_field',
       maxiter=500,
       warm_start=False            # Start fresh (default)
   )
   
   initial_radius = calculate_parameter_uncertainty(
-      observation, "r",
+      obs, "r",
       scale_factor=1000,          # Convert from meters to kilometers
       uncertainty_type="std"
   )
@@ -884,8 +880,9 @@ The warm start feature allows you to use results from a previous fit as the star
   
   # Refined fit using warm start
   print("\n2. REFINED FIT WITH WARM START")
-  observation.fit_limb(
+  obs.fit_limb(
       minimizer='differential-evolution',  # Global minimizer
+      loss_function='gradient_field',
       maxiter=1000,
       warm_start=True,            # Use previous fit as starting point
       popsize=15,
@@ -893,7 +890,7 @@ The warm start feature allows you to use results from a previous fit as the star
   )
   
   refined_radius = calculate_parameter_uncertainty(
-      observation, "r",
+      obs, "r",
       scale_factor=1000,          # Convert from meters to kilometers
       uncertainty_type="std"
   )
@@ -901,7 +898,7 @@ The warm start feature allows you to use results from a previous fit as the star
   
   # Final precision fit with different loss function
   print("\n3. PRECISION FIT WITH WARM START")
-  observation.fit_limb(
+  obs.fit_limb(
       loss_function='gradient_field',  # Advanced gradient-based loss
       minimizer='dual-annealing',      # Robust global minimizer
       maxiter=1500,
@@ -910,7 +907,7 @@ The warm start feature allows you to use results from a previous fit as the star
   )
   
   final_radius = calculate_parameter_uncertainty(
-      observation, "r",
+      obs, "r",
       scale_factor=1000,          # Convert from meters to kilometers
       uncertainty_type="std"
   )
@@ -929,16 +926,17 @@ The warm start feature allows you to use results from a previous fit as the star
   print("Original parameters are preserved:")
   
   # Reset to original values (warm_start=False)
-  observation.fit_limb(
+  obs.fit_limb(
       warm_start=False,           # This restores original initial parameters
+      loss_function='gradient_field',
       maxiter=1                  # Quick test - don't actually optimize
   )
   
-  print(f"✓ Original initial radius restored: {observation.init_parameter_values['r']/1000:.0f} km")
+  print(f"✓ Original initial radius restored: {obs.init_parameter_values['r']/1000:.0f} km")
   print("✓ Previous best parameters remain available in best_parameters")
 
 Multi-Resolution Optimization
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Multi-resolution optimization uses a coarse-to-fine approach, starting with downsampled images for global convergence before refining on full resolution.
 
@@ -949,26 +947,24 @@ Multi-resolution optimization uses a coarse-to-fine approach, starting with down
   print("MULTI-RESOLUTION OPTIMIZATION")
   print("="*60)
   
-  observation = obs.LimbObservation(
+  obs = LimbObservation(
       "demo/images/earth_iss.jpg",
       "config/earth_iss_1.yaml"
   )
   
-  observation.detect_limb(method="gradient-field")
-  observation.smooth_limb()
-  
   # Automatic multi-resolution optimization
   print("\n1. AUTOMATIC MULTI-RESOLUTION")
-  observation.fit_limb(
+  obs.fit_limb(
       resolution_stages='auto',       # Automatic coarse-to-fine progression
       minimizer='dual-annealing',
+      loss_function='gradient_field',
       maxiter=800,
       warm_start=False,
       seed=42
   )
   
   auto_result = calculate_parameter_uncertainty(
-      observation, "r",
+      obs, "r",
       scale_factor=1000,              # Convert from meters to kilometers
       uncertainty_type="std"
   )
@@ -976,9 +972,10 @@ Multi-resolution optimization uses a coarse-to-fine approach, starting with down
   
   # Manual multi-resolution control
   print("\n2. MANUAL MULTI-RESOLUTION STAGES")
-  observation.fit_limb(
-      resolution_stages=[0.25, 0.5, 1.0],  # 25%, 50%, then full resolution
+  obs.fit_limb(
+      resolution_stages=[4, 2, 1],  # 25%, 50%, then full resolution
       minimizer='differential-evolution',
+      loss_function='gradient-field',
       maxiter=600,
       warm_start=False,
       popsize=12,
@@ -986,7 +983,7 @@ Multi-resolution optimization uses a coarse-to-fine approach, starting with down
   )
   
   manual_result = calculate_parameter_uncertainty(
-      observation, "r",
+      obs, "r",
       scale_factor=1000,              # Convert from meters to kilometers
       uncertainty_type="std"
   )
@@ -994,9 +991,10 @@ Multi-resolution optimization uses a coarse-to-fine approach, starting with down
   
   # Compare with single-resolution fit
   print("\n3. SINGLE-RESOLUTION COMPARISON")
-  observation.fit_limb(
+  obs.fit_limb(
       resolution_stages=None,         # No multi-resolution
       minimizer='differential-evolution',
+      loss_function='gradient_field',
       maxiter=600,
       warm_start=False,
       popsize=12,
@@ -1004,7 +1002,7 @@ Multi-resolution optimization uses a coarse-to-fine approach, starting with down
   )
   
   single_result = calculate_parameter_uncertainty(
-      observation, "r",
+      obs, "r",
       scale_factor=1000,              # Convert from meters to kilometers
       uncertainty_type="std"
   )
@@ -1017,7 +1015,7 @@ Multi-resolution optimization uses a coarse-to-fine approach, starting with down
   print("• Progressive refinement ensures accuracy")
 
 Advanced Loss Functions
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Different loss functions optimize different aspects of the fit quality, allowing you to choose the best approach for your specific images and requirements.
 
@@ -1027,30 +1025,28 @@ Different loss functions optimize different aspects of the fit quality, allowing
   print("LOSS FUNCTION COMPARISON")
   print("="*60)
   
-  loss_functions = ['l2', 'l1', 'log-l1', 'gradient_field']
+  loss_functions = ['l2', 'l1', 'log-l1']
   results = {}
   
   for loss_func in loss_functions:
       print(f"\nTesting {loss_func} loss function...")
       
-      observation = obs.LimbObservation(
+      obs = LimbObservation(
           "demo/images/earth_iss.jpg",
           "config/earth_iss_1.yaml"
       )
+
+      obs.detect_limb(detection_method='manual')
       
-      observation.detect_limb(method="gradient-field")
-      observation.smooth_limb()
-      
-      observation.fit_limb(
+      obs.fit_limb(
           loss_function=loss_func,
           minimizer='dual-annealing',
-          resolution_stages='auto',
           maxiter=800,
           seed=42
       )
       
       result = calculate_parameter_uncertainty(
-          observation, "r",
+          obs, "r",
           scale_factor=1000,              # Convert from meters to kilometers
           uncertainty_type="std"
       )
@@ -1074,7 +1070,7 @@ Different loss functions optimize different aspects of the fit quality, allowing
   print(f"{format_parameter_result(results[best_loss], 'km')}")
 
 Command Line Interface Usage
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The Planet Ruler CLI exposes all advanced optimization features through command-line arguments.
 
@@ -1175,7 +1171,7 @@ The `scale_factor` parameter in [`calculate_parameter_uncertainty()`](planet_rul
 * Use `scale_factor=1.0` to keep in meters (default)
 
 Expected Optimization Improvements
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The advanced optimization features typically provide these improvements:
 
@@ -1203,7 +1199,7 @@ Using warm start + multi-resolution + gradient_field loss typically achieves:
 * More reliable convergence across diverse image conditions
 
 Running the Examples
--------------------
+--------------------
 
 To run these examples, ensure you have:
 
@@ -1244,7 +1240,7 @@ Pluto     |   1432 ±   31 km |   1379 -  1526 km |   1188 km |  20.6%
 For the complete example notebooks, see the `notebooks/` directory in the Planet Ruler repository.
 
 Next Steps
----------
+----------
 
 * Try different detection methods (manual annotation vs. AI segmentation) for your own images
 * Experiment with different uncertainty types and loss functions

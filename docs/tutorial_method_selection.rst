@@ -139,7 +139,7 @@ Example Usage
    obs = pr.LimbObservation("image.jpg", "config.yaml")
    
    # Manual annotation (opens GUI)
-   obs.detect_limb(method="manual")
+   obs.detect_limb(detection_method="manual")
    
    # Fit annotated points
    obs.fit_limb(maxiter=1000)
@@ -319,6 +319,7 @@ Visual Examples
 **Example 2: New Horizons Photo**
 
 .. figure:: ../demo/images/PIA19948.jpg
+
    Caption: Hazy atmospheric boundary detected accurately. Multi-resolution helps.
 
 **Example 3: Failure Case**
@@ -446,7 +447,7 @@ Example Usage
    obs = pr.LimbObservation("image.jpg", "config.yaml")
    
    # ML segmentation
-   obs.detect_limb(method="segmentation")
+   obs.detect_limb(detection_method="segmentation")
    
    # Always inspect the result!
    obs.plot()
@@ -482,12 +483,12 @@ For critical measurements, use multiple methods and compare:
 .. code-block:: python
 
    import planet_ruler as pr
-   from planet_ruler.fit import calculate_parameter_uncertainty
+   from planet_ruler.uncertainty import calculate_parameter_uncertainty
    
    methods = {
-       'manual': {'method': 'manual'},
+       'manual': {'detection_method': 'manual'},
        'gradient': {'loss_function': 'gradient_field', 'resolution_stages': 'auto'},
-       'ml': {'method': 'segmentation'}
+       'ml': {'detection_method': 'segmentation'}
    }
    
    results = {}
@@ -496,7 +497,7 @@ For critical measurements, use multiple methods and compare:
        print(f"\nTrying {name} method...")
        obs = pr.LimbObservation("image.jpg", "config.yaml")
        
-       if 'method' in kwargs:
+       if 'detection_method' in kwargs:
            obs.detect_limb(**kwargs)
            obs.smooth_limb()
            obs.fit_limb(maxiter=1000)
