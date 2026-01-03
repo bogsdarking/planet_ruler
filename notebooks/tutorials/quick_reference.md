@@ -4,7 +4,7 @@
 
 ### 1. Absolute Minimum (Auto-Config + Manual Annotation)
 ```python
-import planet_ruler.observation as obs
+from planet_ruler.observation import LimbObservation
 from planet_ruler.camera import create_config_from_image
 
 # Auto-generate config from your image
@@ -15,30 +15,30 @@ config = create_config_from_image(
 )
 
 # Load observation
-Obs = obs.LimbObservation("your_photo.jpg", config)
+obs = LimbObservation("your_photo.jpg", config)
 
 # Manual annotation (GUI opens)
-Obs.detect_limb()
+obs.detect_limb()
 
 # Fit and get results
-Obs.fit_limb(dashboard=True)
-print(f"Radius: {Obs.radius_km:.1f} ± {Obs.radius_uncertainty:.1f} km")
+obs.fit_limb(dashboard=True)
+print(f"Radius: {obs.radius_km:.1f} ± {obs.radius_uncertainty:.1f} km")
 ```
 
 ### 2. Gradient-Field Method (Automatic, Lightweight)
 ```python
 from planet_ruler.camera import create_config_from_image
-import planet_ruler.observation as obs
+from planet_ruler.observation import LimbObservation
 from planet_ruler.dashboard import OutputCapture
 
 config = create_config_from_image("your_photo.jpg", altitude_m=10_000, planet="earth")
-Obs = obs.LimbObservation("your_photo.jpg", config)
+obs = LimbObservation("your_photo.jpg", config)
 
 # Direct gradient-field optimization (no detection needed)
 # Ideal for batch processing - lightweight, no models
 capture = OutputCapture(max_lines=20)
 with capture:
-    Obs.fit_limb(
+    obs.fit_limb(
         minimizer="dual-annealing",
         loss_function="gradient_field",
         resolution_stages=[4, 2, 1],
@@ -50,32 +50,31 @@ with capture:
         dashboard_kwargs={'output_capture': capture}
     )
 
-print(f"Radius: {Obs.radius_km:.1f} ± {Obs.radius_uncertainty:.1f} km")
+print(f"Radius: {obs.radius_km:.1f} ± {obs.radius_uncertainty:.1f} km")
 ```
 
 ### 3. ML Segmentation (Automatic but Heavyweight)
 ```python
 from planet_ruler.camera import create_config_from_image
-import planet_ruler.observation as obs
+from planet_ruler.observation import LimbObservation
 
 config = create_config_from_image("your_photo.jpg", altitude_m=10_000, planet="earth")
-Obs = obs.LimbObservation("your_photo.jpg", config)
+obs = LimbObservation("your_photo.jpg", config)
 
 # ML segmentation (downloads ~2GB model on first use)
 # Note: Gradient-field (Example 2) is lighter for batch processing
-Obs.limb_detection = "segmentation"
-Obs.detect_limb()
-Obs.smooth_limb(method="rolling-median", window_length=3)
+obs.detect_limb(detection_method="segmentation")
+obs.smooth_limb(method="rolling-median", window_length=3)
 
 # Fit with dashboard
-Obs.fit_limb(dashboard=True)
-print(f"Radius: {Obs.radius_km:.1f} ± {Obs.radius_uncertainty:.1f} km")
+obs.fit_limb(dashboard=True)
+print(f"Radius: {obs.radius_km:.1f} ± {obs.radius_uncertainty:.1f} km")
 ```
 
 ### 4. With Parameter Extraction Visibility
 ```python
 from planet_ruler.camera import extract_camera_parameters, create_config_from_image
-import planet_ruler.observation as obs
+from planet_ruler.observation import LimbObservation
 
 # See what camera info was extracted
 camera_info = extract_camera_parameters("your_photo.jpg")
@@ -95,16 +94,16 @@ else:
 
 # Create config and proceed
 config = create_config_from_image("your_photo.jpg", altitude_m, "earth")
-Obs = obs.LimbObservation("your_photo.jpg", config)
-Obs.detect_limb()
-Obs.fit_limb(dashboard=True)
+obs = LimbObservation("your_photo.jpg", config)
+obs.detect_limb()
+obs.fit_limb(dashboard=True)
 ```
 
 ### 5. With Configuration Validation
 ```python
 from planet_ruler.camera import create_config_from_image
 from planet_ruler.validation import validate_limb_config
-import planet_ruler.observation as obs
+from planet_ruler.observation import LimbObservation
 
 # Generate config
 config = create_config_from_image("photo.jpg", altitude_m=10_000, planet="earth")
@@ -117,9 +116,9 @@ except AssertionError as e:
     print(f"⚠️  Warning: {e}")
 
 # Proceed with measurement
-Obs = obs.LimbObservation("photo.jpg", config)
-Obs.detect_limb()
-Obs.fit_limb()
+obs = LimbObservation("photo.jpg", config)
+obs.detect_limb()
+obs.fit_limb()
 ```
 
 ### 6. With Full Uncertainty Analysis
@@ -127,16 +126,16 @@ Obs.fit_limb()
 from planet_ruler.uncertainty import calculate_parameter_uncertainty
 from planet_ruler.fit import format_parameter_result
 from planet_ruler.camera import create_config_from_image
-import planet_ruler.observation as obs
+from planet_ruler.observation import LimbObservation
 
 config = create_config_from_image("photo.jpg", altitude_m=10_000, planet="earth")
-Obs = obs.LimbObservation("photo.jpg", config)
-Obs.detect_limb()
-Obs.fit_limb()
+obs = LimbObservation("photo.jpg", config)
+obs.detect_limb()
+obs.fit_limb()
 
 # Get radius uncertainty with auto method selection
 radius_result = calculate_parameter_uncertainty(
-    Obs, 
+    obs, 
     parameter='r',
     scale_factor=1000,  # Convert m to km
     method='auto'
@@ -146,41 +145,41 @@ print(format_parameter_result(radius_result, unit='km'))
 print(f"Method used: {radius_result['method']}")
 
 # Get uncertainty for any parameter
-altitude_result = calculate_parameter_uncertainty(Obs, 'h', scale_factor=1000)
+altitude_result = calculate_parameter_uncertainty(obs, 'h', scale_factor=1000)
 print(format_parameter_result(altitude_result, unit='km'))
 ```
 
 ### 6. Comparing All Three Methods
 ```python
 from planet_ruler.camera import create_config_from_image
-import planet_ruler.observation as obs
+from planet_ruler.observation import LimbObservation
 
 config = create_config_from_image("photo.jpg", altitude_m=10_000, planet="earth")
 
 # Method 1: Manual annotation
-Obs_manual = obs.LimbObservation("photo.jpg", config)
-Obs_manual.detect_limb()
-Obs_manual.fit_limb()
-radius_manual = Obs_manual.radius_km
+obs_manual = LimbObservation("photo.jpg", config)
+obs_manual.detect_limb()
+obs_manual.fit_limb()
+radius_manual = obs_manual.radius_km
 
 # Method 2: Gradient-field (lightweight, ideal for batch)
-Obs_gradient = obs.LimbObservation("photo.jpg", config)
-Obs_gradient.fit_limb(
+obs_gradient = LimbObservation("photo.jpg", config)
+obs_gradient.fit_limb(
     minimizer="dual-annealing",
     loss_function="gradient_field",
     resolution_stages=[4, 2, 1],
     image_smoothing=2.0,
     kernel_smoothing=8.0
 )
-radius_gradient = Obs_gradient.radius_km
+radius_gradient = obs_gradient.radius_km
 
 # Method 3: ML Segmentation (heavyweight)
-Obs_ml = obs.LimbObservation("photo.jpg", config)
-Obs_ml.limb_detection = "segmentation"
-Obs_ml.detect_limb()
-Obs_ml.smooth_limb()
-Obs_ml.fit_limb(loss_function="l1")
-radius_ml = Obs_ml.radius_km
+obs_ml = LimbObservation("photo.jpg", config)
+obs_ml.limb_detection = "segmentation"
+obs_ml.detect_limb()
+obs_ml.smooth_limb()
+obs_ml.fit_limb(loss_function="l1")
+radius_ml = obs_ml.radius_km
 
 print(f"Manual:          {radius_manual:.1f} km")
 print(f"Gradient-field:  {radius_gradient:.1f} km")
@@ -191,7 +190,7 @@ print(f"\nSpread: {max(radius_manual, radius_gradient, radius_ml) - min(radius_m
 ### 7. Batch Processing Multiple Images
 ```python
 from planet_ruler.camera import create_config_from_image
-import planet_ruler.observation as obs
+from planet_ruler.observation import LimbObservation
 import glob
 
 image_files = glob.glob("flight_photos/*.jpg")
@@ -201,12 +200,12 @@ results = []
 for img_path in image_files:
     try:
         config = create_config_from_image(img_path, altitude_km=10, planet="earth")
-        Obs = obs.LimbObservation(img_path, config)
+        obs = LimbObservation(img_path, config)
         
         # Gradient-field: automatic, lightweight, ideal for batch
-        Obs.minimizer = "dual-annealing"
-        Obs.fit_limb(
+        obs.fit_limb(
             loss_function="gradient_field",
+            minimizer="dual-annealing",
             resolution_stages=[4, 2, 1],
             image_smoothing=2.0,
             kernel_smoothing=8.0
@@ -214,10 +213,10 @@ for img_path in image_files:
         
         results.append({
             'file': img_path,
-            'radius_km': Obs.radius_km,
-            'uncertainty_km': Obs.radius_uncertainty
+            'radius_km': obs.radius_km,
+            'uncertainty_km': obs.radius_uncertainty
         })
-        print(f"✓ {img_path}: {Obs.radius_km:.1f} ± {Obs.radius_uncertainty:.1f} km")
+        print(f"✓ {img_path}: {obs.radius_km:.1f} ± {obs.radius_uncertainty:.1f} km")
     except Exception as e:
         print(f"✗ {img_path}: {e}")
 
@@ -265,14 +264,14 @@ print(f"\nAverage radius: {avg_radius:.1f} km")
 
 ```python
 # Basic dashboard
-Obs.fit_limb(dashboard=True)
+obs.fit_limb(dashboard=True)
 
 # Custom dashboard settings
 from planet_ruler.dashboard import OutputCapture
 
 capture = OutputCapture(max_lines=20, line_width=70)
 with capture:
-    Obs.fit_limb(
+    obs.fit_limb(
         dashboard=True,
         target_planet="earth",  # For comparison display
         dashboard_kwargs={
@@ -306,12 +305,10 @@ config = create_config_from_image(
 **Solution:** The Segment Anything Model is large (~2GB). Options:
 ```python
 # 1. Try manual annotation instead
-Obs.limb_detection = "manual"
-Obs.detect_limb()
+obs.detect_limb(detection_method="manual")
 
 # 2. Or use gradient-field (no model needed)
-Obs.minimizer = "dual-annealing"
-Obs.fit_limb(loss_function="gradient_field", resolution_stages=[4, 2, 1])
+obs.fit_limb(loss_function="gradient_field", minimizer="differential-evolution", resolution_stages=[4, 2, 1])
 
 # 3. Check your internet connection and try again
 # The model is cached after first download
@@ -321,21 +318,21 @@ Obs.fit_limb(loss_function="gradient_field", resolution_stages=[4, 2, 1])
 **Solution:** SAM may struggle with subtle horizons. Try:
 ```python
 # 1. Use manual annotation for more control
-Obs.limb_detection = "manual"
-Obs.detect_limb()
+obs.limb_detection = "manual"
+obs.detect_limb()
 
 # 2. Or use gradient-field optimization
-Obs.fit_limb(loss_function="gradient_field", resolution_stages='auto')
+obs.fit_limb(loss_function="gradient_field", resolution_stages='auto')
 
 # 3. For batch processing, validate ML results before fitting
-Obs.detect_limb()
-Obs.plot()  # Visually inspect before fit_limb()
+obs.detect_limb()
+obs.plot()  # Visually inspect before fit_limb()
 ```
 
 ### Issue: "Optimization not converging"
 **Solution:** Try gradient-field with more stages or adjust smoothing:
 ```python
-Obs.fit_limb(
+obs.fit_limb(
     loss_function="gradient_field",
     resolution_stages=[8, 4, 2, 1],  # More stages
     image_smoothing=3.0,              # More smoothing
@@ -361,7 +358,7 @@ if gps_alt:
 3. **Use GPS altitude**: EXIF GPS data is more accurate than estimates
 4. **Higher is better**: Measurements from >10km altitude are more reliable
 5. **Try multiple methods**: Manual, ML, and gradient-field can validate each other
-6. **For ML segmentation**: Always inspect with `Obs.plot()` after detection - validate before fitting
+6. **For ML segmentation**: Always inspect with `obs.plot()` after detection - validate before fitting
 7. **Check the dashboard**: Watch for warnings about parameter drift or stalling
 8. **Validate first**: Always run `validate_limb_config()` before optimizing
 9. **First ML use**: Be patient with ~2GB model download (one-time only)

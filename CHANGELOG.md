@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ability to handle phones with multiple cameras (infer which via EXIF aperture tag)
 - Cropping tool (`planet_ruler.crop.TkImageCropper`) that allows subselection of images while preserving camera properties
 - Suite of test imagery for benchmarking and calibration. Stored in Git LFS -- retrieve via `git lfs install; git lfs pull`
+- More cameras/parameters to the database
+- A new tutorial that derives the minimum viable altitude for detecting limb curvature as a function of camera resolution.
 
 ### Fixed
 
@@ -19,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restored a missing image referenced in the README
 - Large speedup to gradient-field detection by removing an unused full-resolution field calculation
 - Faster fitting on manual annotation by only calculating the limb at labeled points
+- Many API fixes in the documentation
 
 ## [1.7.0] - 2025-12-13
 
