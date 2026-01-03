@@ -18,7 +18,7 @@
 ```python
 import planet_ruler as pr
 obs = pr.LimbObservation("horizon_photo.jpg", "config/camera.yaml")
-obs.detect_limb().fit_limb()  # â†’ Planet radius: 6,234 km
+obs.detect_limb().fit_limb()  # Planet radius: 6,234 km
 ```
 
 <div align="center">
@@ -111,10 +111,10 @@ import planet_ruler as pr
 obs = pr.LimbObservation("photo.jpg", "camera_config.yaml")
 
 # Choose detection method:
-obs.detect_limb(method='manual')          # Interactive GUI (default)
-# obs.detect_limb(method='gradient-break')  # Simple gradient-based detection
-# obs.detect_limb(method='gradient-field')  # Gradient flow analysis
-# obs.detect_limb(method='segmentation')    # AI-powered (requires PyTorch)
+obs.detect_limb(detection_method='manual')          # Interactive GUI (default)
+# obs.detect_limb(detection_method='gradient-break')  # Simple gradient-based detection
+# obs.detect_limb(detection_method='gradient-field')  # Gradient flow analysis
+# obs.detect_limb(detection_method='segmentation')    # AI-powered (requires PyTorch)
 
 # OR skip detection and use gradient-field optimization directly:
 # obs.fit_limb(loss_function='gradient_field')  # Direct gradient optimization
@@ -171,6 +171,30 @@ planet-ruler demo --planet earth
 - Non-linear optimization with robust error handling
 
 </details>
+
+## Why This Works
+
+**A fundamental question**: At what altitude does Earth's curvature become detectable in a photograph?
+
+**The surprising answer**: With modern phone cameras, curvature is detectable from **essentially ground level** (1-3 meters altitude).
+
+The geometric signal—the vertical "sag" of the horizon arc across your image—exceeds one pixel even at remarkably low altitudes:
+
+- **10 m altitude**: ~4 pixels of curvature (detectable)
+- **100 m altitude**: ~12 pixels of curvature (easily measurable)
+- **10 km altitude** (airplane): ~115 pixels of curvature (excellent signal)
+- **100 km altitude** (space): ~360 pixels of curvature (hemisphere-scale)
+
+Modern high-resolution sensors (4000+ pixels wide) can resolve these tiny angular deviations. The limiting factors aren't geometric visibility but rather:
+
+- Atmospheric refraction and haze
+- Optical quality (lens aberrations)  
+- Scene complexity (buildings, trees obscuring horizon)
+- Measurement precision in the fitting algorithm
+
+This means horizon-based radius measurement is fundamentally sound across the entire altitude range from ground level to orbit. The method gets *easier* at higher altitudes (cleaner images, larger signal), but it *works* even from remarkably low vantage points.
+
+**See the math**: [Minimum Detectable Altitude](docs/minimum_detectable_altitude.rst) | **Try it yourself**: [Interactive Notebook](notebooks/minimum_altitude_demo.ipynb)
 
 ## Real Results
 
@@ -356,9 +380,9 @@ obs = pr.LimbObservation(
 )
 
 # Choose detection method: 'manual', 'gradient-break', 'gradient-field', or 'segmentation'
-obs.detect_limb(method='manual')  # Interactive GUI detection
-# obs.detect_limb(method='gradient-break')  # Simple gradient detection
-# obs.detect_limb(method='gradient-field')  # Gradient flow analysis
+obs.detect_limb(detection_method='manual')  # Interactive GUI detection
+# obs.detect_limb(detection_method='gradient-break')  # Simple gradient detection
+# obs.detect_limb(detection_method='gradient-field')  # Gradient flow analysis
 
 # OR use gradient-field optimization (skips traditional detection):
 # obs.fit_limb(loss_function='gradient_field')  # Direct gradient optimization
@@ -441,11 +465,7 @@ obs = pr.LimbObservation(
 )
 
 # Full analysis pipeline
-obs.detect_limb(method='gradient-break')  # Automated gradient-based detection
-obs.fit_limb()                             # Multi-resolution parameter optimization
-
-# OR use gradient-field optimization (more advanced):
-# obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
+obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
 obs.plot()                                 # Visualize results
 
 # Results
@@ -462,11 +482,7 @@ obs = pr.LimbObservation(
 )
 
 # Two-step analysis
-obs.detect_limb(method='gradient-break')  # Automated detection
-obs.fit_limb()                            # Multi-resolution fitting
-
-# OR single-step gradient-field optimization:
-# obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
+obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
 
 # Rich visualization
 from planet_ruler.plot import plot_3d_solution
@@ -486,14 +502,14 @@ plot_3d_solution(**obs.best_parameters)  # 3D planetary geometry view
 ### Quick References
 ```python
 # Core classes and functions
-pr.LimbObservation(image_path, fit_config)                      # Main analysis class
+pr.LimbObservation(image_path, fit_config)                       # Main analysis class
 pr.geometry.horizon_distance(altitude, radius)                   # Theoretical calculations  
 pr.fit.optimize_parameters(obs, method='differential_evolution') # Optimization
 pr.uncertainty.calculate_parameter_uncertainty(obs, 'r')         # Uncertainty estimation
 pr.plot.show_analysis(obs, style='comprehensive')                # Visualization
 
 # Key methods
-obs.detect_limb(method='manual')          # Interactive detection (default)
+obs.detect_limb(detection_method='manual')          # Interactive detection (default)
 obs.fit_limb(resolution_stages='auto')    # Multi-resolution optimization
 obs.plot()                                # Show results with uncertainty
 
