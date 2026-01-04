@@ -124,7 +124,7 @@ CAMERA_DB = {
             },
         ],
     },
-    # iPhone 13 Pro/Pro Max
+    # iPhone 13 Pro/Pro Max (identical cameras)
     "iPhone 13 Pro": {
         "type": "phone",
         "cameras": [
@@ -135,6 +135,35 @@ CAMERA_DB = {
                 "sensor_width": 8.47,
                 "sensor_height": 6.35,
                 "notes": "12MP main camera",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 9.0,
+                "aperture": 2.8,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP 3x optical zoom",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 1.8,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    "iPhone 13 Pro Max": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.7,
+                "aperture": 1.5,
+                "sensor_width": 8.47,
+                "sensor_height": 6.35,
+                "notes": "12MP main camera, identical to 13 Pro",
             },
             {
                 "name": "telephoto",
@@ -244,6 +273,58 @@ CAMERA_DB = {
             },
         ],
     },
+    # iPhone 11 Pro
+    "iPhone 11 Pro": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 4.25,
+                "aperture": 1.8,
+                "sensor_width": 5.6,
+                "sensor_height": 4.2,
+                "notes": "12MP main camera, 1/2.55\" sensor, 1.4µm pixels, OIS",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 6.0,
+                "aperture": 2.0,
+                "sensor_width": 4.8,
+                "sensor_height": 3.6,
+                "notes": "12MP 2x optical zoom, 1/3.6\" sensor, OIS",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 1.54,
+                "aperture": 2.4,
+                "sensor_width": 4.8,
+                "sensor_height": 3.6,
+                "notes": "12MP ultra-wide, 1/3.6\" sensor",
+            },
+        ],
+    },
+    # iPhone XS
+    "iPhone XS": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 4.25,
+                "aperture": 1.8,
+                "sensor_width": 5.6,
+                "sensor_height": 4.2,
+                "notes": "12MP main camera, 1/2.55\" sensor, 1.4µm pixels, OIS",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 6.0,
+                "aperture": 2.4,
+                "sensor_width": 4.54,
+                "sensor_height": 3.42,
+                "notes": "12MP 2x optical zoom, 1/3.4\" sensor, 1.0µm pixels, OIS",
+            },
+        ],
+    },
     # Google Pixel 7 Pro
     "Pixel 7 Pro": {
         "type": "phone",
@@ -305,6 +386,23 @@ CAMERA_DB = {
         ],
     },
     # ========================================================================
+    # Single-Camera Phones
+    # ========================================================================
+    # Samsung Galaxy S6 Edge
+    "SM-G925F": {
+        "type": "phone",
+        "sensor_width": 5.5,
+        "sensor_height": 4.1,
+        "notes": "16MP camera, f/1.9, OIS, ~1/2.6\" sensor",
+    },
+    # iPhone 6s
+    "iPhone 6s": {
+        "type": "phone",
+        "sensor_width": 4.80,
+        "sensor_height": 3.60,
+        "notes": "12MP camera, 1/3\" sensor, 1.22µm pixels",
+    },
+    # ========================================================================
     # Traditional Digital
     # ========================================================================
     # Canon PowerShot series
@@ -335,12 +433,25 @@ CAMERA_DB = {
         "type": "dslr",
     },
     "Canon EOS 6D": {"sensor_width": 35.8, "sensor_height": 23.9, "type": "dslr"},
+    "Canon EOS 600D": {
+        "sensor_width": 22.3,
+        "sensor_height": 14.9,
+        "type": "dslr",
+        "notes": "APS-C sensor, also sold as EOS Rebel T3i / EOS Kiss X5",
+    },
     "Canon EOS Rebel T7i": {
         "sensor_width": 22.3,
         "sensor_height": 14.9,
         "type": "dslr",
     },
     "Canon EOS RP": {"sensor_width": 36, "sensor_height": 24, "type": "dslr"},
+    # Canon Mirrorless
+    "Canon EOS M50": {
+        "sensor_width": 22.3,
+        "sensor_height": 14.9,
+        "type": "mirrorless",
+        "notes": "APS-C sensor, Canon's entry-level mirrorless",
+    },
     # Nikon cameras
     "NIKON D850": {"sensor_width": 35.9, "sensor_height": 23.9, "type": "dslr"},
     "NIKON D750": {"sensor_width": 35.9, "sensor_height": 24.0, "type": "dslr"},
