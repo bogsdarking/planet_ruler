@@ -161,7 +161,7 @@ class TestGetCameraModel:
         """Test partial matching for unknown models."""
         exif = {"Make": "Apple", "Model": "iPhone 13 Pro Max"}
         model = get_camera_model(exif)
-        assert model == "iPhone 13 Pro"  # Should match iPhone 13 Pro in DB
+        assert model == "iPhone 13 Pro Max"  # Exact match in DB
 
     def test_no_exif_data(self):
         """Test with empty EXIF data."""

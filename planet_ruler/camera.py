@@ -283,7 +283,7 @@ CAMERA_DB = {
                 "aperture": 1.8,
                 "sensor_width": 5.6,
                 "sensor_height": 4.2,
-                "notes": "12MP main camera, 1/2.55\" sensor, 1.4µm pixels, OIS",
+                "notes": '12MP main camera, 1/2.55" sensor, 1.4µm pixels, OIS',
             },
             {
                 "name": "telephoto",
@@ -291,7 +291,7 @@ CAMERA_DB = {
                 "aperture": 2.0,
                 "sensor_width": 4.8,
                 "sensor_height": 3.6,
-                "notes": "12MP 2x optical zoom, 1/3.6\" sensor, OIS",
+                "notes": '12MP 2x optical zoom, 1/3.6" sensor, OIS',
             },
             {
                 "name": "ultrawide",
@@ -299,7 +299,7 @@ CAMERA_DB = {
                 "aperture": 2.4,
                 "sensor_width": 4.8,
                 "sensor_height": 3.6,
-                "notes": "12MP ultra-wide, 1/3.6\" sensor",
+                "notes": '12MP ultra-wide, 1/3.6" sensor',
             },
         ],
     },
@@ -313,7 +313,7 @@ CAMERA_DB = {
                 "aperture": 1.8,
                 "sensor_width": 5.6,
                 "sensor_height": 4.2,
-                "notes": "12MP main camera, 1/2.55\" sensor, 1.4µm pixels, OIS",
+                "notes": '12MP main camera, 1/2.55" sensor, 1.4µm pixels, OIS',
             },
             {
                 "name": "telephoto",
@@ -321,7 +321,7 @@ CAMERA_DB = {
                 "aperture": 2.4,
                 "sensor_width": 4.54,
                 "sensor_height": 3.42,
-                "notes": "12MP 2x optical zoom, 1/3.4\" sensor, 1.0µm pixels, OIS",
+                "notes": '12MP 2x optical zoom, 1/3.4" sensor, 1.0µm pixels, OIS',
             },
         ],
     },
@@ -393,14 +393,14 @@ CAMERA_DB = {
         "type": "phone",
         "sensor_width": 5.5,
         "sensor_height": 4.1,
-        "notes": "16MP camera, f/1.9, OIS, ~1/2.6\" sensor",
+        "notes": '16MP camera, f/1.9, OIS, ~1/2.6" sensor',
     },
     # iPhone 6s
     "iPhone 6s": {
         "type": "phone",
         "sensor_width": 4.80,
         "sensor_height": 3.60,
-        "notes": "12MP camera, 1/3\" sensor, 1.22µm pixels",
+        "notes": '12MP camera, 1/3" sensor, 1.22µm pixels',
     },
     # ========================================================================
     # Traditional Digital
