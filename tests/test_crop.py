@@ -21,11 +21,9 @@ GUI interaction by directly manipulating internal state.
 
 import pytest
 import numpy as np
-import math
-from pathlib import Path
 from typing import Dict
 from unittest.mock import MagicMock, patch
-import sys
+import json
 
 # Set matplotlib to non-GUI backend FIRST
 import matplotlib
@@ -34,6 +32,7 @@ matplotlib.use("Agg")
 
 from PIL import Image
 from planet_ruler.crop import TkImageCropper
+from planet_ruler.camera import check_planet_ruler_crop_metadata
 
 
 @pytest.fixture
@@ -724,3 +723,200 @@ def test_large_image_handling(tmp_path, mock_gui):
     assert scaled["n_pix_x"] == 3680
     assert scaled["n_pix_y"] == 2320
     assert scaled["w"] > 0
+
+
+# ============================================================================
+# EXIF CONSISTENCY
+# ============================================================================
+
+
+@pytest.fixture
+def mock_gui():
+    """Mock GUI dependencies."""
+    with patch("planet_ruler.crop.tk.Tk") as mock_root, patch(
+        "planet_ruler.crop.tk.Frame"
+    ), patch("planet_ruler.crop.tk.Label"), patch("planet_ruler.crop.tk.Button"), patch(
+        "planet_ruler.crop.tk.Canvas"
+    ), patch(
+        "planet_ruler.crop.tk.Scrollbar"
+    ), patch(
+        "planet_ruler.crop.ImageTk.PhotoImage"
+    ):
+        mock_root.return_value = MagicMock()
+        yield
+
+
+def test_json_sidecar_round_trip(tmp_path, mock_gui):
+    """Test that crop→save→reload preserves scaled parameters in JSON sidecar."""
+    # Create test image
+    test_image = tmp_path / "test_image.jpg"
+    img = Image.new("RGB", (4032, 3024), color="blue")
+    img.save(test_image, quality=95)
+
+    # Initial parameters
+    initial_params = {
+        "w": 0.0098,  # 9.8mm sensor width
+        "f": 0.0042,  # 4.2mm focal length
+        "n_pix_x": 4032,
+        "n_pix_y": 3024,
+        "x0": 2016,
+        "y0": 1512,
+    }
+
+    # Create cropper and crop image
+    cropper = TkImageCropper(test_image, initial_params, initial_zoom=1.0)
+    cropper.crop_rect = (0, 0, 4032, 2024)
+    cropper.cropped_image = cropper.original_image.crop(cropper.crop_rect)
+    scaled = cropper.calculate_scaled_parameters()
+
+    # Save image and metadata
+    output_path = tmp_path / "test_image_cropped.jpg"
+    cropper.cropped_image.save(output_path, quality=95)
+    json_path = cropper._save_crop_metadata(output_path, scaled, cropper.crop_rect)
+
+    # Verify JSON file was created
+    assert json_path.exists()
+    assert json_path.name == "test_image_cropped.crop.json"
+
+    # Check that metadata is readable
+    crop_metadata = check_planet_ruler_crop_metadata(str(output_path))
+    assert crop_metadata is not None, "Crop metadata not found in JSON sidecar"
+    assert crop_metadata["version"] == "1.0"
+    assert crop_metadata["scaled_w"] == scaled["w"]
+    assert crop_metadata["crop_region"] == list(cropper.crop_rect)
+    assert crop_metadata["original_dimensions"] == [4032, 3024]
+
+    # Verify scaled sensor width
+    assert np.isclose(crop_metadata["scaled_w"], initial_params["w"], rtol=0.01)
+
+
+def test_horizontal_crop_json_sidecar(tmp_path, mock_gui):
+    """Test horizontal crop (changes sensor width)."""
+    # Create test image
+    test_image = tmp_path / "test_image.jpg"
+    img = Image.new("RGB", (4032, 3024), color="blue")
+    img.save(test_image, quality=95)
+
+    # Initial parameters
+    initial_params = {
+        "w": 0.0098,  # 9.8mm sensor width
+        "f": 0.0042,  # 4.2mm focal length
+        "n_pix_x": 4032,
+        "n_pix_y": 3024,
+        "x0": 2016,
+        "y0": 1512,
+    }
+
+    # Create cropper and crop horizontally (50% width)
+    cropper = TkImageCropper(test_image, initial_params, initial_zoom=1.0)
+    cropper.crop_rect = (1000, 0, 3000, 3024)  # 2000px wide (was 4032)
+    cropper.cropped_image = cropper.original_image.crop(cropper.crop_rect)
+
+    scaled = cropper.calculate_scaled_parameters()
+
+    # Expected scaled width: 0.0098 * (2000/4032) = 0.00486
+    expected_w = initial_params["w"] * (2000 / 4032)
+    assert np.isclose(scaled["w"], expected_w, rtol=0.001)
+
+    # Save with metadata
+    output_path = tmp_path / "test_image_cropped.jpg"
+    cropper.cropped_image.save(output_path, quality=95)
+    json_path = cropper._save_crop_metadata(output_path, scaled, cropper.crop_rect)
+
+    # Reload metadata
+    crop_metadata = check_planet_ruler_crop_metadata(str(output_path))
+    assert crop_metadata is not None
+    assert np.isclose(crop_metadata["scaled_w"], expected_w, rtol=0.001)
+
+
+def test_no_json_sidecar_normal_processing(tmp_path):
+    """Test that normal images without sidecar work as before."""
+    # Create test image
+    test_image = tmp_path / "normal_image.jpg"
+    img = Image.new("RGB", (4032, 3024), color="blue")
+    img.save(test_image, quality=95)
+
+    # Should return None (no sidecar)
+    crop_metadata = check_planet_ruler_crop_metadata(str(test_image))
+    assert crop_metadata is None
+
+
+def test_json_sidecar_structure(tmp_path, mock_gui):
+    """Test that JSON sidecar has correct structure."""
+    # Create test image
+    test_image = tmp_path / "test_image.jpg"
+    img = Image.new("RGB", (4032, 3024), color="blue")
+    img.save(test_image, quality=95)
+
+    initial_params = {
+        "w": 0.0098,
+        "f": 0.0042,
+        "n_pix_x": 4032,
+        "n_pix_y": 3024,
+    }
+
+    # Crop and save
+    cropper = TkImageCropper(test_image, initial_params, initial_zoom=1.0)
+    cropper.crop_rect = (1000, 500, 3000, 2500)
+    cropper.cropped_image = cropper.original_image.crop(cropper.crop_rect)
+    scaled = cropper.calculate_scaled_parameters()
+
+    output_path = tmp_path / "test_cropped.jpg"
+    cropper.cropped_image.save(output_path, quality=95)
+    json_path = cropper._save_crop_metadata(output_path, scaled, cropper.crop_rect)
+
+    # Read JSON directly
+    with open(json_path) as f:
+        data = json.load(f)
+
+    # Check structure
+    assert "planet_ruler_crop" in data
+    metadata = data["planet_ruler_crop"]
+
+    # Required fields
+    assert "version" in metadata
+    assert "scaled_w" in metadata
+    assert "crop_region" in metadata
+    assert "original_dimensions" in metadata
+    assert "timestamp" in metadata
+
+    # Types
+    assert isinstance(metadata["version"], str)
+    assert isinstance(metadata["scaled_w"], float)
+    assert isinstance(metadata["crop_region"], list)
+    assert len(metadata["crop_region"]) == 4
+    assert isinstance(metadata["original_dimensions"], list)
+    assert len(metadata["original_dimensions"]) == 2
+    assert isinstance(metadata["timestamp"], str)
+
+
+def test_json_sidecar_human_readable(tmp_path, mock_gui):
+    """Test that JSON sidecar is human-readable."""
+    test_image = tmp_path / "test_image.jpg"
+    img = Image.new("RGB", (4032, 3024), color="blue")
+    img.save(test_image, quality=95)
+
+    initial_params = {"w": 0.0098, "n_pix_x": 4032, "n_pix_y": 3024}
+
+    cropper = TkImageCropper(test_image, initial_params, initial_zoom=1.0)
+    cropper.crop_rect = (0, 0, 4032, 2024)
+    cropper.cropped_image = cropper.original_image.crop(cropper.crop_rect)
+    scaled = cropper.calculate_scaled_parameters()
+
+    output_path = tmp_path / "test_cropped.jpg"
+    cropper.cropped_image.save(output_path, quality=95)
+    json_path = cropper._save_crop_metadata(output_path, scaled, cropper.crop_rect)
+
+    # Read as text
+    with open(json_path) as f:
+        text = f.read()
+
+    # Should be formatted with indentation
+    assert "\n" in text
+    assert "  " in text  # Has indentation
+    assert "planet_ruler_crop" in text
+    assert "scaled_w" in text
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
