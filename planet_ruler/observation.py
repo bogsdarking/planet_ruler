@@ -191,7 +191,6 @@ class PlanetObservation:
 
     def crop_image(
         self,
-        save_cropped: bool = True,
         update_parameters: bool = True,
     ) -> "PlanetObservation":
         """
@@ -206,7 +205,6 @@ class PlanetObservation:
         optical axis was pointing at a location not visible in the cropped image.
 
         Args:
-            save_cropped: If True, save the cropped image to disk
             update_parameters: If True and parameters exist, scale them for the crop
 
         Returns:
@@ -290,18 +288,6 @@ class PlanetObservation:
 
         # Update original image reference
         self._original_image = self.image.copy()
-
-        # Save cropped image to disk (optional)
-        if save_cropped:
-            output_path = (
-                Path(self.image_filepath).parent
-                / f"{Path(self.image_filepath).stem}_cropped.jpg"
-            )
-            PILImage.fromarray(self.image).save(output_path, quality=95)
-            logger.info(f"Saved cropped image to: {output_path}")
-
-            # Update filepath to point to cropped version
-            self.image_filepath = str(output_path)
 
         # Update parameters (only if they exist and user wants to)
         if has_parameters and update_parameters:

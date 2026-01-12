@@ -522,19 +522,37 @@ class TkImageCropper:
         # Calculate scaled parameters
         self.scaled_parameters = self.calculate_scaled_parameters()
 
-        # Save cropped image
+        # Save cropped image (EXIF already in image.info)
         output_path = (
             Path(self.image_path).parent / f"{Path(self.image_path).stem}_cropped.jpg"
         )
-        self.cropped_image.save(output_path, quality=95)
+
+        # Save with preserved EXIF
+        if "exif" in self.cropped_image.info:
+            self.cropped_image.save(
+                output_path, exif=self.cropped_image.info.get("exif")
+            )
+            print("✓ Preserved original EXIF data in cropped image")
+        else:
+            self.cropped_image.save(output_path, quality=95)
+            print("No EXIF data to preserve")
+
+        # Save metadata sidecar
+        json_path = self._save_crop_metadata(
+            output_path, self.scaled_parameters, self.crop_rect
+        )
 
         # Prepare message
         msg = (
             f"Cropped image saved!\n\n"
-            f"Original: {self.width}×{self.height}px\n"
-            f"Cropped: {x2-x1}×{y2-y1}px\n"
-            f"Crop region: ({x1}, {y1}) to ({x2}, {y2})\n\n"
-            f"Saved to: {output_path}\n\n"
+            f"Files saved:\n"
+            f"  Image: {output_path.name}\n"
+            f"  Metadata: {json_path.name}\n\n"
+            f"✓ Scaled parameters stored in sidecar JSON\n"
+            f"⚠️  Keep both files together for auto-config to work\n\n"
+            f"⚠️  Note: Existing EXIF UserComment was overwritten\n\n"
+            f"You can reload with auto-config:\n"
+            f"  create_config_from_image('{output_path.name}', ...)\n\n"
         )
 
         if "w" in self.scaled_parameters:
@@ -612,6 +630,49 @@ class TkImageCropper:
     def get_scaled_parameters(self) -> Optional[Dict]:
         """Get scaled parameters after cropping."""
         return self.scaled_parameters
+
+    def _save_crop_metadata(
+        self,
+        output_path: Path,
+        scaled_params: Dict,
+        crop_bounds: Tuple[int, int, int, int],
+    ) -> Path:
+        """
+        Save crop metadata as JSON sidecar file.
+
+        Creates a .crop.json file alongside the cropped image.
+
+        Args:
+            output_path: Path where image will be saved
+            scaled_params: Scaled camera parameters
+            crop_bounds: (x1, y1, x2, y2) crop region
+
+        Returns:
+            Path to JSON sidecar file
+        """
+        import json
+        from datetime import datetime
+
+        metadata = {
+            "planet_ruler_crop": {
+                "version": "1.0",
+                "scaled_w": scaled_params.get("w"),
+                "scaled_h_detector": scaled_params.get("h_detector"),
+                "crop_region": list(crop_bounds),
+                "original_dimensions": [self.width, self.height],
+                "timestamp": datetime.now().isoformat(),
+            }
+        }
+
+        # Save JSON sidecar
+        json_path = (
+            str(output_path).replace(".jpg", ".crop.json").replace(".JPG", ".crop.json")
+        )
+        with open(json_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"✓ Saved crop metadata: {json_path}")
+        return Path(json_path)
 
 
 # Convenience function for use in LimbObservation
