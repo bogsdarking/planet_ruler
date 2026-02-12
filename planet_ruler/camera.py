@@ -184,6 +184,28 @@ CAMERA_DB = {
             },
         ],
     },
+    # iPhone 15 (base model)
+    "iPhone 15": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.86,
+                "aperture": 1.6,
+                "sensor_width": 9.8,
+                "sensor_height": 7.35,
+                "notes": "48MP main camera",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 2.4,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
     # iPhone 15 Pro/Pro Max
     "iPhone 15 Pro": {
         "type": "phone",
@@ -1219,7 +1241,7 @@ def create_config_from_image(
         init_values["w"] = sensor_m
 
         # Use data-driven limits if available (from camera type statistics)
-        if camera_params["sensor_width_min"] and camera_params["sensor_width_max"]:
+        if camera_params["sensor_width_min"] and camera_params["sensor_width_max"] and not crop_metadata:
             param_limits["w"] = [
                 camera_params["sensor_width_min"] / 1000,
                 camera_params["sensor_width_max"] / 1000,
