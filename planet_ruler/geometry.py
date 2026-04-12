@@ -151,12 +151,15 @@ def extrinsic_transform(
         world_coords (np.ndarray): Coordinates of the limb in the world.
             Array has Nx4 shape where N is the number of x-axis pixels
             in the image.
-        theta_x (float): Rotation around the x (horizontal) axis,
-            AKA pitch. (radians)
-        theta_y (float): Rotation around the y (toward the limb) axis,
-            AKA roll. (radians)
-        theta_z (float): Rotation around the z (vertical) axis,
-            AKA yaw. (radians)
+        theta_x (float): Rotation around the x (horizontal lateral) axis,
+            AKA pitch — tilts the camera up/down. (radians)
+        theta_y (float): Rotation around the y (toward-limb) axis, AKA roll.
+            When theta_z=0, acts as a pure phase shift in φ with no effect on
+            the projected arc shape. When theta_z≠0, the z-rotation breaks
+            that symmetry and theta_y has a genuine effect on the arc. (radians)
+        theta_z (float): Rotation around the z (vertical) axis, AKA yaw.
+            Use theta_z=π for the physically correct ∪-shaped horizon arc
+            (near limb visible, more planet at image center). (radians)
         origin_x (float): Horizontal offset from the object in question
             to the camera (m).
         origin_y (float): Distance from the object in question to the
@@ -241,12 +244,15 @@ def limb_arc_sample(
         w (float): detector size (float): Width of CCD (m).
         x0 (float): The x-axis principle point.
         y0 (float): The y-axis principle point.
-        theta_x (float): Rotation around the x (horizontal) axis,
-            AKA pitch. (radians)
-        theta_y (float): Rotation around the y (toward the limb) axis,
-            AKA roll. (radians)
-        theta_z (float): Rotation around the z (vertical) axis,
-            AKA yaw. (radians)
+        theta_x (float): Rotation around the x (horizontal lateral) axis,
+            AKA pitch — tilts the camera up/down. (radians)
+        theta_y (float): Rotation around the y (toward-limb) axis, AKA roll.
+            When theta_z=0, acts as a pure phase shift in φ with no effect on
+            the projected arc shape. When theta_z≠0, the z-rotation breaks
+            that symmetry and theta_y has a genuine effect on the arc. (radians)
+        theta_z (float): Rotation around the z (vertical) axis, AKA yaw.
+            Use theta_z=π for the physically correct ∪-shaped horizon arc
+            (near limb visible, more planet at image center). (radians)
         origin_x (float): Horizontal offset from the object in question
             to the camera (m).
         origin_y (float): Distance from the object in question to the
@@ -454,12 +460,15 @@ def limb_arc(
         w (float): detector size (float): Width of CCD (m).
         x0 (float): The x-axis principle point.
         y0 (float): The y-axis principle point.
-        theta_x (float): Rotation around the x (horizontal) axis,
-            AKA pitch. (radians)
-        theta_y (float): Rotation around the y (toward the limb) axis,
-            AKA roll. (radians)
-        theta_z (float): Rotation around the z (vertical) axis,
-            AKA yaw. (radians)
+        theta_x (float): Rotation around the x (horizontal lateral) axis,
+            AKA pitch — tilts the camera up/down. (radians)
+        theta_y (float): Rotation around the y (toward-limb) axis, AKA roll.
+            When theta_z=0, acts as a pure phase shift in φ with no effect on
+            the projected arc shape. When theta_z≠0, the z-rotation breaks
+            that symmetry and theta_y has a genuine effect on the arc. (radians)
+        theta_z (float): Rotation around the z (vertical) axis, AKA yaw.
+            Use theta_z=π for the physically correct ∪-shaped horizon arc
+            (near limb visible, more planet at image center). (radians)
         origin_x (float): Horizontal offset from the object in question
             to the camera (m).
         origin_y (float): Distance from the object in question to the
