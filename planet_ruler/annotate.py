@@ -90,12 +90,13 @@ class TkLimbAnnotator:
     - Generate sparse target array for CostFunction
     """
 
-    def __init__(self, image_path, initial_stretch=1.0, initial_zoom=None):
+    def __init__(self, image_path, image=None, initial_stretch=1.0, initial_zoom=None):
         """
         Initialize the annotation tool.
 
         Args:
             image_path (str): Path to the image to annotate
+            image (np.ndarray): Optionally the already loaded image
             initial_stretch (float): Initial vertical stretch factor
             initial_zoom (float): Initial zoom level (None = auto-fit)
         """
@@ -103,7 +104,10 @@ class TkLimbAnnotator:
         self.vertical_stretch = initial_stretch
 
         # Load image
-        self.original_image = Image.open(image_path)
+        if image is None:
+            self.original_image = Image.open(image_path)
+        else:
+            self.original_image = Image.fromarray(image)
         self.width, self.height = self.original_image.size
 
         # Store clicked points (in original coordinates)
@@ -1293,3 +1297,62 @@ if __name__ == "__main__":
     if len(annotator.points) >= 3:
         target = annotator.get_target()
         print(f"\n✓ Generated target with {np.sum(~np.isnan(target))} points")
+
+
+def load_limb_points_from_json(json_path, return_metadata=False):
+    """
+    Load limb points from JSON and convert to sparse target array.
+    
+    Args:
+        json_path (str): Path to JSON file saved by TkLimbAnnotator
+        return_metadata (bool): If True, return (target, metadata) tuple
+        
+    Returns:
+        np.ndarray: Sparse target array with limb y-coordinates
+        tuple: (target, metadata) if return_metadata=True
+        
+    Example:
+        >>> # Simple usage - just get the target array
+        >>> target = load_limb_points_from_json("image_limb_points.json")
+        >>> 
+        >>> # Use with LimbObservation
+        >>> from planet_ruler.observation import LimbObservation
+        >>> obs = LimbObservation("image.jpg", "config.yaml")
+        >>> target = load_limb_points_from_json("image_limb_points.json")
+        >>> obs.register_limb(target)
+        >>> obs.fit_limb()
+        >>>
+        >>> # Get metadata too (for validation)
+        >>> target, metadata = load_limb_points_from_json(
+        ...     "image_limb_points.json", 
+        ...     return_metadata=True
+        ... )
+        >>> print(f"Loaded {metadata['n_points']} points from {metadata['image_path']}")
+    """
+    try:
+        with open(json_path, "r") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"JSON file not found: {json_path}")
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON file: {e}")
+    
+    # Validate required fields
+    required_fields = ["points", "image_size"]
+    missing = [f for f in required_fields if f not in data]
+    if missing:
+        raise ValueError(f"JSON file missing required fields: {missing}")
+    
+    points = data["points"]
+    width = data["image_size"][0]
+    
+    # Convert to sparse target array
+    target = np.full(width, np.nan)
+    for x, y in points:
+        x_idx = int(round(x))
+        if 0 <= x_idx < width:
+            target[x_idx] = y
+    
+    if return_metadata:
+        return target, data
+    return target
