@@ -745,7 +745,9 @@ class LimbObservation(PlanetObservation):
 
         elif self.limb_detection == "manual":
             annotator = TkLimbAnnotator(
-                image_path=self.image_filepath, initial_stretch=1.0
+                image_path=self.image_filepath,
+                image=self.image,
+                initial_stretch=1.0,
             )
             annotator.run()  # Opens window
 
