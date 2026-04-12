@@ -52,7 +52,9 @@ Examples:
         """,
     )
 
-    parser.add_argument("config", type=Path, help="Path to YAML configuration file")
+    parser.add_argument(
+        "config", type=Path, help="Path to YAML configuration file"
+    )
 
     parser.add_argument(
         "--scenario",
@@ -69,7 +71,23 @@ Examples:
     parser.add_argument(
         "--parallel",
         action="store_true",
-        help="Run scenarios in parallel (not yet implemented)",
+        help="Run scenario batches in parallel using worker processes.",
+    )
+
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=0,
+        help=(
+            "Number of parallel worker processes (default: half of CPU count). "
+            "Implies --parallel when > 0."
+        ),
+    )
+
+    parser.add_argument(
+        "--no-skip",
+        action="store_true",
+        help="Re-run scenarios even if already present in the DB.",
     )
 
     parser.add_argument(
@@ -78,7 +96,9 @@ Examples:
         help="Path to output database (default: benchmarks/results/benchmark_results.db)",
     )
 
-    parser.add_argument("--quiet", action="store_true", help="Suppress progress output")
+    parser.add_argument(
+        "--quiet", action="store_true", help="Suppress progress output"
+    )
 
     args = parser.parse_args()
 
@@ -110,9 +130,14 @@ Examples:
         print()
 
     # Run benchmarks
+    use_parallel = args.parallel or args.workers > 0
     try:
         results = runner.run(
-            parallel=args.parallel, scenarios=args.scenario, images=args.image
+            parallel=use_parallel,
+            workers=args.workers,
+            scenarios=args.scenario,
+            images=args.image,
+            skip_completed=not args.no_skip,
         )
     except Exception as e:
         print(f"Error running benchmarks: {e}", file=sys.stderr)
@@ -129,7 +154,9 @@ Examples:
         print("=" * 70)
         print(f"Total runs: {len(results)}")
 
-        successful = sum(1 for r in results if r.convergence_status == "success")
+        successful = sum(
+            1 for r in results if r.convergence_status == "success"
+        )
         print(f"Successful: {successful} ({successful/len(results)*100:.1f}%)")
 
         if successful > 0:
@@ -155,7 +182,9 @@ Examples:
         print(f"Results stored in: {runner.db_path}")
         print()
         print("Next steps:")
-        print("  - Analyze results: jupyter notebook benchmarks/visualize.ipynb")
+        print(
+            "  - Analyze results: jupyter notebook benchmarks/visualize.ipynb"
+        )
         print(
             "  - Export CSV: python -c 'from benchmarks.analyzer import BenchmarkAnalyzer; "
             'BenchmarkAnalyzer().export_csv("results.csv")\''
