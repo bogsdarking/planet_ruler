@@ -19,9 +19,12 @@ This module provides infrastructure for running systematic performance benchmark
 across multiple scenarios, images, and parameter configurations.
 """
 
+import itertools
 import json
+import os
 import sqlite3
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
@@ -30,11 +33,9 @@ import warnings
 
 import numpy as np
 import yaml
-from PIL import Image
 
 # Import planet_ruler components
 from planet_ruler.image import load_image
-from planet_ruler.observation import LimbObservation
 
 
 @dataclass
@@ -97,7 +98,9 @@ class BenchmarkResult:
     uncertainty_radius: float
 
     # Fit results (actual fitted parameters)
-    best_parameters: Dict[str, float]  # Actual fitted values {r, h, f, theta_x, ...}
+    best_parameters: Dict[
+        str, float
+    ]  # Actual fitted values {r, h, f, theta_x, ...}
     convergence_status: str
     iterations: Optional[int]
 
@@ -118,6 +121,34 @@ class BenchmarkResult:
 
     # Error info
     error_message: Optional[str]
+
+
+def _run_batch_worker(task: tuple) -> List["BenchmarkResult"]:
+    """
+    Module-level worker for ProcessPoolExecutor (must be picklable).
+
+    Constructs a minimal BenchmarkRunner context from ``task`` without
+    going through __init__ (which would re-expand the full config).
+    Writes results to DB directly so the main process stays lean.
+    """
+    benchmark_dir, db_path, scenario, image_name, git_commit = task
+
+    runner = object.__new__(BenchmarkRunner)
+    runner.benchmark_dir = Path(benchmark_dir)
+    runner.db_path = Path(db_path)
+    runner.git_commit = git_commit
+
+    try:
+        batch = runner._run_with_augmentation(scenario, image_name)
+        for result in batch:
+            runner._store_result(result)
+        return batch
+    except Exception as exc:
+        print(
+            f"[worker error] {scenario.get('name')} / {image_name}: {exc}",
+            flush=True,
+        )
+        return []
 
 
 class BenchmarkRunner:
@@ -142,24 +173,40 @@ class BenchmarkRunner:
     """
 
     def __init__(
-        self, config_path: Union[str, Path], db_path: Optional[Union[str, Path]] = None
+        self,
+        config_path: Union[str, Path],
+        db_path: Optional[Union[str, Path]] = None,
     ):
         self.config_path = Path(config_path)
         self.config = self._load_config()
 
         # Determine base directory for benchmarks
-        # Try module location first, fall back to CWD/planet_ruler/benchmarks
+        # Benchmarks are a dev/contributor workflow -- data lives in the repo,
+        # not in the installed package. Search for repo working directory first.
         module_bench_dir = Path(__file__).parent
-        cwd_bench_dir = Path.cwd() / "planet_ruler" / "benchmarks"
 
-        # Use module location if images/ exists there, otherwise use CWD-relative
-        if (module_bench_dir / "images").exists():
-            self.benchmark_dir = module_bench_dir
-        elif cwd_bench_dir.exists():
-            self.benchmark_dir = cwd_bench_dir
+        # Walk up from CWD looking for a repo root (has planet_ruler/benchmarks/images)
+        def _find_repo_bench_dir(start: Path) -> Optional[Path]:
+            for parent in [start, *start.parents]:
+                candidate = parent / "planet_ruler" / "benchmarks"
+                if (candidate / "images").exists():
+                    return candidate
+            return None
+
+        repo_bench_dir = _find_repo_bench_dir(Path.cwd())
+
+        if repo_bench_dir is not None:
+            self.benchmark_dir = repo_bench_dir
         else:
-            # Default to module location (will be created if needed)
+            # Fall back to module location -- will produce a clear error later
+            # if data isn't present (e.g. running from a pip install without the repo)
             self.benchmark_dir = module_bench_dir
+            if not (self.benchmark_dir / "images").exists():
+                warnings.warn(
+                    "Benchmark data directory not found. Benchmarks must be run from "
+                    "within the planet_ruler git repository after `git lfs pull`. "
+                    f"Expected images at: {self.benchmark_dir / 'images'}"
+                )
 
         if db_path is None:
             db_path = self.benchmark_dir / "results" / "benchmark_results.db"
@@ -174,9 +221,10 @@ class BenchmarkRunner:
         with open(self.config_path) as f:
             config = yaml.safe_load(f)
 
-        # Basic validation
+        if "scenarios" not in config and "grid" not in config:
+            raise ValueError("Config must contain 'scenarios' or 'grid' key")
         if "scenarios" not in config:
-            raise ValueError("Config must contain 'scenarios' key")
+            config["scenarios"] = []
 
         return config
 
@@ -196,9 +244,34 @@ class BenchmarkRunner:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return None
 
+    def _get_completed_keys(self) -> set:
+        """Return set of (scenario_name, image_name) tuples already in DB."""
+        conn = sqlite3.connect(self.db_path, timeout=30)
+        cur = conn.cursor()
+        cur.execute("SELECT scenario_name, image_name FROM benchmark_results")
+        keys = {(row[0], row[1]) for row in cur.fetchall()}
+        conn.close()
+        return keys
+
+    def _expected_names(self, scenario: Dict[str, Any]) -> List[str]:
+        """
+        Scenario_name values expected for one (scenario, image) batch.
+
+        Includes the base name plus any augmentation variant names.
+        """
+        base = scenario["name"]
+        aug = scenario.get("augmentation")
+        if not aug or scenario.get("detection_method", "manual") != "manual":
+            return [base]
+        n_variants = int(aug.get("n_variants", aug.get("n_noisy_variants", 0)))
+        return [base] + [f"{base}__aug{i + 1:02d}" for i in range(n_variants)]
+
     def _init_database(self):
         """Initialize SQLite database with results table."""
         conn = sqlite3.connect(self.db_path)
+        # WAL mode allows concurrent readers + serialised writers without
+        # blocking — required for parallel benchmark workers.
+        conn.execute("PRAGMA journal_mode=WAL")
         cursor = conn.cursor()
 
         cursor.execute(
@@ -209,36 +282,36 @@ class BenchmarkRunner:
                 image_name TEXT NOT NULL,
                 timestamp TEXT NOT NULL,
                 git_commit TEXT,
-                
+
                 detection_method TEXT NOT NULL,
                 fit_params TEXT NOT NULL,
                 free_parameters TEXT NOT NULL,
                 init_parameter_values TEXT NOT NULL,
                 parameter_limits TEXT NOT NULL,
                 minimizer_config TEXT NOT NULL,
-                
+
                 image_width INTEGER,
                 image_height INTEGER,
                 altitude REAL,
                 planet_name TEXT,
                 expected_radius REAL,
                 uncertainty_radius REAL,
-                
+
                 best_parameters TEXT NOT NULL,
                 fitted_radius REAL,
                 convergence_status TEXT,
                 iterations INTEGER,
-                
+
                 absolute_error REAL,
                 relative_error REAL,
                 within_uncertainty INTEGER,
-                
+
                 total_time REAL NOT NULL,
                 image_load_time REAL,
                 detection_time REAL,
                 optimization_time REAL,
                 timing_details TEXT,
-                
+
                 error_message TEXT
             )
         """
@@ -247,13 +320,13 @@ class BenchmarkRunner:
         # Create indexes for common queries
         cursor.execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_scenario_image 
+            CREATE INDEX IF NOT EXISTS idx_scenario_image
             ON benchmark_results(scenario_name, image_name)
         """
         )
         cursor.execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_timestamp 
+            CREATE INDEX IF NOT EXISTS idx_timestamp
             ON benchmark_results(timestamp)
         """
         )
@@ -261,113 +334,360 @@ class BenchmarkRunner:
         conn.commit()
         conn.close()
 
-    def _expand_scenarios(self) -> List[Dict[str, Any]]:
+    # ------------------------------------------------------------------
+    # Top-level grid expansion (GridSearchCV-style ``grid:`` section)
+    # ------------------------------------------------------------------
+
+    # Abbreviations used in generated scenario names
+    _PRESET_ABBR = {
+        "fast": "fast",
+        "balanced": "bal",
+        "planet-ruler": "pr",
+        "robust": "rob",
+        "scipy-default": "sdf",
+    }
+    _MINIMIZER_ABBR = {
+        "differential-evolution": "de",
+        "dual-annealing": "da",
+        "basinhopping": "bh",
+    }
+
+    @staticmethod
+    def _fp_code(free_params: list) -> str:
+        """Short code for a free_parameters list."""
+        fp = set(free_params)
+        has_angles = {"theta_x", "theta_y", "theta_z"}.issubset(fp)
+        code = "r"
+        if "h" in fp:
+            code += "h"
+        if has_angles:
+            code += "a"
+        if "w" in fp:
+            code += "w"
+        if "f" in fp:
+            code += "f"
+        return code
+
+    @staticmethod
+    def _rl_code(r_limits_km: list) -> str:
+        """Short code for r_limits_km relative to Earth radius."""
+        lo, hi = r_limits_km
+        center = 6371.0
+        pct = round(max(hi - center, center - lo) / center * 100)
+        if pct <= 6:
+            return "r05"
+        if pct <= 11:
+            return "r10"
+        if pct <= 22:
+            return "r20"
+        if pct <= 52:
+            return "r50"
+        return "rck"
+
+    def _make_grid_scenario_name(self, params: dict) -> str:
+        """Compact, human-readable name encoding all grid axes."""
+        m = self._MINIMIZER_ABBR.get(params.get("minimizer", ""), "xx")
+        p = self._PRESET_ABBR.get(params.get("minimizer_preset", ""), "xx")
+        fp = self._fp_code(params.get("free_parameters", ["r"]))
+        rl = self._rl_code(params.get("r_limits_km", [1000, 100000]))
+        h_pct = params.get("h_limits_pct")
+        hl = f"h{int(h_pct * 100):02d}" if h_pct else "hw"
+        pf_val = params.get("perturbation_factor", 0.5)
+        pf = f"p{int(pf_val * 100):02d}"
+        it = params.get("fit_params", {}).get("max_iter", 1000)
+        it_s = f"i{it}" if it < 1000 else f"i{it // 1000}k"
+        return f"g_{m}_{p}_{fp}_{rl}_{hl}_{pf}_{it_s}"
+
+    def _expand_top_level_grid(self) -> List[Dict[str, Any]]:
         """
-        Expand scenarios with grid search or sampling.
+        Expand the top-level ``grid:`` config section into scenario dicts.
 
-        Returns list of individual scenario configurations.
+        Within ``param_grid``, every list-valued key is a sweep dimension
+        (cross-product); scalar values are fixed for that sub-grid. Multiple
+        dicts in the list are unioned (identical to sklearn param_grid).
+
+        Special keys:
+          ``images`` -- image stems to run each config on.
+          ``fixed`` -- keys applied to every generated scenario.
+          ``annotation_file_pattern`` -- template using ``{image}``.
+          ``fit_params_max_iter`` -- shorthand for fit_params.max_iter.
+          ``h_limits_pct`` -- ±fraction of GPS h; applied only when h free.
         """
-        expanded = []
+        grid_cfg = self.config.get("grid")
+        if not grid_cfg:
+            return []
 
-        for scenario in self.config["scenarios"]:
-            # Check for grid search
-            has_grid = self._has_grid_params(scenario)
-            has_sampling = "sampling" in scenario
+        images = grid_cfg.get("images", [])
+        param_grid = grid_cfg.get("param_grid", [])
+        fixed = grid_cfg.get("fixed", {})
+        ann_pattern = grid_cfg.get(
+            "annotation_file_pattern",
+            "{image}_limb_points.json",
+        )
 
-            if has_grid and has_sampling:
-                raise ValueError(
-                    f"Scenario {scenario['name']} has both grid and sampling"
+        scenarios = []
+        for spec in param_grid:
+            sweep: Dict[str, list] = {}
+            scalar: Dict[str, Any] = {}
+            for k, v in spec.items():
+                if isinstance(v, list):
+                    sweep[k] = v
+                else:
+                    scalar[k] = v
+
+            all_dims = {"_image": images, **sweep}
+            keys = list(all_dims.keys())
+            for combo in itertools.product(*all_dims.values()):
+                params = dict(zip(keys, combo))
+                image = params.pop("_image")
+
+                # Resolve free_parameters from combo or scalar fallback
+                fp = params.get(
+                    "free_parameters",
+                    scalar.get("free_parameters", ["r"]),
                 )
+                # Skip h_limits_pct combos when h is not free
+                h_pct = params.get("h_limits_pct")
+                if h_pct is not None and "h" not in fp:
+                    continue
 
-            if has_grid:
-                expanded.extend(self._expand_grid(scenario))
-            elif has_sampling:
-                expanded.extend(self._expand_sampling(scenario))
-            else:
-                # Single scenario
-                expanded.append(scenario)
+                scenario = {**fixed, **scalar, **params}
 
+                # Promote fit_params_max_iter shorthand
+                if "fit_params_max_iter" in scenario:
+                    scenario["fit_params"] = {
+                        "max_iter": scenario.pop("fit_params_max_iter")
+                    }
+
+                # Drop null h_limits_pct (no override wanted)
+                if scenario.get("h_limits_pct") is None:
+                    scenario.pop("h_limits_pct", None)
+
+                scenario["images"] = [image]
+                scenario["annotation_file"] = ann_pattern.format(image=image)
+                scenario["name"] = self._make_grid_scenario_name(scenario)
+                scenarios.append(scenario)
+
+        return scenarios
+
+    def _expand_scenarios(self) -> List[Dict[str, Any]]:
+        """Expand explicit scenarios list plus top-level grid section."""
+        expanded = list(self.config.get("scenarios", []))
+        expanded.extend(self._expand_top_level_grid())
         return expanded
-
-    def _has_grid_params(self, scenario: Dict[str, Any]) -> bool:
-        """Check if scenario contains grid search parameters."""
-
-        def check_dict(d):
-            for v in d.values():
-                if isinstance(v, dict):
-                    if "grid" in v:
-                        return True
-                    if check_dict(v):
-                        return True
-                elif isinstance(v, list) and len(v) > 0:
-                    if isinstance(v[0], dict) and check_dict(v[0]):
-                        return True
-            return False
-
-        return check_dict(scenario)
-
-    def _expand_grid(self, scenario: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Expand grid search parameters into individual scenarios."""
-        # TODO: Implement proper grid expansion
-        # For now, return as-is and log warning
-        warnings.warn(f"Grid expansion not yet implemented for {scenario['name']}")
-        return [scenario]
-
-    def _expand_sampling(self, scenario: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate sampled parameter combinations."""
-        # TODO: Implement Latin hypercube or random sampling
-        warnings.warn(f"Sampling not yet implemented for {scenario['name']}")
-        return [scenario]
 
     def run(
         self,
         parallel: bool = False,
+        workers: int = 0,
         scenarios: Optional[List[str]] = None,
         images: Optional[List[str]] = None,
+        skip_completed: bool = True,
     ) -> List[BenchmarkResult]:
         """
         Run benchmark suite.
 
         Args:
-            parallel (bool): Whether to run scenarios in parallel.
+            parallel (bool): Run batches in parallel using worker processes.
+            workers (int): Number of worker processes (0 = half of CPU count).
             scenarios (list of str, optional): Filter to specific scenario names.
             images (list of str, optional): Filter to specific image names.
+            skip_completed (bool): Skip (scenario, image) pairs already in DB.
 
         Returns:
-            list of BenchmarkResult: All benchmark results.
+            list of BenchmarkResult: All benchmark results (empty in parallel
+            mode to avoid large IPC overhead; query the DB for summaries).
         """
         expanded_scenarios = self._expand_scenarios()
 
-        # Filter scenarios if requested
         if scenarios is not None:
             expanded_scenarios = [
                 s for s in expanded_scenarios if s["name"] in scenarios
             ]
 
-        results = []
+        # Build work list, optionally skipping already-complete pairs
+        completed_keys: set = set()
+        if skip_completed:
+            completed_keys = self._get_completed_keys()
+
+        pending: List[tuple] = []  # (scenario, image_name)
+        n_skipped = 0
 
         for scenario in expanded_scenarios:
             scenario_images = scenario.get("images", [])
-
-            # Filter images if requested
             if images is not None:
-                scenario_images = [img for img in scenario_images if img in images]
-
+                scenario_images = [
+                    img for img in scenario_images if img in images
+                ]
             for image_name in scenario_images:
-                print(f"Running: {scenario['name']} on {image_name}")
-                result = self._run_single(scenario, image_name)
-                results.append(result)
-                self._store_result(result)
+                expected = self._expected_names(scenario)
+                if skip_completed and all(
+                    (name, image_name) in completed_keys for name in expected
+                ):
+                    n_skipped += 1
+                    continue
+                pending.append((scenario, image_name))
+
+        if n_skipped:
+            print(
+                f"Skipping {n_skipped} already-complete (scenario, image) pairs."
+            )
+        print(f"Running {len(pending)} pending batches.")
+
+        results: List[BenchmarkResult] = []
+
+        if not parallel or len(pending) == 0:
+            for scenario, image_name in pending:
+                batch = self._run_with_augmentation(scenario, image_name)
+                for result in batch:
+                    results.append(result)
+                    self._store_result(result)
+        else:
+            n_workers = workers if workers > 0 else max(1, os.cpu_count() // 2)
+            print(f"Parallel mode: {n_workers} workers.")
+            tasks = [
+                (
+                    str(self.benchmark_dir),
+                    str(self.db_path),
+                    scenario,
+                    image_name,
+                    self.git_commit,
+                )
+                for scenario, image_name in pending
+            ]
+            with ProcessPoolExecutor(max_workers=n_workers) as pool:
+                futures = {pool.submit(_run_batch_worker, t): t for t in tasks}
+                for fut in as_completed(futures):
+                    try:
+                        batch = fut.result()
+                        results.extend(batch)
+                    except Exception as exc:
+                        task = futures[fut]
+                        print(
+                            f"[error] {task[2].get('name')} / {task[3]}: {exc}",
+                            flush=True,
+                        )
 
         return results
 
-    def _run_single(self, scenario: Dict[str, Any], image_name: str) -> BenchmarkResult:
-        """Run a single benchmark scenario on one image."""
+    def _run_with_augmentation(
+        self, scenario: Dict[str, Any], image_name: str
+    ) -> List[BenchmarkResult]:
+        """
+        Run a scenario on one image, including augmented annotation variants.
+
+        If the scenario contains an ``augmentation`` key, the base annotation is
+        run first, then each noisy variant is run and stored with a suffixed
+        scenario name (e.g. ``my_scenario__aug01``).
+
+        Augmentation config (all optional)::
+
+            augmentation:
+              n_noisy_variants: 5   # number of noisy copies (default 0)
+              noise_sigma: 4.0      # Gaussian σ in pixels (default 4.0)
+              seed: 0               # RNG seed (default 0)
+
+        Returns:
+            List containing the base result and any augmentation results.
+        """
+        augmentation = scenario.get("augmentation")
+
+        if (
+            not augmentation
+            or scenario.get("detection_method", "manual") != "manual"
+        ):
+            name = scenario["name"]
+            print(f"Running: {name} on {image_name}")
+            return [self._run_single(scenario, image_name)]
+
+        from planet_ruler.benchmarks.augment_annotations import (
+            generate_noisy_variants,
+        )
+
+        n_variants = int(
+            augmentation.get(
+                "n_variants", augmentation.get("n_noisy_variants", 0)
+            )
+        )
+        noise_sigma = float(augmentation.get("noise_sigma", 4.0))
+        seed = int(augmentation.get("seed", 0))
+
+        # Run base case first (no override — loads annotation from file as usual)
+        base_name = scenario["name"]
+        print(f"Running: {base_name} on {image_name} (base)")
+        base_result = self._run_single(scenario, image_name)
+        batch = [base_result]
+
+        if n_variants <= 0 or base_result.convergence_status == "error":
+            return batch
+
+        # Re-load the annotation points so we can generate variants
+        annotation_file = scenario.get("annotation_file")
+        if not annotation_file:
+            return batch
+
+        annot_path = self.benchmark_dir / "annotations" / annotation_file
+        try:
+            with open(annot_path) as f:
+                annotation_data = json.load(f)
+            if "limb_points" in annotation_data:
+                points = annotation_data["limb_points"]["points"]
+            else:
+                points = annotation_data["points"]
+        except Exception:
+            return batch
+
+        variants = generate_noisy_variants(
+            points, n_variants=n_variants, noise_sigma=noise_sigma, seed=seed
+        )
+
+        image_width = base_result.image_width
+
+        for i, var_points in enumerate(variants):
+            # Build sparse limb_target from variant points
+            limb_target = np.full(image_width, np.nan)
+            for x, y in var_points:
+                x_idx = int(round(x))
+                if 0 <= x_idx < image_width:
+                    limb_target[x_idx] = y
+
+            aug_name = f"{base_name}__aug{i + 1:02d}"
+            print(f"Running: {aug_name} on {image_name}")
+            result = self._run_single(
+                scenario,
+                image_name,
+                limb_target_override=limb_target,
+                scenario_name_override=aug_name,
+            )
+            batch.append(result)
+
+        return batch
+
+    def _run_single(
+        self,
+        scenario: Dict[str, Any],
+        image_name: str,
+        limb_target_override: Optional[np.ndarray] = None,
+        scenario_name_override: Optional[str] = None,
+    ) -> BenchmarkResult:
+        """
+        Run a single benchmark scenario on one image.
+
+        Args:
+            scenario: Scenario configuration dict.
+            image_name: Image stem (no extension).
+            limb_target_override: If provided, skip annotation file loading and
+                use this sparse NaN array as the limb target directly. Useful
+                for augmented annotation variants.
+            scenario_name_override: If provided, use this as the stored scenario
+                name instead of ``scenario['name']``.
+        """
         start_time = time.time()
+        effective_name = scenario_name_override or scenario["name"]
 
         # Initialize result with metadata
         result = BenchmarkResult(
-            scenario_name=scenario["name"],
+            scenario_name=effective_name,
             image_name=image_name,
             timestamp=datetime.now().isoformat(),
             git_commit=self.git_commit,
@@ -419,7 +739,10 @@ class BenchmarkRunner:
             limb_detection = scenario.get("detection_method", "manual")
 
             # Get minimizer (default to differential-evolution)
-            minimizer_method = scenario.get("minimizer", "differential-evolution")
+            minimizer_method = scenario.get(
+                "minimizer", "differential-evolution"
+            )
+            minimizer_preset = scenario.get("minimizer_preset")
             minimizer_kwargs = scenario.get("minimizer_kwargs")
 
             # Create observation
@@ -437,44 +760,77 @@ class BenchmarkRunner:
 
             # For manual detection, load and register annotations
             if limb_detection == "manual":
-                # Require explicit annotation file for manual detection
-                annotation_file = scenario.get("annotation_file")
-                if not annotation_file:
-                    raise ValueError(
-                        f"Manual detection requires explicit 'annotation_file' parameter.\n"
-                        f"Add to scenario: annotation_file: 'pexels-claiton-17217951_exif.json'"
-                    )
-
-                annot_path = self.benchmark_dir / "annotations" / annotation_file
-                if not annot_path.exists():
-                    raise FileNotFoundError(
-                        f"Annotation file not found: {annot_path}\n"
-                        f"For manual detection, create annotation with:\n"
-                        f"  python -m planet_ruler.annotate {image_path}\n"
-                        f"Then convert with:\n"
-                        f"  python -m planet_ruler.benchmarks.copy_test_annotations"
-                    )
-
-                with open(annot_path) as f:
-                    annotation_data = json.load(f)
-
-                # Extract points from annotation format
-                if "limb_points" in annotation_data:
-                    points = annotation_data["limb_points"]["points"]
-                elif "points" in annotation_data:
-                    points = annotation_data["points"]
+                if limb_target_override is not None:
+                    # Augmented variant: use pre-built sparse target directly
+                    obs.register_limb(limb_target_override)
                 else:
-                    raise ValueError(f"Invalid annotation format in {annot_path}")
+                    # Normal path: load annotation from file
+                    annotation_file = scenario.get("annotation_file")
+                    if not annotation_file:
+                        raise ValueError(
+                            "Manual detection requires explicit 'annotation_file' "
+                            "parameter.\nAdd to scenario: annotation_file: "
+                            "'pexels-claiton-17217951_exif.json'"
+                        )
 
-                # Convert points to sparse target array
-                limb_target = np.full(img_array.shape[1], np.nan)
-                for x, y in points:
-                    x_idx = int(round(x))
-                    if 0 <= x_idx < img_array.shape[1]:
-                        limb_target[x_idx] = y
+                    annot_path = (
+                        self.benchmark_dir / "annotations" / annotation_file
+                    )
+                    if not annot_path.exists():
+                        raise FileNotFoundError(
+                            f"Annotation file not found: {annot_path}\n"
+                            f"For manual detection, create annotation with:\n"
+                            f"  python -m planet_ruler.annotate {image_path}\n"
+                            f"Then convert with:\n"
+                            f"  python -m planet_ruler.benchmarks.copy_test_annotations"
+                        )
 
-                # Register limb with observation
-                obs.register_limb(limb_target)
+                    with open(annot_path) as f:
+                        annotation_data = json.load(f)
+
+                    # If annotation stores ground-truth params (synthetic data),
+                    # use them to initialise fixed parameters to their true
+                    # values so the fit is not corrupted by EXIF rounding or
+                    # perturbed-r_init artifacts.  Must apply to obs directly
+                    # since LimbObservation copied fit_config on __init__.
+                    # Also update _original_init_parameter_values since
+                    # fit_limb restores from it on a cold start.
+                    ann_params = annotation_data.get("params")
+                    if ann_params:
+                        free = set(obs.free_parameters or [])
+                        for param, value in ann_params.items():
+                            if (
+                                param not in free
+                                and param in obs.init_parameter_values
+                            ):
+                                obs.init_parameter_values[param] = float(value)
+                                orig = getattr(
+                                    obs,
+                                    "_original_init_parameter_values",
+                                    None,
+                                )
+                                if orig is not None and param in orig:
+                                    orig[param] = float(value)
+
+                    # Extract points from annotation format
+                    if "limb_points" in annotation_data:
+                        points = annotation_data["limb_points"]["points"]
+                    elif "points" in annotation_data:
+                        points = annotation_data["points"]
+                    else:
+                        raise ValueError(
+                            f"Invalid annotation format in {annot_path}"
+                        )
+
+                    # Convert points to sparse target array
+                    limb_target = np.full(img_array.shape[1], np.nan)
+                    for x, y in points:
+                        x_idx = int(round(x))
+                        if 0 <= x_idx < img_array.shape[1]:
+                            limb_target[x_idx] = y
+
+                    # Register limb with observation
+                    obs.register_limb(limb_target)
 
             # For other detection methods, detect_limb is called automatically during fit
             # (gradient-field, gradient-break, segmentation)
@@ -487,11 +843,13 @@ class BenchmarkRunner:
             # Extract fit parameters from scenario
             fit_params = scenario.get("fit_params", {})
             loss_function = (
-                "gradient_field" if limb_detection == "gradient-field" else "l2"
+                "gradient_field"
+                if limb_detection == "gradient-field"
+                else "l2"
             )
 
             # Call fit_limb with actual parameters
-            obs.fit_limb(
+            fit_limb_kwargs = dict(
                 loss_function=loss_function,
                 max_iter=fit_params.get("max_iter", 15000),
                 resolution_stages=fit_params.get("resolution_stages"),
@@ -500,6 +858,9 @@ class BenchmarkRunner:
                 minimizer=minimizer_method,
                 minimizer_kwargs=minimizer_kwargs,
             )
+            if minimizer_preset is not None:
+                fit_limb_kwargs["minimizer_preset"] = minimizer_preset
+            obs.fit_limb(**fit_limb_kwargs)
 
             result.optimization_time = time.time() - opt_start
 
@@ -517,12 +878,16 @@ class BenchmarkRunner:
             # Extract results
             if obs.best_parameters is not None:
                 result.best_parameters = obs.best_parameters
-                result.fitted_radius = obs.best_parameters.get("r")  # Extract radius
+                result.fitted_radius = obs.best_parameters.get(
+                    "r"
+                )  # Extract radius
 
                 # Get iteration count from fit results
                 if obs.fit_results is not None:
                     result.iterations = getattr(obs.fit_results, "nit", None)
-                    if result.iterations is None and hasattr(obs.fit_results, "nfev"):
+                    if result.iterations is None and hasattr(
+                        obs.fit_results, "nfev"
+                    ):
                         result.iterations = obs.fit_results.nfev
 
             # Calculate accuracy metrics
@@ -530,7 +895,9 @@ class BenchmarkRunner:
                 result.absolute_error = abs(
                     result.fitted_radius - result.expected_radius
                 )
-                result.relative_error = result.absolute_error / result.expected_radius
+                result.relative_error = (
+                    result.absolute_error / result.expected_radius
+                )
                 result.within_uncertainty = (
                     result.absolute_error <= result.uncertainty_radius
                 )
@@ -561,6 +928,15 @@ class BenchmarkRunner:
         param_tolerance = scenario.get("param_tolerance", 0.1)
         altitude_m = scenario.get("altitude_m")  # Optional override
 
+        # Build perturb_* kwargs from the scenario's perturb_params list.
+        # e.g. perturb_params: [r, h]  →  perturb_r=True, perturb_h=True
+        perturb_params_list = scenario.get("perturb_params", [])
+        perturb_kwargs = {
+            f"perturb_{p}": True
+            for p in perturb_params_list
+            if p in {"r", "h", "theta_x", "theta_y", "theta_z", "f", "w"}
+        }
+
         config = create_config_from_image(
             image_path=str(image_path),
             altitude_m=altitude_m,
@@ -568,7 +944,65 @@ class BenchmarkRunner:
             param_tolerance=param_tolerance,
             perturbation_factor=perturbation_factor,
             seed=0,  # Reproducible for benchmarks
+            **perturb_kwargs,
         )
+
+        # Allow scenarios to override r limits (in km) independently of
+        # perturbation_factor. This lets the benchmark sweep the prior
+        # knowledge encoded in the search bounds separately from x0 noise.
+        r_limits_km = scenario.get("r_limits_km")
+        if r_limits_km is not None:
+            config["parameter_limits"]["r"] = [
+                float(r_limits_km[0]) * 1000.0,
+                float(r_limits_km[1]) * 1000.0,
+            ]
+
+        # Generalised parameter limits override (meters/radians, keyed by param name).
+        # e.g. parameter_limits_override: {h: [9000, 11000], theta_x: [-0.2, 0.2]}
+        param_limits_override = scenario.get("parameter_limits_override")
+        if param_limits_override is not None:
+            for param, bounds in param_limits_override.items():
+                config["parameter_limits"][param] = [
+                    float(bounds[0]),
+                    float(bounds[1]),
+                ]
+
+        # Allow scenario to override init values for specific parameters.
+        # Critical for synthetic data where the true theta_z differs from the
+        # EXIF-derived default (e.g. init_parameter_values_override: {theta_z: 3.14159}).
+        init_override = scenario.get("init_parameter_values_override")
+        if init_override is not None:
+            for param, value in init_override.items():
+                config["init_parameter_values"][param] = float(value)
+
+        # Allow scenario to fix which parameters are optimised.
+        # e.g. free_parameters: ["r"]  → only optimise r, fix everything else.
+        free_params = scenario.get("free_parameters")
+        if free_params is not None:
+            config["free_parameters"] = list(free_params)
+
+        # h_limits_pct: set h bounds to ±pct of the GPS-derived init h.
+        # Only applied when h is in free_parameters.
+        h_pct = scenario.get("h_limits_pct")
+        if h_pct is not None and "h" in config["free_parameters"]:
+            h_init = config["init_parameter_values"].get("h", 10000)
+            margin = h_init * float(h_pct)
+            config["parameter_limits"]["h"] = [
+                max(0.0, h_init - margin),
+                h_init + margin,
+            ]
+
+        # Clip all init values to their parameter limits.  This is needed
+        # when perturbation_factor pushes the init r outside the (possibly
+        # tighter) r_limits_km or h_limits_pct bounds we just applied.
+        for param, bounds in config["parameter_limits"].items():
+            if param in config["init_parameter_values"]:
+                lo, hi = float(bounds[0]), float(bounds[1])
+                v = config["init_parameter_values"][param]
+                clipped = max(lo, min(hi, float(v)))
+                if clipped != float(v):
+                    config["init_parameter_values"][param] = clipped
+
         return config
 
     def _get_image_path(self, image_name: str) -> Path:
@@ -582,7 +1016,9 @@ class BenchmarkRunner:
         repo_root = (
             self.benchmark_dir.parent.parent
         )  # planet_ruler/benchmarks -> planet_ruler -> repo_root
-        test_path = repo_root / "tests" / "images" / "airplane" / f"{image_name}.jpg"
+        test_path = (
+            repo_root / "tests" / "images" / "airplane" / f"{image_name}.jpg"
+        )
         if test_path.exists():
             return test_path
 
@@ -597,7 +1033,9 @@ class BenchmarkRunner:
         data = asdict(result)
         data["fit_params"] = json.dumps(data["fit_params"])
         data["free_parameters"] = json.dumps(data["free_parameters"])
-        data["init_parameter_values"] = json.dumps(data["init_parameter_values"])
+        data["init_parameter_values"] = json.dumps(
+            data["init_parameter_values"]
+        )
         data["parameter_limits"] = json.dumps(data["parameter_limits"])
         data["best_parameters"] = json.dumps(data["best_parameters"])
         data["minimizer_config"] = json.dumps(data["minimizer_config"])
