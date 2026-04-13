@@ -255,7 +255,9 @@ class TestManualLimbDetectionIntegration:
 
             # Verify annotator was created and used correctly
             mock_annotator_class.assert_called_once_with(
-                image_path=tmp_file.name, initial_stretch=1.0
+                image_path=tmp_file.name,
+                image=obs.image,
+                initial_stretch=1.0,
             )
             mock_annotator.run.assert_called_once()
             mock_annotator.get_target.assert_called_once()

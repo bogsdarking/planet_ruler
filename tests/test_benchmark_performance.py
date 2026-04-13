@@ -597,8 +597,6 @@ class TestConfigurationBenchmarks:
                 image_path=image_path,
                 altitude_m=10000,
                 planet="earth",
-                perturbation_factor=0.5,
-                seed=0,
             )
 
         result = benchmark(create_config)
@@ -614,7 +612,6 @@ class TestConfigurationBenchmarks:
             image_path=image_path,
             altitude_m=10000,
             planet="earth",
-            seed=0,
         )
 
         def validate_config():
@@ -866,7 +863,6 @@ class TestFullPipelineBenchmarks:
                 image_path=image_path,
                 altitude_m=418_000,
                 planet="earth",
-                seed=0,
             )
 
             # Step 3: Validate configuration
@@ -929,7 +925,7 @@ class TestFullPipelineBenchmarks:
 
             # Generate configuration
             config = create_config_from_image(
-                image_path=image_path, altitude_m=10000, planet="earth", seed=0
+                image_path=image_path, altitude_m=10000, planet="earth"
             )
 
             # Validate configuration
@@ -950,7 +946,6 @@ class TestFullPipelineBenchmarks:
             image_path=image_path,
             altitude_m=10000,
             planet="earth",
-            seed=0,
         )
 
         def obs_setup_workflow():
