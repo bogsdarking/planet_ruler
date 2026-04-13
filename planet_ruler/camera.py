@@ -22,7 +22,7 @@ from PIL import Image
 from PIL.ExifTags import TAGS
 import json
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1069,35 +1069,111 @@ PLANET_RADII = {
 }
 
 
-def get_initial_radius(
-    planet: str = "earth", perturbation_factor: float = 0.5, seed: Optional[int] = None
+def sample_param_from_bounds(
+    lo: float,
+    hi: float,
+    ref: Optional[float] = None,
+    perturbation_factor: float = 1.0,
+    seed: Optional[int] = None,
 ) -> float:
     """
-    Get initial radius guess with perturbation.
+    Sample a parameter initial value uniformly from a sub-interval of [lo, hi].
+
+    Each side of the interval is scaled proportionally toward ``ref`` by
+    ``(1 - perturbation_factor)``, preserving asymmetry in the original bounds.
+    With ``perturbation_factor=1.0`` the full [lo, hi] range is used; with 0.0
+    only ``ref`` is returned.
+
+    Example: lo=0.7, hi=1.2, ref=1.0, perturbation_factor=0.5
+      new_lo = 1.0 - (1.0 - 0.7) * 0.5 = 0.85
+      new_hi = 1.0 + (1.2 - 1.0) * 0.5 = 1.10
+
+    Uses a local Random instance to avoid polluting global random state.
 
     Args:
-        planet: Planet name
-        perturbation_factor: Relative perturbation (default: 0.5 = ±50%)
-        seed: Random seed for reproducibility (default: None = unseeded)
+        lo: Lower bound of search interval (inclusive)
+        hi: Upper bound of search interval (inclusive)
+        ref: Reference value toward which bounds are scaled.  Defaults to the
+            midpoint (lo + hi) / 2, which is exact for symmetric bounds.
+        perturbation_factor: 1.0 = full [lo, hi]; 0.0 = ref only. (default: 1.0)
+        seed: Optional seed for reproducibility
+    """
+    import random
+    if ref is None:
+        ref = 0.5 * (lo + hi)
+    new_lo = ref - (ref - lo) * perturbation_factor
+    new_hi = ref + (hi - ref) * perturbation_factor
+    rng = random.Random(seed)
+    return rng.uniform(new_lo, new_hi)
+
+
+def init_params_from_bounds(
+    param_limits: Dict[str, List[float]],
+    perturbation_factor: float = 1.0,
+    seed: Optional[int] = None,
+    ref_values: Optional[Dict[str, float]] = None,
+    params: Optional[List[str]] = None,
+) -> Dict[str, float]:
+    """
+    Sample initial values for parameters uniformly from their search bounds.
+
+    Each parameter is sampled via :func:`sample_param_from_bounds`.  A single
+    seeded RNG advances sequentially through a fixed parameter ordering so that
+    each parameter's draw is independent of which other parameters are included,
+    and results are fully reproducible given the same seed.
+
+    Args:
+        param_limits: Dict mapping parameter name → [lo, hi].
+        perturbation_factor: Passed to :func:`sample_param_from_bounds`.
+            1.0 (default) samples the full [lo, hi] range; 0.0 returns ref only.
+        seed: Optional seed for reproducibility.
+        ref_values: Optional dict of reference values used as the proportional
+            centre for each parameter.  Defaults to the midpoint of each
+            parameter's bounds when not provided.
+        params: Optional list of parameter names to sample.  When None, all
+            keys present in ``param_limits`` are sampled in the fixed order
+            below (unknown names are appended at the end).
+
+    Returns:
+        Dict mapping parameter name → sampled initial value.
     """
     import random
 
-    if seed is not None:
-        random.seed(seed)
+    _FIXED_ORDER = ["r", "h", "theta_x", "theta_y", "theta_z", "f", "w"]
 
-    if planet.lower() in PLANET_RADII:
-        true_value = PLANET_RADII[planet.lower()]
-        min_factor = 1.0 - perturbation_factor
-        max_factor = 1.0 + perturbation_factor
-        perturbation = random.uniform(min_factor, max_factor)
-        r_init = true_value * perturbation
-        logger.info(
-            f"Perturbed {planet} radius: {true_value/1000:.0f} km → {r_init/1000:.0f} km ({perturbation:.2f}x)"
-        )
-        return r_init
+    if ref_values is None:
+        ref_values = {}
+
+    if params is None:
+        params_to_sample = list(param_limits.keys())
     else:
-        logger.warning(f"Unknown planet '{planet}', using middle-range guess")
-        return 10_000_000  # 10,000 km
+        params_to_sample = [p for p in params if p in param_limits]
+
+    ordered = [p for p in _FIXED_ORDER if p in params_to_sample]
+    ordered += [p for p in params_to_sample if p not in _FIXED_ORDER]
+
+    rng = random.Random(seed)
+    result: Dict[str, float] = {}
+    for param in ordered:
+        lo, hi = float(param_limits[param][0]), float(param_limits[param][1])
+        ref = ref_values.get(param)
+        result[param] = sample_param_from_bounds(
+            lo,
+            hi,
+            ref=ref,
+            perturbation_factor=perturbation_factor,
+            seed=rng.randint(0, 2**31),
+        )
+    return result
+
+
+def get_initial_radius(planet: str = "earth") -> float:
+    """Return the known radius for a planet (metres), or 10,000 km for unknown planets."""
+    planet_lower = planet.lower()
+    if planet_lower in PLANET_RADII:
+        return float(PLANET_RADII[planet_lower])
+    logger.warning(f"Unknown planet '{planet}', using middle-range guess")
+    return 10_000_000.0  # 10,000 km
 
 
 def check_planet_ruler_crop_metadata(image_path: str) -> Optional[Dict]:
@@ -1145,8 +1221,6 @@ def create_config_from_image(
     altitude_m: Optional[float] = None,
     planet: str = "earth",
     param_tolerance: float = 0.1,
-    perturbation_factor: float = 0.5,
-    seed: Optional[int] = None,
 ) -> Dict:
     """
     Create a complete planet_ruler configuration from an image.
@@ -1157,8 +1231,6 @@ def create_config_from_image(
         altitude_m: Altitude in meters (REQUIRED if not in GPS data)
         planet: Planet name for initial radius guess (default: 'earth')
         param_tolerance: Fractional tolerance for parameter limits (default: 0.1 = ±10%)
-        perturbation_factor: Initial radius perturbation (default: 0.5 = ±50%)
-        seed: Random seed for reproducibility (default: None = unseeded)
 
     Returns:
         dict: Configuration ready for planet_ruler
@@ -1167,7 +1239,6 @@ def create_config_from_image(
         ValueError: If altitude cannot be determined from GPS and not provided manually
 
     Notes:
-        - Initial radius is randomly perturbed to avoid local minima and prove data-driven results
         - For uncertainty quantification, consider running multiple times (multi-start optimization)
         - Theta parameters (orientation) have wide default limits to handle r-h coupling
     """
@@ -1214,8 +1285,8 @@ def create_config_from_image(
             "Altitude is critical for accurate planetary radius measurement."
         )
 
-    # Get initial planet radius with perturbation to avoid local minima
-    r_init = get_initial_radius(planet, perturbation_factor, seed=seed)
+    # Get initial planet radius
+    r_init = get_initial_radius(planet)
 
     # Determine which camera parameters to use (pick 2 of 3)
     # Priority: focal_length > sensor_width > field_of_view
