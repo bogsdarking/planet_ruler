@@ -262,38 +262,70 @@ class TestCalculateSensorDimensions:
 
 
 class TestGetInitialRadius:
-    """Test initial radius generation with perturbation."""
+    """Test initial radius generation."""
 
-    def test_earth_radius_perturbed(self):
-        """Test Earth radius is perturbed within expected range."""
-        r_init = get_initial_radius("earth", perturbation_factor=0.5)
-        true_radius = PLANET_RADII["earth"]
-        # Should be within ±50%
-        assert 0.5 * true_radius <= r_init <= 1.5 * true_radius
+    def test_earth_returns_exact_radius(self):
+        """Test Earth returns the exact known radius."""
+        r = get_initial_radius("earth")
+        assert r == float(PLANET_RADII["earth"])
 
-    def test_mars_radius_perturbed(self):
-        """Test Mars radius is perturbed."""
-        r_init = get_initial_radius("mars", perturbation_factor=0.5)
-        true_radius = PLANET_RADII["mars"]
-        assert 0.5 * true_radius <= r_init <= 1.5 * true_radius
+    def test_mars_returns_exact_radius(self):
+        """Test Mars returns the exact known radius."""
+        r = get_initial_radius("mars")
+        assert r == float(PLANET_RADII["mars"])
 
-    def test_unknown_planet_returns_default(self):
-        """Test unknown planet returns middle-range value."""
-        r_init = get_initial_radius("unknown_planet")
-        assert r_init == 10_000_000  # 10,000 km
+    def test_unknown_planet_returns_10000_km(self):
+        """Test unknown planet returns 10,000 km."""
+        r = get_initial_radius("unknown_planet")
+        assert r == 10_000_000.0
 
-    def test_custom_perturbation_factor(self):
-        """Test custom perturbation factor."""
-        r_init = get_initial_radius("earth", perturbation_factor=0.2)
-        true_radius = PLANET_RADII["earth"]
-        # Should be within ±20%
-        assert 0.8 * true_radius <= r_init <= 1.2 * true_radius
+    def test_deterministic_multiple_calls(self):
+        """Test that multiple calls give the same result."""
+        results = [get_initial_radius("earth") for _ in range(5)]
+        assert len(set(results)) == 1
 
-    def test_multiple_calls_give_different_results(self):
-        """Test that multiple calls give different perturbed values."""
-        results = [get_initial_radius("earth") for _ in range(10)]
-        # At least some should be different (very unlikely all are the same)
-        assert len(set(results)) > 1
+
+class TestSampleParamFromBounds:
+    """Test the sample_param_from_bounds helper."""
+
+    def test_returns_value_within_bounds(self):
+        """Test that result is within [lo, hi]."""
+        sample_param_from_bounds = camera_module.sample_param_from_bounds
+        lo, hi = 1.0, 10.0
+        result = sample_param_from_bounds(lo, hi, perturbation_factor=1.0)
+        assert lo <= result <= hi
+
+    def test_reproducible_with_seed(self):
+        """Test that same seed gives same result."""
+        sample_param_from_bounds = camera_module.sample_param_from_bounds
+        lo, hi = 100.0, 200.0
+        r1 = sample_param_from_bounds(lo, hi, seed=42)
+        r2 = sample_param_from_bounds(lo, hi, seed=42)
+        assert r1 == r2
+
+    def test_different_seeds_give_different_results(self):
+        """Test that different seeds give different results."""
+        sample_param_from_bounds = camera_module.sample_param_from_bounds
+        lo, hi = 0.0, 1000.0
+        r1 = sample_param_from_bounds(lo, hi, seed=1)
+        r2 = sample_param_from_bounds(lo, hi, seed=2)
+        assert r1 != r2
+
+    def test_perturbation_factor_restricts_range(self):
+        """Test that perturbation_factor < 1.0 restricts sampling to a sub-interval."""
+        sample_param_from_bounds = camera_module.sample_param_from_bounds
+        lo, hi = 0.0, 100.0
+        # perturbation_factor=0.5 → sample from [25, 75]
+        for seed in range(20):
+            result = sample_param_from_bounds(lo, hi, perturbation_factor=0.5, seed=seed)
+            assert 25.0 <= result <= 75.0
+
+    def test_perturbation_factor_zero_gives_midpoint(self):
+        """Test that perturbation_factor=0.0 returns the midpoint."""
+        sample_param_from_bounds = camera_module.sample_param_from_bounds
+        lo, hi = 2.0, 8.0
+        result = sample_param_from_bounds(lo, hi, perturbation_factor=0.0, seed=99)
+        assert result == 5.0
 
 
 class TestExtractCameraParameters:
@@ -409,11 +441,11 @@ class TestCreateConfigFromImage:
             "image_height_px": 3000,
         }
         mock_gps.return_value = 10668.0
-        mock_radius.return_value = 8892000  # Perturbed Earth radius
+        mock_radius.return_value = 6371000
 
         config = create_config_from_image("dummy.jpg", planet="earth")
 
-        assert config["init_parameter_values"]["r"] == 8892000
+        assert config["init_parameter_values"]["r"] == 6371000
         assert config["init_parameter_values"]["h"] == 10668.0
         assert "theta_x" in config["init_parameter_values"]
         assert "r" in config["free_parameters"]
@@ -460,7 +492,7 @@ class TestCreateConfigFromImage:
             "image_height_px": 3000,
         }
         mock_gps.return_value = None
-        mock_radius.return_value = 5084250  # Perturbed Mars radius
+        mock_radius.return_value = PLANET_RADII["mars"]
 
         config = create_config_from_image("dummy.jpg", altitude_m=4500, planet="mars")
 
@@ -538,6 +570,30 @@ class TestCreateConfigFromImage:
         assert abs(config["parameter_limits"]["h"][0] - h_init * 0.9) < 1
         assert abs(config["parameter_limits"]["h"][1] - h_init * 1.1) < 1
 
+    @patch.object(camera_module, "extract_camera_parameters")
+    @patch.object(camera_module, "get_gps_altitude")
+    @patch.object(camera_module, "get_initial_radius")
+    def test_r_init_is_true_planet_radius(self, mock_radius, mock_gps, mock_params):
+        """Test that r_init is always the true planet radius from get_initial_radius."""
+        mock_params.return_value = {
+            "focal_length_mm": 6.1,
+            "sensor_width_mm": 7.6,
+            "sensor_height_mm": 5.7,
+            "sensor_width_min": None,
+            "sensor_width_max": None,
+            "camera_model": "Canon PowerShot G12",
+            "camera_type": "compact",
+            "confidence": "high",
+            "image_width_px": 4000,
+            "image_height_px": 3000,
+        }
+        mock_gps.return_value = 10000.0
+        mock_radius.return_value = PLANET_RADII["earth"]
+
+        config = create_config_from_image("dummy.jpg", altitude_m=10000)
+
+        assert config["init_parameter_values"]["r"] == PLANET_RADII["earth"]
+
 
 class TestConfigIntegration:
     """Integration tests for realistic workflows."""
@@ -579,6 +635,68 @@ class TestConfigIntegration:
         assert (
             len(config["free_parameters"]) >= 5
         )  # r, h, theta_x, theta_y, theta_z, ...
+
+
+class TestInitParamsFromBounds:
+    """Test the init_params_from_bounds helper."""
+
+    def setup_method(self):
+        self.init_params_from_bounds = camera_module.init_params_from_bounds
+
+    def test_returns_dict_with_requested_keys(self):
+        """Test that returned dict has keys matching requested params."""
+        limits = {"r": [1e6, 1e8], "h": [9000.0, 11000.0]}
+        result = self.init_params_from_bounds(limits, params=["r", "h"])
+        assert set(result.keys()) == {"r", "h"}
+
+    def test_values_within_bounds(self):
+        """Test that all sampled values are within their bounds."""
+        limits = {
+            "r": [1e6, 1e8],
+            "h": [9000.0, 11000.0],
+            "f": [0.004, 0.006],
+        }
+        for seed in range(10):
+            result = self.init_params_from_bounds(limits, seed=seed)
+            for param, (lo, hi) in limits.items():
+                assert lo <= result[param] <= hi
+
+    def test_reproducible_with_same_seed(self):
+        """Test that same seed gives identical results."""
+        limits = {"r": [1e6, 1e8], "h": [9000.0, 11000.0]}
+        r1 = self.init_params_from_bounds(limits, seed=42)
+        r2 = self.init_params_from_bounds(limits, seed=42)
+        assert r1 == r2
+
+    def test_different_seeds_give_different_values(self):
+        """Test that different seeds give different sampled values."""
+        limits = {"r": [1e6, 1e8], "h": [9000.0, 11000.0]}
+        r1 = self.init_params_from_bounds(limits, seed=1)
+        r2 = self.init_params_from_bounds(limits, seed=2)
+        assert r1["r"] != r2["r"] or r1["h"] != r2["h"]
+
+    def test_params_kwarg_limits_which_params_sampled(self):
+        """Test that params kwarg restricts which keys are returned."""
+        limits = {"r": [1e6, 1e8], "h": [9000.0, 11000.0], "f": [0.004, 0.006]}
+        result = self.init_params_from_bounds(limits, params=["r"])
+        assert set(result.keys()) == {"r"}
+
+    def test_ref_values_respected_at_pf_zero(self):
+        """Test that ref_values is used as the return value when pf=0."""
+        limits = {"r": [1e6, 1e8], "h": [9000.0, 11000.0]}
+        ref = {"r": 6371000.0, "h": 10000.0}
+        result = self.init_params_from_bounds(
+            limits, perturbation_factor=0.0, ref_values=ref, seed=0
+        )
+        assert result["r"] == 6371000.0
+        assert result["h"] == 10000.0
+
+    def test_r_draw_same_regardless_of_h_inclusion(self):
+        """Test that r's draw is the same whether or not h is included."""
+        limits = {"r": [1e6, 1e8], "h": [9000.0, 11000.0]}
+        r_only = self.init_params_from_bounds(limits, seed=7, params=["r"])
+        r_and_h = self.init_params_from_bounds(limits, seed=7, params=["r", "h"])
+        assert r_only["r"] == r_and_h["r"]
 
 
 class TestErrorHandling:
@@ -698,7 +816,7 @@ class TestConfigGeneration:
 
                 try:
                     config = create_config_from_image(
-                        "dummy.jpg", altitude_m=1000, perturbation_factor=0.0
+                        "dummy.jpg", altitude_m=1000
                     )
                     from numpy import isclose
 

@@ -322,7 +322,9 @@ class TestLimbObservation:
 
             # Verify annotator was created with correct parameters
             mock_annotator_class.assert_called_once_with(
-                image_path=tmp_file.name, initial_stretch=1.0
+                image_path=tmp_file.name,
+                image=obs.image,
+                initial_stretch=1.0,
             )
             mock_annotator.run.assert_called_once()
             mock_annotator.get_target.assert_called_once()
@@ -362,7 +364,9 @@ class TestLimbObservation:
 
             # Verify annotator was created with default stretch
             mock_annotator_class.assert_called_once_with(
-                image_path=tmp_file.name, initial_stretch=1.0
+                image_path=tmp_file.name,
+                image=obs.image,
+                initial_stretch=1.0,
             )
 
             os.unlink(tmp_file.name)

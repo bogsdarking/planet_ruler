@@ -392,8 +392,8 @@ class BenchmarkRunner:
         rl = self._rl_code(params.get("r_limits_km", [1000, 100000]))
         h_pct = params.get("h_limits_pct")
         hl = f"h{int(h_pct * 100):02d}" if h_pct else "hw"
-        pf_val = params.get("perturbation_factor", 0.5)
-        pf = f"p{int(pf_val * 100):02d}"
+        pf_val = params.get("perturbation_factor", 0.0)
+        pf = f"p{int(pf_val * 100):02d}" if "perturbation_factor" in params else "p00"
         it = params.get("fit_params", {}).get("max_iter", 1000)
         it_s = f"i{it}" if it < 1000 else f"i{it // 1000}k"
         return f"g_{m}_{p}_{fp}_{rl}_{hl}_{pf}_{it_s}"
@@ -924,32 +924,19 @@ class BenchmarkRunner:
         from planet_ruler.camera import create_config_from_image
 
         planet = scenario.get("planet_name", "earth").lower()
-        perturbation_factor = scenario.get("perturbation_factor", 0.5)
         param_tolerance = scenario.get("param_tolerance", 0.1)
         altitude_m = scenario.get("altitude_m")  # Optional override
-
-        # Build perturb_* kwargs from the scenario's perturb_params list.
-        # e.g. perturb_params: [r, h]  →  perturb_r=True, perturb_h=True
-        perturb_params_list = scenario.get("perturb_params", [])
-        perturb_kwargs = {
-            f"perturb_{p}": True
-            for p in perturb_params_list
-            if p in {"r", "h", "theta_x", "theta_y", "theta_z", "f", "w"}
-        }
 
         config = create_config_from_image(
             image_path=str(image_path),
             altitude_m=altitude_m,
             planet=planet,
             param_tolerance=param_tolerance,
-            perturbation_factor=perturbation_factor,
-            seed=0,  # Reproducible for benchmarks
-            **perturb_kwargs,
         )
 
-        # Allow scenarios to override r limits (in km) independently of
-        # perturbation_factor. This lets the benchmark sweep the prior
-        # knowledge encoded in the search bounds separately from x0 noise.
+        # Allow scenarios to override r limits (in km).
+        # Sampling of init values from these limits happens after all overrides
+        # are applied (see perturb_params block below).
         r_limits_km = scenario.get("r_limits_km")
         if r_limits_km is not None:
             config["parameter_limits"]["r"] = [
@@ -993,8 +980,8 @@ class BenchmarkRunner:
             ]
 
         # Clip all init values to their parameter limits.  This is needed
-        # when perturbation_factor pushes the init r outside the (possibly
-        # tighter) r_limits_km or h_limits_pct bounds we just applied.
+        # when init values fall outside the (possibly tighter) r_limits_km
+        # or h_limits_pct bounds we just applied.
         for param, bounds in config["parameter_limits"].items():
             if param in config["init_parameter_values"]:
                 lo, hi = float(bounds[0]), float(bounds[1])
@@ -1002,6 +989,21 @@ class BenchmarkRunner:
                 clipped = max(lo, min(hi, float(v)))
                 if clipped != float(v):
                     config["init_parameter_values"][param] = clipped
+
+        # Resample init values from their finalised bounds for any params listed
+        # in perturb_params.  This runs after all limit overrides so sampling
+        # always uses the correct scenario-specific bounds with no clipping risk.
+        perturb_params_list = scenario.get("perturb_params", [])
+        if perturb_params_list:
+            from planet_ruler.camera import init_params_from_bounds
+
+            sampled = init_params_from_bounds(
+                param_limits=config["parameter_limits"],
+                perturbation_factor=1.0,
+                seed=0,
+                params=list(perturb_params_list),
+            )
+            config["init_parameter_values"].update(sampled)
 
         return config
 
