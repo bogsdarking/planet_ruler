@@ -5,15 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.8.0] - 2026-XX-XX
+## [1.8.0] - 2026-01-04
 
 ### Added
 
 - Ability to handle phones with multiple cameras (infer which via EXIF aperture tag)
 - Cropping tool (`planet_ruler.crop.TkImageCropper`) that allows subselection of images while preserving camera properties
-- Suite of test imagery for benchmarking and calibration. Stored in Git LFS -- retrieve via `git lfs install; git lfs pull`
+- Initial suite of test imagery for benchmarking and calibration. Stored in Git LFS -- retrieve via `git lfs install; git lfs pull`
 - More cameras/parameters to the database
-- A new tutorial that derives the minimum viable altitude for detecting limb curvature as a function of camera resolution.
+- A new tutorial that derives the minimum viable altitude for detecting limb curvature as a function of camera resolution (see notebooks/minimum_altitude_demo.ipynb)
+- Parameter limit presets (tight, balanced, loose) for create_config_from_image.
+
+### Changed
+
+- Parameter limits are now set initially via preset combinations of tolerance, rather than as a flat fraction.
 
 ### Fixed
 
@@ -21,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restored a missing image referenced in the README
 - Large speedup to gradient-field detection by removing an unused full-resolution field calculation
 - Faster fitting on manual annotation by only calculating the limb at labeled points
+- Parameter initialization is now randomized from within bounds rather than limited after init, which caused bunching.
 - Many API fixes in the documentation
 
 ## [1.7.0] - 2025-12-13
