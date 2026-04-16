@@ -392,8 +392,8 @@ class BenchmarkRunner:
         rl = self._rl_code(params.get("r_limits_km", [1000, 100000]))
         h_pct = params.get("h_limits_pct")
         hl = f"h{int(h_pct * 100):02d}" if h_pct else "hw"
-        pf_val = params.get("perturbation_factor", 0.0)
-        pf = f"p{int(pf_val * 100):02d}" if "perturbation_factor" in params else "p00"
+        pf_val = params.get("perturbation_factor", 1.0)
+        pf = f"p{int(pf_val * 100):03d}"
         it = params.get("fit_params", {}).get("max_iter", 1000)
         it_s = f"i{it}" if it < 1000 else f"i{it // 1000}k"
         return f"g_{m}_{p}_{fp}_{rl}_{hl}_{pf}_{it_s}"
@@ -999,7 +999,9 @@ class BenchmarkRunner:
 
             sampled = init_params_from_bounds(
                 param_limits=config["parameter_limits"],
-                perturbation_factor=1.0,
+                perturbation_factor=float(
+                    scenario.get("perturbation_factor", 1.0)
+                ),
                 seed=0,
                 params=list(perturb_params_list),
             )

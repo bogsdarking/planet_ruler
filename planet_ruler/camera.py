@@ -1216,11 +1216,45 @@ def check_planet_ruler_crop_metadata(image_path: str) -> Optional[Dict]:
     return None
 
 
+# Per-parameter fractional tolerances for each preset.
+# All parameters scale with the preset; theta_* are the only exception —
+# they always span ±π because camera orientation has no useful prior.
+# h has two variants: h_gps (altitude read from EXIF) and h_manual (caller-
+# supplied).  GPS warrants tighter limits within each preset, but loose still
+# loosens GPS bounds relative to tight/balanced.
+_LIMITS_PRESETS: Dict[str, Dict[str, float]] = {
+    "tight": {
+        "r": 0.05,        # ±5%  around planet init radius
+        "f": 0.02,        # ±2%  EXIF focal length is usually very accurate
+        "w": 0.03,        # ±3%  sensor width from known device database
+        "h_gps": 0.05,    # ±5%  GPS at cruise ≈ ±50–100 m
+        "h_manual": 0.10,  # ±10% manually entered, assumed reasonably known
+    },
+    "balanced": {
+        "r": 0.20,
+        "f": 0.05,
+        "w": 0.08,
+        "h_gps": 0.10,
+        "h_manual": 0.25,
+    },
+    "loose": {
+        "r": 0.50,
+        "f": 0.10,
+        "w": 0.15,
+        "h_gps": 0.30,
+        "h_manual": 0.70,
+    },
+}
+_DEFAULT_PRESET = "balanced"
+
+
 def create_config_from_image(
     image_path: str,
     altitude_m: Optional[float] = None,
     planet: str = "earth",
-    param_tolerance: float = 0.1,
+    limits_preset: str = _DEFAULT_PRESET,
+    param_tolerances: Optional[Dict[str, float]] = None,
+    param_tolerance: Optional[float] = None,  # deprecated
 ) -> Dict:
     """
     Create a complete planet_ruler configuration from an image.
@@ -1230,18 +1264,61 @@ def create_config_from_image(
         image_path: Path to the image
         altitude_m: Altitude in meters (REQUIRED if not in GPS data)
         planet: Planet name for initial radius guess (default: 'earth')
-        param_tolerance: Fractional tolerance for parameter limits (default: 0.1 = ±10%)
+        limits_preset: How tightly to constrain camera/altitude parameters.
+            ``"tight"``    — trust EXIF and GPS data; small search windows.
+            ``"balanced"`` — default; moderate windows for most photos.
+            ``"loose"``    — wide windows; use when metadata reliability
+            is uncertain.
+            Altitude (h) bounds are automatically tightened when GPS
+            altitude is detected, regardless of preset.
+        param_tolerances: Per-parameter fractional tolerance overrides, e.g.
+            ``{"h": 0.30}`` to widen the altitude window without changing other
+            parameters.  Keys: ``"f"``, ``"w"``, ``"h"``.
+        param_tolerance: *Deprecated.* Pass ``limits_preset`` instead.  A
+            deprecation warning is raised; the value is ignored and
+            ``"balanced"`` is used.
 
     Returns:
         dict: Configuration ready for planet_ruler
 
     Raises:
         ValueError: If altitude cannot be determined from GPS and not provided manually
+        ValueError: If ``limits_preset`` is not a recognised preset name.
 
     Notes:
-        - For uncertainty quantification, consider running multiple times (multi-start optimization)
-        - Theta parameters (orientation) have wide default limits to handle r-h coupling
+        - For uncertainty quantification, consider running multiple times
+          (multi-start optimization)
+        - Theta parameters (orientation) always span ±π; they have no prior
+        - r bounds scale with the preset around the planet init radius
     """
+    import warnings
+
+    if param_tolerance is not None:
+        warnings.warn(
+            "param_tolerance is deprecated and will be removed in a future "
+            "version. Use limits_preset='tight', 'balanced', or 'loose' "
+            "instead. Falling back to limits_preset='balanced'.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        limits_preset = _DEFAULT_PRESET
+
+    if limits_preset not in _LIMITS_PRESETS:
+        raise ValueError(
+            f"Unknown limits_preset {limits_preset!r}. "
+            f"Choose from: {list(_LIMITS_PRESETS)}"
+        )
+
+    tolerances = dict(_LIMITS_PRESETS[limits_preset])
+    if param_tolerances:
+        # "h" override applies to whichever h_* key will be active; store both
+        for key, val in param_tolerances.items():
+            if key == "h":
+                tolerances["h_gps"] = val
+                tolerances["h_manual"] = val
+            else:
+                tolerances[key] = val
+
     # Check for Planet Ruler crop metadata FIRST
     crop_metadata = check_planet_ruler_crop_metadata(image_path)
 
@@ -1273,8 +1350,12 @@ def create_config_from_image(
             )
 
     # Try to get GPS altitude if not provided
+    altitude_from_gps = False
     if altitude_m is None:
-        altitude_m = get_gps_altitude(image_path)
+        gps_alt = get_gps_altitude(image_path)
+        if gps_alt is not None:
+            altitude_m = gps_alt
+            altitude_from_gps = True
 
     # Altitude is REQUIRED - no placeholders
     if altitude_m is None:
@@ -1292,17 +1373,20 @@ def create_config_from_image(
     # Priority: focal_length > sensor_width > field_of_view
     free_params = ["r", "h", "theta_x", "theta_y", "theta_z"]  # Always free
     init_values = {"r": r_init, "h": altitude_m}
-    param_limits = {"r": [1000000, 100000000]}  # Wide range: 1000 km to 100,000 km
+    r_tol = tolerances["r"]
+    param_limits = {
+        "r": [r_init * (1 - r_tol), r_init * (1 + r_tol)],
+    }
 
     # Always include focal length if available (highest priority)
     if camera_params["focal_length_mm"]:
         focal_m = camera_params["focal_length_mm"] / 1000
         free_params.append("f")
         init_values["f"] = focal_m
-        # Tight constraint: ±param_tolerance
+        f_tol = tolerances["f"]
         param_limits["f"] = [
-            focal_m * (1 - param_tolerance),
-            focal_m * (1 + param_tolerance),
+            focal_m * (1 - f_tol),
+            focal_m * (1 + f_tol),
         ]
 
     # Include sensor width if available (second priority)
@@ -1321,17 +1405,29 @@ def create_config_from_image(
                 f"Using data-driven sensor width limits: [{param_limits['w'][0]*1000:.1f}, {param_limits['w'][1]*1000:.1f}] mm"
             )
         else:
-            # Use tight constraint for known sensors
+            w_tol = tolerances["w"]
             param_limits["w"] = [
-                sensor_m * (1 - param_tolerance),
-                sensor_m * (1 + param_tolerance),
+                sensor_m * (1 - w_tol),
+                sensor_m * (1 + w_tol),
             ]
 
-    # Constrain altitude with tolerance since precision altitude is rare
+    # Altitude bounds — GPS data earns tighter limits automatically
+    h_tol_key = "h_gps" if altitude_from_gps else "h_manual"
+    h_tol = tolerances[h_tol_key]
     param_limits["h"] = [
-        float(altitude_m * (1 - param_tolerance)),
-        float(altitude_m * (1 + param_tolerance)),
+        float(altitude_m * (1 - h_tol)),
+        float(altitude_m * (1 + h_tol)),
     ]
+    if altitude_from_gps:
+        print(
+            f"✓ GPS altitude detected ({altitude_m:.0f} m) — "
+            f"altitude bounds set to ±{h_tol:.0%} ({limits_preset} preset)"
+        )
+    else:
+        print(
+            f"  Manual altitude ({altitude_m:.0f} m) — "
+            f"altitude bounds set to ±{h_tol:.0%} ({limits_preset} preset)"
+        )
 
     # Calculate initial theta_x using geometry
     # theta_y and theta_z default to 0 (user doesn't know orientation)
@@ -1376,7 +1472,8 @@ def create_config_from_image(
                 camera_params["image_height_px"],
             ],
             "planet": planet,
-            "altitude_source": "gps" if get_gps_altitude(image_path) else "manual",
+            "altitude_source": "gps" if altitude_from_gps else "manual",
+            "limits_preset": limits_preset,
         },
         "notes": {
             "r_init_perturbed": True,
