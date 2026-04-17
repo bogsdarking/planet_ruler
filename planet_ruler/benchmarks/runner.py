@@ -924,14 +924,14 @@ class BenchmarkRunner:
         from planet_ruler.camera import create_config_from_image
 
         planet = scenario.get("planet_name", "earth").lower()
-        param_tolerance = scenario.get("param_tolerance", 0.1)
+        limits_preset = scenario.get("limits_preset", "balanced")
         altitude_m = scenario.get("altitude_m")  # Optional override
 
         config = create_config_from_image(
             image_path=str(image_path),
             altitude_m=altitude_m,
             planet=planet,
-            param_tolerance=param_tolerance,
+            limits_preset=limits_preset,
         )
 
         # Allow scenarios to override r limits (in km).
