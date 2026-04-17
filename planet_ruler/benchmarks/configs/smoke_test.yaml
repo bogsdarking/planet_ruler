@@ -47,7 +47,7 @@ scenarios:
     perturb_params: [r]
     fit_params:
       max_iter: 50
-      resolution_stages: [8, 4, 2, 1]
+      resolution_stages: [8, 4, 2]
     minimizer: "differential-evolution"
 
 thresholds:

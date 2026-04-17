@@ -159,9 +159,10 @@ class TestGetCameraModel:
 
     def test_partial_match(self):
         """Test partial matching for unknown models."""
+        # iPhone 13 Pro Max is not in the DB; expect the longest partial match
         exif = {"Make": "Apple", "Model": "iPhone 13 Pro Max"}
         model = get_camera_model(exif)
-        assert model == "iPhone 13 Pro Max"  # Exact match in DB
+        assert model == "iPhone 13 Pro"
 
     def test_no_exif_data(self):
         """Test with empty EXIF data."""
@@ -552,23 +553,60 @@ class TestCreateConfigFromImage:
         mock_gps.return_value = 10000.0
         mock_radius.return_value = 6371000
 
+        # Let GPS mock supply altitude so the GPS path is exercised
         config = create_config_from_image(
-            "dummy.jpg", altitude_m=10000, param_tolerance=0.1
+            "dummy.jpg", limits_preset="balanced"
         )
 
-        # Check r limits are wide
-        assert config["parameter_limits"]["r"][0] == 1_000_000
-        assert config["parameter_limits"]["r"][1] == 100_000_000
+        # r bounds scale with preset around planet init radius (±20% balanced)
+        r_init = config["init_parameter_values"]["r"]
+        assert abs(config["parameter_limits"]["r"][0] - r_init * 0.80) < 1
+        assert abs(config["parameter_limits"]["r"][1] - r_init * 1.20) < 1
 
-        # Check focal length has ±10% limits
+        # focal length has ±5% limits (balanced preset)
         f_init = config["init_parameter_values"]["f"]
-        assert abs(config["parameter_limits"]["f"][0] - f_init * 0.9) < 1e-6
-        assert abs(config["parameter_limits"]["f"][1] - f_init * 1.1) < 1e-6
+        assert abs(config["parameter_limits"]["f"][0] - f_init * 0.95) < 1e-6
+        assert abs(config["parameter_limits"]["f"][1] - f_init * 1.05) < 1e-6
 
-        # Check altitude has ±10% limits
+        # GPS altitude gets h_gps tolerance (±10% for balanced)
         h_init = config["init_parameter_values"]["h"]
-        assert abs(config["parameter_limits"]["h"][0] - h_init * 0.9) < 1
-        assert abs(config["parameter_limits"]["h"][1] - h_init * 1.1) < 1
+        assert abs(config["parameter_limits"]["h"][0] - h_init * 0.90) < 1
+        assert abs(config["parameter_limits"]["h"][1] - h_init * 1.10) < 1
+
+    @patch.object(camera_module, "extract_camera_parameters")
+    @patch.object(camera_module, "get_gps_altitude")
+    @patch.object(camera_module, "get_initial_radius")
+    def test_param_tolerance_deprecated(
+        self, mock_radius, mock_gps, mock_params
+    ):
+        """param_tolerance raises DeprecationWarning; balanced is used."""
+        mock_params.return_value = {
+            "focal_length_mm": 6.1,
+            "sensor_width_mm": 7.6,
+            "sensor_height_mm": 5.7,
+            "sensor_width_min": None,
+            "sensor_width_max": None,
+            "camera_model": "Canon PowerShot G12",
+            "camera_type": "compact",
+            "confidence": "high",
+            "image_width_px": 4000,
+            "image_height_px": 3000,
+        }
+        mock_gps.return_value = 10000.0
+        mock_radius.return_value = 6371000
+
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            config = create_config_from_image(
+                "dummy.jpg", altitude_m=10000, param_tolerance=0.99
+            )
+        assert len(w) == 1
+        assert issubclass(w[0].category, DeprecationWarning)
+        assert "limits_preset" in str(w[0].message)
+        # Falls back to balanced — r bounds are ±20%, not ±99%
+        r_init = config["init_parameter_values"]["r"]
+        assert abs(config["parameter_limits"]["r"][0] - r_init * 0.80) < 1
 
     @patch.object(camera_module, "extract_camera_parameters")
     @patch.object(camera_module, "get_gps_altitude")
