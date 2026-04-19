@@ -15,10 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - More cameras/parameters to the database
 - A new tutorial that derives the minimum viable altitude for detecting limb curvature as a function of camera resolution (see notebooks/minimum_altitude_demo.ipynb)
 - Parameter limit presets (tight, balanced, loose) for create_config_from_image.
+- New minimizer hooks for l-bfgs-b and shgo.
 
 ### Changed
 
 - Parameter limits are now set initially via preset combinations of tolerance, rather than as a flat fraction.
+- Minimizer presets now lead to different optimized parameters depending on which detection method is being employed.
 
 ### Fixed
 

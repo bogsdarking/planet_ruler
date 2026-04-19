@@ -94,7 +94,6 @@ MINIMIZER_PRESETS = {
         },
         "scipy-default": {
             # Exact scipy differential_evolution defaults
-            # Use this to match original prototype behavior
             "strategy": "best1bin",
             "popsize": 15,
             "mutation": (0.5, 1),
@@ -129,7 +128,6 @@ MINIMIZER_PRESETS = {
         },
         "scipy-default": {
             # Exact scipy dual_annealing defaults
-            # Use this to match original prototype behavior
             "initial_temp": 5230.0,
             "restart_temp_ratio": 2e-05,
             "visit": 2.62,
@@ -138,11 +136,64 @@ MINIMIZER_PRESETS = {
         },
     },
     "basinhopping": {
-        "fast": {"niter": 100, "T": 1.5, "stepsize": 0.5, "local_maxiter": 50},
-        "balanced": {"niter": 200, "T": 2.0, "stepsize": 0.5, "local_maxiter": 100},
-        "robust": {"niter": 500, "T": 3.0, "stepsize": 0.7, "local_maxiter": 200},
+        "fast":    {"niter": 100, "T": 1.5, "stepsize": 0.5, "local_maxiter": 50},
+        "balanced":{"niter": 200, "T": 2.0, "stepsize": 0.5, "local_maxiter": 100},
+        "robust":  {"niter": 500, "T": 3.0, "stepsize": 0.7, "local_maxiter": 200},
+        "scipy-default": {
+            # Exact scipy basinhopping defaults
+            "niter": 100,
+            "T": 1.0,
+            "stepsize": 0.5,
+        },
+    },
+    "scipy-minimize": {
+        "fast":    {"method": "L-BFGS-B", "n_restarts": 5,  "ftol": 1e-6},
+        "balanced":{"method": "L-BFGS-B", "n_restarts": 20, "ftol": 1e-8},
+        "robust":  {"method": "Powell",   "n_restarts": 50, "ftol": 1e-10},
+        "scipy-default": {
+            # Exact scipy minimize defaults (L-BFGS-B, single run)
+            "method": "L-BFGS-B",
+            "n_restarts": 1,
+        },
+    },
+    "shgo": {
+        "fast":    {"n": 50,  "iters": 1},
+        "balanced":{"n": 100, "iters": 2},
+        "robust":  {"n": 200, "iters": 3},
+        "scipy-default": {
+            # Exact scipy shgo defaults
+            "n": 100,
+            "iters": 1,
+        },
     },
 }
+
+# Per-detection-method preset overrides. Checked before MINIMIZER_PRESETS.
+# Lets "balanced" mean different things for manual vs gradient-field fitting.
+METHOD_MINIMIZER_PRESETS: dict = {
+    "manual": {
+        "basinhopping": {
+            "fast":    {"niter": 100, "T": 1.5, "stepsize": 0.5, "local_maxiter": 50},
+            "balanced":{"niter": 200, "T": 2.0, "stepsize": 0.5, "local_maxiter": 100},
+            "robust":  {"niter": 500, "T": 3.0, "stepsize": 0.7, "local_maxiter": 200},
+        },
+        "scipy-minimize": {
+            "fast":    {"method": "L-BFGS-B", "n_restarts": 5,  "ftol": 1e-6},
+            "balanced":{"method": "L-BFGS-B", "n_restarts": 20, "ftol": 1e-8},
+            "robust":  {"method": "L-BFGS-B", "n_restarts": 50, "ftol": 1e-10},
+        },
+    },
+}
+
+
+def _resolve_preset_kwargs(minimizer: str, preset: str, detection_method: Optional[str] = None) -> dict:
+    """Return preset kwargs, preferring method-specific overrides when available."""
+    if detection_method:
+        method_entry = METHOD_MINIMIZER_PRESETS.get(detection_method, {})
+        minimizer_entry = method_entry.get(minimizer, {})
+        if preset in minimizer_entry:
+            return dict(minimizer_entry[preset])
+    return dict(MINIMIZER_PRESETS.get(minimizer, {}).get(preset, {}))
 
 
 # ============================================================================
@@ -412,7 +463,7 @@ class LimbObservation(PlanetObservation):
             f"Must be one of: {valid_limb_methods}"
         )
 
-        valid_minimizers = ["differential-evolution", "dual-annealing", "basinhopping"]
+        valid_minimizers = ["differential-evolution", "dual-annealing", "basinhopping", "scipy-minimize", "shgo"]
         assert minimizer in valid_minimizers, (
             f"Invalid minimizer '{minimizer}'. " f"Must be one of: {valid_minimizers}"
         )
@@ -795,11 +846,15 @@ class LimbObservation(PlanetObservation):
         directional_decay_rate: float = 0.15,
         prefer_direction: Optional[Literal["up", "down"]] = None,
         minimizer: Optional[
-            Literal["differential-evolution", "dual-annealing", "basinhopping"]
+            Literal[
+                "differential-evolution",
+                "dual-annealing",
+                "basinhopping",
+                "scipy-minimize",
+                "shgo",
+            ]
         ] = None,
-        minimizer_preset: Literal[
-            "fast", "balanced", "robust", "scipy-default"
-        ] = "balanced",
+        minimizer_preset: Literal["fast", "balanced", "robust", "scipy-default"] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         warm_start: bool = False,
         dashboard: bool = False,
@@ -837,9 +892,19 @@ class LimbObservation(PlanetObservation):
             prefer_direction: For gradient_field - prefer 'up' or 'down' gradients
                 where 'up' means dark-sky/bright-planet and v.v.
                 (None = no preference, choose best gradient regardless of direction)
-            minimizer (str): Choice of minimizer. Supports 'differential-evolution',
-                'dual-annealing', and 'basinhopping'.
-            minimizer_preset: Optimization strategy
+            minimizer (str): Choice of minimizer.
+                - 'differential-evolution': Population-based global search. Best for
+                  gradient-field fitting where the landscape is dense and noisy.
+                - 'basinhopping': Random hops + local search. Recommended for manual
+                  annotation (sparse, smooth L2 landscape). Fastest and most reliable.
+                - 'scipy-minimize': Multi-start local search (L-BFGS-B or Powell).
+                  Portable alternative to basinhopping; good for manual annotation.
+                - 'dual-annealing': Trajectory-based global search. Shelved for manual
+                  annotation (2-3× slower than basinhopping with no accuracy gain).
+            minimizer_preset: Optimization strategy. Preset kwargs are resolved
+                per detection method — 'balanced' for manual fitting uses different
+                hyperparameters than 'balanced' for gradient-field fitting. Override
+                fine-grained kwargs via minimizer_kwargs.
                 - 'fast': Quick convergence, may miss global minimum
                 - 'balanced': Good trade-off (default)
                 - 'robust': Thorough exploration, slower
@@ -1038,7 +1103,13 @@ class LimbObservation(PlanetObservation):
         directional_decay_rate: float,
         prefer_direction: Optional[Literal["up", "down"]] = None,
         minimizer: Optional[
-            Literal["differential-evolution", "dual-annealing", "basinhopping"]
+            Literal[
+                "differential-evolution",
+                "dual-annealing",
+                "basinhopping",
+                "scipy-minimize",
+                "shgo",
+            ]
         ] = None,
         minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
@@ -1326,7 +1397,13 @@ class LimbObservation(PlanetObservation):
         directional_decay_rate: float,
         prefer_direction: Optional[Literal["up", "down"]] = None,
         minimizer: Optional[
-            Literal["differential-evolution", "dual-annealing", "basinhopping"]
+            Literal[
+                "differential-evolution",
+                "dual-annealing",
+                "basinhopping",
+                "scipy-minimize",
+                "shgo",
+            ]
         ] = None,
         minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
@@ -1423,18 +1500,22 @@ class LimbObservation(PlanetObservation):
                 dash.update(full_params, loss)
             return False  # Don't stop optimization
 
-        # Get minimizer configuration
+        # Get minimizer configuration (method-specific presets take priority)
         if self.minimizer not in MINIMIZER_PRESETS:
             raise ValueError(f"Unknown minimizer: {self.minimizer}")
 
-        if minimizer_preset not in MINIMIZER_PRESETS[self.minimizer]:
+        all_presets = {
+            **MINIMIZER_PRESETS[self.minimizer],
+            **METHOD_MINIMIZER_PRESETS.get(self.limb_detection, {}).get(self.minimizer, {}),
+        }
+        if minimizer_preset not in all_presets:
             raise ValueError(
                 f"Unknown preset '{minimizer_preset}' for {self.minimizer}. "
-                f"Choose from: {list(MINIMIZER_PRESETS[self.minimizer].keys())}"
+                f"Choose from: {list(all_presets.keys())}"
             )
 
         # Start with preset, then apply overrides
-        config = MINIMIZER_PRESETS[self.minimizer][minimizer_preset].copy()
+        config = _resolve_preset_kwargs(self.minimizer, minimizer_preset, self.limb_detection)
         if minimizer_kwargs:
             config.update(minimizer_kwargs)
 
@@ -1516,6 +1597,47 @@ class LimbObservation(PlanetObservation):
                 disp=verbose,
                 seed=seed,
                 **config,
+            )
+
+        elif self.minimizer == "scipy-minimize":
+            from scipy.optimize import minimize
+
+            method = config.pop("method", "L-BFGS-B")
+            n_restarts = config.pop("n_restarts", 1)
+            rng = np.random.default_rng(seed)
+            best_result = None
+            lo = np.array([b[0] for b in bounds])
+            hi = np.array([b[1] for b in bounds])
+
+            for i in range(n_restarts):
+                x_start = (
+                    x0
+                    if i == 0
+                    else rng.uniform(lo, hi)
+                )
+                res = minimize(
+                    self.cost_function.cost,
+                    x_start,
+                    method=method,
+                    bounds=bounds,
+                    options={"maxiter": max_iter, **config},
+                )
+                if best_result is None or res.fun < best_result.fun:
+                    best_result = res
+
+            self.fit_results = best_result
+
+        elif self.minimizer == "shgo":
+            from scipy.optimize import shgo
+
+            n = config.pop("n", 64)
+            iters = config.pop("iters", 1)
+            self.fit_results = shgo(
+                self.cost_function.cost,
+                bounds=bounds,
+                n=n,
+                iters=iters,
+                options={"maxiter": max_iter, **config},
             )
 
         # Extract results
