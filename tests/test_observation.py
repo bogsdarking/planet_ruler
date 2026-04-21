@@ -2343,3 +2343,103 @@ class TestObservationMiscellaneous:
                     assert result is False
 
             os.unlink(tmp_file.name)
+
+
+# ---------------------------------------------------------------------------
+# Helpers shared by TestConstrainRadius
+# ---------------------------------------------------------------------------
+
+def _synthetic_limb_for_obs(
+    r=6_371_000, h=10_000, f=0.026, w=0.0173,
+    W=4000, H=3000, n_points=12, noise_std=0.0, seed=42,
+):
+    """Centered synthetic limb array with apex at W//2."""
+    from planet_ruler.geometry import limb_arc, limb_camera_angle
+    theta_x = limb_camera_angle(r, h)
+    y_arc = limb_arc(
+        r=r, n_pix_x=W, n_pix_y=H, h=h, f=f, w=w,
+        x0=W // 2, y0=H // 2, theta_x=theta_x, theta_y=0, theta_z=0,
+    )
+    rng = np.random.default_rng(seed)
+    margin = W // 10
+    xs = np.linspace(margin, W - margin - 1, n_points, dtype=int)
+    limb = np.full(W, np.nan)
+    for x in xs:
+        limb[x] = y_arc[x] + rng.normal(0, noise_std)
+    return limb
+
+
+def _mock_obs(limb_array, h=10_000.0, f=0.026, w=0.0173, r_init=6_371_000.0):
+    """Minimal stub that satisfies constrain_radius() without __init__."""
+    W = len(limb_array)
+    stub = MagicMock(spec=LimbObservation)
+    stub._raw_limb = limb_array
+    stub.init_parameter_values = {"h": h, "f": f, "w": w, "r": r_init}
+    stub.parameter_limits = {"r": [1e6, 1e8]}
+    stub.image = MagicMock()
+    stub.image.shape = (3000, W, 3)
+    return stub
+
+
+class TestConstrainRadius:
+    """Tests for LimbObservation.constrain_radius()."""
+
+    def test_raises_without_limb(self):
+        stub = _mock_obs(np.full(4000, np.nan))
+        stub._raw_limb = None
+        with pytest.raises(RuntimeError, match="register_limb"):
+            LimbObservation.constrain_radius(stub)
+
+    def test_updates_r_and_limits(self):
+        limb = _synthetic_limb_for_obs()
+        stub = _mock_obs(limb)
+        LimbObservation.constrain_radius(stub)
+        assert stub.init_parameter_values["r"] != 6_371_000.0
+        r_low, r_high = stub.parameter_limits["r"]
+        assert r_low < stub.init_parameter_values["r"] < r_high
+
+    def test_returns_self(self):
+        limb = _synthetic_limb_for_obs()
+        stub = _mock_obs(limb)
+        result = LimbObservation.constrain_radius(stub)
+        assert result is stub
+
+    def test_default_sigma_auto(self, capsys):
+        """Default call (sigma_px='auto') prints σ=auto label."""
+        limb = _synthetic_limb_for_obs()
+        stub = _mock_obs(limb)
+        LimbObservation.constrain_radius(stub)
+        out = capsys.readouterr().out
+        assert "σ=auto" in out
+
+    def test_explicit_sigma_label_in_output(self, capsys):
+        limb = _synthetic_limb_for_obs()
+        stub = _mock_obs(limb)
+        LimbObservation.constrain_radius(stub, sigma_px=2.0)
+        out = capsys.readouterr().out
+        assert "σ=2.0 px" in out
+
+    def test_n_sigma_widens_bounds(self):
+        limb = _synthetic_limb_for_obs()
+
+        stub1 = _mock_obs(limb)
+        LimbObservation.constrain_radius(stub1, sigma_px=1.0, n_sigma=1.0)
+        lo1, hi1 = stub1.parameter_limits["r"]
+
+        stub2 = _mock_obs(limb)
+        LimbObservation.constrain_radius(stub2, sigma_px=1.0, n_sigma=3.0)
+        lo2, hi2 = stub2.parameter_limits["r"]
+
+        assert (hi2 - lo2) > (hi1 - lo1)
+
+    def test_degenerate_limb_leaves_r_unchanged(self, capsys):
+        """Too-few-points limb prints failure message; r is not modified."""
+        limb = np.full(4000, np.nan)
+        limb[500] = 1200.0
+        limb[1000] = 1202.0
+        limb[1500] = 1203.0  # only 3 points
+        stub = _mock_obs(limb, r_init=6_371_000.0)
+        LimbObservation.constrain_radius(stub)
+        out = capsys.readouterr().out
+        assert "could not constrain" in out
+        assert stub.init_parameter_values["r"] == 6_371_000.0

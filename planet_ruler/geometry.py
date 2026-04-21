@@ -658,3 +658,176 @@ def limb_arc(
         return full_coords
 
     return y_pixel
+
+
+def estimate_radius_from_limb_arc(
+    limb: np.ndarray,
+    h: float,
+    f_px: float,
+    x0: Optional[float] = None,
+    sigma_px: "float | str" = "auto",
+    n_sigma: float = 1.0,
+) -> dict:
+    """
+    Estimate planetary radius from a manually annotated limb arc.
+
+    Uses the sagitta geometry: each annotated point gives an independent
+    estimate of K = A/D (horizon circle radius / camera-to-circle-centre
+    distance), which inverts exactly to r = h*(K^2 + K*sqrt(K^2+1)).
+    No nonlinear optimisation is performed — the apex is located by a quadratic
+    fit (linear least squares), then K is read directly from each annotated point.
+
+    Use the returned r_low / r_high as parameter_limits["r"] in a fit_config
+    dict before running differential evolution.
+
+    Args:
+        limb:     Sparse target array of shape (W,) with np.nan for unannotated
+                  x-positions.  Direct output of load_limb_points_from_json().
+        h:        Observer altitude above the surface (metres).
+        f_px:     Focal length in pixels = f * W / w, where f is focal length
+                  in metres, W is image width in pixels, w is detector width
+                  in metres.
+        x0:       Principal point x (pixels).  Defaults to len(limb) / 2.
+                  Currently unused in the computation (apex is found from the
+                  annotated data directly), but reserved for future use.
+        sigma_px: Per-point annotation noise (pixels), or "auto" (default) to
+                  derive it from the RMS of annotation residuals against the
+                  estimated arc.  Propagated analytically to K_sigma and
+                  therefore r_low/r_high.  Does not filter annotation points.
+        n_sigma:  Bound width in units of sigma (default 1.0).  Applies to
+                  both explicit and "auto" sigma_px — r_low / r_high always
+                  span K_est ± n_sigma·K_sigma.  K_sigma and r_sigma in the
+                  return dict are always 1-sigma values.
+
+    Returns:
+        dict with keys:
+            r            – best-estimate radius (metres)
+            r_low        – n_sigma lower bound (metres)
+            r_high       – n_sigma upper bound (metres)
+            r_sigma      – 1-sigma uncertainty, linearised (metres)
+            K            – sagitta-weighted mean of per-point K = A/D estimates
+            K_sigma      – propagated 1-sigma uncertainty on K
+            n_points     – number of annotated points used for K
+            residual_rms – RMS of model residuals (pixels)
+            status       – "ok" | "flat_arc" | "too_few_points"
+            warnings     – list of warning strings
+    """
+    warnings_list = []
+    W = len(limb)
+    if x0 is None:
+        x0 = W / 2.0
+
+    valid = ~np.isnan(limb)
+    n_valid = int(np.sum(valid))
+
+    def _nan_result(status, extra_warnings=None):
+        return {
+            "r": np.nan, "r_low": np.nan, "r_high": np.nan, "r_sigma": np.nan,
+            "K": np.nan, "K_sigma": np.nan,
+            "n_points": n_valid, "residual_rms": np.nan,
+            "status": status,
+            "warnings": extra_warnings or [],
+        }
+
+    if n_valid < 4:
+        return _nan_result(
+            "too_few_points",
+            [f"Only {n_valid} annotated point(s); need at least 4"],
+        )
+
+    x_px = np.where(valid)[0].astype(float)
+    y_px = limb[valid]
+
+    span = np.max(x_px) - np.min(x_px)
+    if span < W / 4:
+        warnings_list.append(
+            f"Annotated points span only {span:.0f} of {W} pixels"
+            " — K estimate may be unreliable"
+        )
+
+    # Locate apex via quadratic interpolation (linear least squares, no iter)
+    coeffs = np.polyfit(x_px, y_px, 2)
+    a = coeffs[0]
+
+    if abs(a) < 1e-12:
+        return _nan_result(
+            "flat_arc", ["Parabola coefficient ~0; arc is effectively flat"]
+        )
+
+    x_apex = -coeffs[1] / (2.0 * a)
+    y_apex = float(np.polyval(coeffs, x_apex))
+
+    half_span = (np.max(x_px) - np.min(x_px)) / 2.0
+    s_est = abs(a) * half_span**2
+
+    # Arc direction: ∩ (a < 0, apex is max y) → arc_sign = +1
+    #               ∪ (a > 0, apex is min y) → arc_sign = -1
+    arc_sign = -np.sign(a)
+
+    # K_i for each annotated point: K = (sqrt(f²+u²) - f) / s
+    # Exclude only the degenerate case where a point sits exactly at x_apex.
+    u_i = x_px - x_apex
+    s_i = arc_sign * (y_apex - y_px)
+
+    nonzero = s_i > 1e-9
+    if not np.any(nonzero):
+        return _nan_result(
+            "too_few_points",
+            ["All annotated points coincide with the apex"],
+        )
+
+    u_v = u_i[nonzero]
+    s_v = s_i[nonzero]
+    K_i = (np.sqrt(f_px**2 + u_v**2) - f_px) / s_v
+
+    # Weighted mean: w_i = s_i² (∝ 1/Var(K_i), since σ_Ki = K_i·sigma_px/s_i)
+    w = s_v**2
+    K_est = float(np.sum(w * K_i) / np.sum(w))
+
+    # Residuals using K_est (computed before K_sigma so "auto" can use them)
+    y_pred = y_apex - arc_sign * (1.0 / K_est) * (
+        np.sqrt(f_px**2 + u_i**2) - f_px
+    )
+    residual_rms = float(np.sqrt(np.mean((y_px - y_pred) ** 2)))
+
+    # Resolve sigma_px: "auto" uses the measured annotation RMS (1-sigma)
+    if sigma_px == "auto":
+        sigma_px = residual_rms if residual_rms > 0 else 1.0
+
+    # Check estimated sagitta against noise floor (deferred until sigma_px is resolved)
+    status = "flat_arc" if s_est < sigma_px else "ok"
+    if status == "flat_arc":
+        warnings_list.append(
+            f"Estimated sagitta ({s_est:.2f} px) is below noise floor "
+            f"({sigma_px:.1f} px) — radius bound will be very wide"
+        )
+
+    # 1-sigma K uncertainty: K_sigma = K_est · sigma_px / sqrt(Σ s_i²)
+    K_sigma = K_est * sigma_px / float(np.sqrt(np.sum(w)))
+
+    # Invert K → r via exact closed form: r = h * (K² + K√(K²+1))
+    def _r_from_K(K):
+        K = max(float(K), 1e-12)
+        return h * (K**2 + K * np.sqrt(K**2 + 1))
+
+    r = _r_from_K(K_est)
+    # r_low / r_high span n_sigma on each side (works for both explicit and auto sigma_px)
+    r_low = _r_from_K(max(K_est - n_sigma * K_sigma, 1e-9))
+    r_high = _r_from_K(K_est + n_sigma * K_sigma)
+
+    sq = np.sqrt(K_est**2 + 1)
+    drdK = h * (2 * K_est + sq + K_est**2 / sq)
+    r_sigma = abs(drdK) * K_sigma  # 1-sigma linearised uncertainty
+
+    return {
+        "r": r,
+        "r_low": r_low,
+        "r_high": r_high,
+        "r_sigma": r_sigma,
+        "K": K_est,
+        "K_sigma": K_sigma,
+        "n_points": int(np.sum(nonzero)),
+        "residual_rms": residual_rms,
+        "status": status,
+        "warnings": warnings_list,
+    }

@@ -136,9 +136,10 @@ MINIMIZER_PRESETS = {
         },
     },
     "basinhopping": {
-        "fast":    {"niter": 100, "T": 1.5, "stepsize": 0.5, "local_maxiter": 50},
-        "balanced":{"niter": 200, "T": 2.0, "stepsize": 0.5, "local_maxiter": 100},
-        "robust":  {"niter": 500, "T": 3.0, "stepsize": 0.7, "local_maxiter": 200},
+        "fast":        {"niter": 100,  "T": 1.5, "stepsize": 0.5, "local_maxiter": 50},
+        "balanced":    {"niter": 200,  "T": 2.0, "stepsize": 0.5, "local_maxiter": 100},
+        "robust":      {"niter": 500,  "T": 3.0, "stepsize": 0.7, "local_maxiter": 200},
+        "super_robust":{"niter": 2000, "T": 5.0, "stepsize": 1.5, "local_maxiter": 500},
         "scipy-default": {
             # Exact scipy basinhopping defaults
             "niter": 100,
@@ -147,9 +148,10 @@ MINIMIZER_PRESETS = {
         },
     },
     "scipy-minimize": {
-        "fast":    {"method": "L-BFGS-B", "n_restarts": 5,  "ftol": 1e-6},
-        "balanced":{"method": "L-BFGS-B", "n_restarts": 20, "ftol": 1e-8},
-        "robust":  {"method": "Powell",   "n_restarts": 50, "ftol": 1e-10},
+        "fast":        {"method": "L-BFGS-B", "n_restarts": 5,   "ftol": 1e-6},
+        "balanced":    {"method": "L-BFGS-B", "n_restarts": 20,  "ftol": 1e-8},
+        "robust":      {"method": "Powell",   "n_restarts": 50,  "ftol": 1e-10},
+        "super_robust":{"method": "Powell",   "n_restarts": 200, "ftol": 1e-12},
         "scipy-default": {
             # Exact scipy minimize defaults (L-BFGS-B, single run)
             "method": "L-BFGS-B",
@@ -173,14 +175,16 @@ MINIMIZER_PRESETS = {
 METHOD_MINIMIZER_PRESETS: dict = {
     "manual": {
         "basinhopping": {
-            "fast":    {"niter": 100, "T": 1.5, "stepsize": 0.5, "local_maxiter": 50},
-            "balanced":{"niter": 200, "T": 2.0, "stepsize": 0.5, "local_maxiter": 100},
-            "robust":  {"niter": 500, "T": 3.0, "stepsize": 0.7, "local_maxiter": 200},
+            "fast":        {"niter": 100,  "T": 1.5, "stepsize": 0.5, "local_maxiter": 50},
+            "balanced":    {"niter": 200,  "T": 2.0, "stepsize": 0.5, "local_maxiter": 100},
+            "robust":      {"niter": 500,  "T": 3.0, "stepsize": 0.7, "local_maxiter": 200},
+            "super_robust":{"niter": 2000, "T": 5.0, "stepsize": 1.5, "local_maxiter": 500},
         },
         "scipy-minimize": {
-            "fast":    {"method": "L-BFGS-B", "n_restarts": 5,  "ftol": 1e-6},
-            "balanced":{"method": "L-BFGS-B", "n_restarts": 20, "ftol": 1e-8},
-            "robust":  {"method": "L-BFGS-B", "n_restarts": 50, "ftol": 1e-10},
+            "fast":        {"method": "L-BFGS-B", "n_restarts": 5,   "ftol": 1e-6},
+            "balanced":    {"method": "L-BFGS-B", "n_restarts": 20,  "ftol": 1e-8},
+            "robust":      {"method": "L-BFGS-B", "n_restarts": 50,  "ftol": 1e-10},
+            "super_robust":{"method": "Powell",   "n_restarts": 200, "ftol": 1e-12},
         },
     },
 }
@@ -724,6 +728,63 @@ class LimbObservation(PlanetObservation):
         self._plot_functions["limb"] = plot_limb
         return self
 
+    def constrain_radius(
+        self, sigma_px: "float | str" = "auto", n_sigma: float = 1.0
+    ) -> "LimbObservation":
+        """
+        Use the registered limb arc's sagitta to estimate and constrain the
+        planetary radius bounds before fitting.
+
+        Reads K = A/D directly from each annotated point (no nonlinear
+        optimisation), inverts via r = h*(K²+K√(K²+1)), and updates
+        parameter_limits["r"] and init_parameter_values["r"] in place.
+
+        Call after register_limb() and before fit_limb().
+
+        Args:
+            sigma_px: Per-point annotation noise in pixels, or "auto" (default)
+                to derive it from the RMS residuals of the annotated points
+                against the estimated arc model.
+            n_sigma:  Bound width in units of sigma (default 1.0).  Only used
+                when sigma_px="auto"; pass 2.0 for 2-sigma bounds, etc.
+
+        Returns:
+            self (chainable)
+        """
+        from .geometry import estimate_radius_from_limb_arc
+
+        if self._raw_limb is None:
+            raise RuntimeError("No limb registered; call register_limb() first.")
+
+        h = self.init_parameter_values["h"]
+        f = self.init_parameter_values["f"]
+        w = self.init_parameter_values["w"]
+        W = self.image.shape[1]
+        f_px = f * W / w
+
+        est = estimate_radius_from_limb_arc(
+            self._raw_limb, h=h, f_px=f_px, sigma_px=sigma_px, n_sigma=n_sigma
+        )
+
+        for msg in est["warnings"]:
+            print(f"[constrain_radius] warning: {msg}")
+
+        if est["status"] in ("ok", "flat_arc") and not np.isnan(est["r"]):
+            self.init_parameter_values["r"] = est["r"]
+            self.parameter_limits["r"] = [est["r_low"], est["r_high"]]
+            print(
+                f"[constrain_radius] r = {est['r']/1e3:.0f} km  "
+                f"[{est['r_low']/1e3:.0f}, {est['r_high']/1e3:.0f}] km  "
+                f"(K={est['K']:.2f} ± {est['K_sigma']:.2f}, "
+                f"n={est['n_points']}, rms={est['residual_rms']:.2f} px"
+                + (", σ=auto" if sigma_px == "auto" else f", σ={sigma_px} px")
+                + ")"
+            )
+        else:
+            print(f"[constrain_radius] could not constrain radius: {est['status']}")
+
+        return self
+
     def detect_limb(
         self,
         detection_method: Optional[
@@ -854,7 +915,7 @@ class LimbObservation(PlanetObservation):
                 "shgo",
             ]
         ] = None,
-        minimizer_preset: Literal["fast", "balanced", "robust", "scipy-default"] = "balanced",
+        minimizer_preset: Literal["fast", "balanced", "robust", "super_robust", "scipy-default"] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         warm_start: bool = False,
         dashboard: bool = False,
@@ -1111,7 +1172,7 @@ class LimbObservation(PlanetObservation):
                 "shgo",
             ]
         ] = None,
-        minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
+        minimizer_preset: Literal["fast", "balanced", "robust", "super_robust"] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         dashboard: bool = False,
         dashboard_kwargs: Optional[Dict] = None,
@@ -1405,7 +1466,7 @@ class LimbObservation(PlanetObservation):
                 "shgo",
             ]
         ] = None,
-        minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
+        minimizer_preset: Literal["fast", "balanced", "robust", "super_robust"] = "balanced",
         minimizer_kwargs: Optional[Dict] = None,
         dashboard: bool = False,
         dashboard_kwargs: Optional[Dict] = None,

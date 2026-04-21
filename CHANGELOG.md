@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A new tutorial that derives the minimum viable altitude for detecting limb curvature as a function of camera resolution (see notebooks/minimum_altitude_demo.ipynb)
 - Parameter limit presets (tight, balanced, loose) for create_config_from_image.
 - New minimizer hooks for l-bfgs-b and shgo.
+- An approximate but fast way to estimate r and r-bounds without fitting a limb: Obs.constrain_radius()
 
 ### Changed
 

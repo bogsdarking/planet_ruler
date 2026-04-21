@@ -24,6 +24,7 @@ from planet_ruler.geometry import (
     intrinsic_transform,
     extrinsic_transform,
     limb_arc,
+    estimate_radius_from_limb_arc,
 )
 
 
@@ -415,6 +416,175 @@ class TestIntegration:
         # (curvature might not be visible depending on FOV)
         variation = np.max(result) - np.min(result)
         assert variation >= 0  # Sanity check
+
+
+def _make_synthetic_limb(
+    r=6_371_000,
+    h=10_000,
+    f=0.026,
+    w=0.0173,
+    W=4000,
+    H=3000,
+    n_points=12,
+    noise_std=0.0,
+    seed=42,
+):
+    """
+    Generate a sparse limb array by sampling a synthetic arc at n_points
+    evenly spaced columns (avoiding the outermost 10% to stay well within FOV).
+    """
+    theta_x = limb_camera_angle(r, h)
+    y_arc = limb_arc(
+        r=r, n_pix_x=W, n_pix_y=H, h=h, f=f, w=w,
+        x0=W // 2, y0=H // 2,
+        theta_x=theta_x, theta_y=0, theta_z=0,
+    )
+    rng = np.random.default_rng(seed)
+    margin = W // 10
+    xs = np.linspace(margin, W - margin - 1, n_points, dtype=int)
+    limb = np.full(W, np.nan)
+    for x in xs:
+        limb[x] = y_arc[x] + rng.normal(0, noise_std)
+    return limb
+
+
+class TestEstimateRadiusFromLimbArc:
+    """Tests for estimate_radius_from_limb_arc."""
+
+    # --- accuracy across altitudes ---
+
+    @pytest.mark.parametrize("h", [1_000, 10_000, 50_000])
+    def test_clean_arc_within_5_percent(self, h):
+        r_true = 6_371_000
+        limb = _make_synthetic_limb(r=r_true, h=h, noise_std=0.0)
+        f, w, W = 0.026, 0.0173, 4000
+        f_px = f * W / w
+        est = estimate_radius_from_limb_arc(limb, h=h, f_px=f_px, sigma_px=1.0)
+        assert est["status"] == "ok"
+        assert abs(est["r"] - r_true) / r_true < 0.05
+
+    def test_3sigma_bounds_contain_truth_under_noise(self):
+        """3-sigma bounds (sigma_px = true noise) must bracket r_true."""
+        r_true = 6_371_000
+        h = 10_000
+        noise_std = 1.0
+        limb = _make_synthetic_limb(
+            r=r_true, h=h, noise_std=noise_std, seed=42
+        )
+        f, w, W = 0.026, 0.0173, 4000
+        f_px = f * W / w
+        est = estimate_radius_from_limb_arc(
+            limb, h=h, f_px=f_px, sigma_px=noise_std, n_sigma=3.0
+        )
+        assert est["status"] == "ok"
+        assert est["r_low"] <= r_true <= est["r_high"]
+
+    # --- bounds sanity ---
+
+    def test_bounds_bracket_estimate(self):
+        limb = _make_synthetic_limb()
+        f_px = 0.026 * 4000 / 0.0173
+        est = estimate_radius_from_limb_arc(
+            limb, h=10_000, f_px=f_px, sigma_px=1.0
+        )
+        assert est["r_low"] < est["r"] < est["r_high"]
+
+    def test_wider_sigma_gives_wider_bounds(self):
+        limb = _make_synthetic_limb()
+        f_px = 0.026 * 4000 / 0.0173
+        narrow = estimate_radius_from_limb_arc(
+            limb, h=10_000, f_px=f_px, sigma_px=1.0
+        )
+        wide = estimate_radius_from_limb_arc(
+            limb, h=10_000, f_px=f_px, sigma_px=5.0
+        )
+        narrow_width = narrow["r_high"] - narrow["r_low"]
+        wide_width = wide["r_high"] - wide["r_low"]
+        assert wide_width > narrow_width
+
+    # --- n_sigma scaling ---
+
+    def test_n_sigma_scales_auto_bounds(self):
+        limb = _make_synthetic_limb()
+        f_px = 0.026 * 4000 / 0.0173
+        one = estimate_radius_from_limb_arc(
+            limb, h=10_000, f_px=f_px, sigma_px="auto", n_sigma=1.0
+        )
+        two = estimate_radius_from_limb_arc(
+            limb, h=10_000, f_px=f_px, sigma_px="auto", n_sigma=2.0
+        )
+        assert (two["r_high"] - two["r_low"]) > (one["r_high"] - one["r_low"])
+
+    def test_n_sigma_scales_bounds_for_explicit_sigma(self):
+        """n_sigma widens bounds even when sigma_px is an explicit float."""
+        limb = _make_synthetic_limb()
+        f_px = 0.026 * 4000 / 0.0173
+        a = estimate_radius_from_limb_arc(
+            limb, h=10_000, f_px=f_px, sigma_px=2.0, n_sigma=1.0
+        )
+        b = estimate_radius_from_limb_arc(
+            limb, h=10_000, f_px=f_px, sigma_px=2.0, n_sigma=3.0
+        )
+        # Point estimate and 1-sigma K_sigma are unchanged; bounds widen
+        assert np.isclose(a["r"], b["r"])
+        assert np.isclose(a["K_sigma"], b["K_sigma"])
+        assert (b["r_high"] - b["r_low"]) > (a["r_high"] - a["r_low"])
+
+    # --- auto sigma ---
+
+    def test_auto_sigma_uses_residual_rms(self):
+        limb = _make_synthetic_limb(noise_std=2.0)
+        f_px = 0.026 * 4000 / 0.0173
+        est = estimate_radius_from_limb_arc(
+            limb, h=10_000, f_px=f_px, sigma_px="auto"
+        )
+        assert est["status"] == "ok"
+        assert est["residual_rms"] > 0
+        # K_sigma = K_est * rms / sqrt(sum(s_i^2)) — must be finite and positive
+        assert np.isfinite(est["K_sigma"])
+        assert est["K_sigma"] > 0
+
+    # --- failure modes ---
+
+    def test_too_few_points(self):
+        limb = np.full(4000, np.nan)
+        limb[100] = 500.0
+        limb[200] = 502.0
+        limb[300] = 503.0  # only 3 points
+        f_px = 0.026 * 4000 / 0.0173
+        est = estimate_radius_from_limb_arc(limb, h=10_000, f_px=f_px)
+        assert est["status"] == "too_few_points"
+        assert np.isnan(est["r"])
+
+    def test_flat_arc_parabola(self):
+        limb = np.full(400, np.nan)
+        xs = np.linspace(40, 360, 10, dtype=int)
+        for x in xs:
+            limb[x] = 200.0  # perfectly flat line
+        f_px = 0.026 * 400 / 0.0173
+        est = estimate_radius_from_limb_arc(
+            limb, h=10_000, f_px=f_px, sigma_px=1.0
+        )
+        assert est["status"] == "flat_arc"
+
+    # --- return dict completeness ---
+
+    def test_return_dict_keys(self):
+        limb = _make_synthetic_limb()
+        f_px = 0.026 * 4000 / 0.0173
+        est = estimate_radius_from_limb_arc(limb, h=10_000, f_px=f_px)
+        expected_keys = {
+            "r", "r_low", "r_high", "r_sigma",
+            "K", "K_sigma", "n_points", "residual_rms",
+            "status", "warnings",
+        }
+        assert expected_keys == set(est.keys())
+
+    def test_n_points_matches_annotated(self):
+        limb = _make_synthetic_limb(n_points=8)
+        f_px = 0.026 * 4000 / 0.0173
+        est = estimate_radius_from_limb_arc(limb, h=10_000, f_px=f_px)
+        assert est["n_points"] == 8
 
 
 if __name__ == "__main__":
