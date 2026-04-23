@@ -626,7 +626,11 @@ class TestTkLimbAnnotatorExtended:
     @patch("builtins.open", new_callable=MagicMock)
     @patch("json.dump")
     @patch("tkinter.messagebox.showinfo")
-    def test_save_points_success(self, mock_info, mock_json_dump, mock_open):
+    @patch(
+        "tkinter.filedialog.asksaveasfilename",
+        return_value="/path/to/test_image_limb_points.json",
+    )
+    def test_save_points_success(self, mock_dialog, mock_info, mock_json_dump, mock_open):
         """Test successful point saving"""
         with patch("tkinter.Tk"), patch(
             "PIL.Image.open"
