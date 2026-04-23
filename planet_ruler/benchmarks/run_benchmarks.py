@@ -91,6 +91,12 @@ Examples:
     )
 
     parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Delete the existing database before running (fresh start, no append).",
+    )
+
+    parser.add_argument(
         "--db",
         type=Path,
         help="Path to output database (default: benchmarks/results/benchmark_results.db)",
@@ -113,6 +119,12 @@ Examples:
     except Exception as e:
         print(f"Error initializing benchmark runner: {e}", file=sys.stderr)
         sys.exit(1)
+
+    # Overwrite: delete and reinit the DB now that we know the resolved path
+    if args.overwrite and runner.db_path.exists():
+        runner.db_path.unlink()
+        print(f"Deleted existing database: {runner.db_path}")
+        runner._init_database()
 
     # Display info
     if not args.quiet:
