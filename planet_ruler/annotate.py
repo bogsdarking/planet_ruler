@@ -90,7 +90,14 @@ class TkLimbAnnotator:
     - Generate sparse target array for CostFunction
     """
 
-    def __init__(self, image_path, image=None, initial_stretch=1.0, initial_zoom=None):
+    def __init__(
+        self,
+        image_path,
+        image=None,
+        initial_stretch=1.0,
+        initial_zoom=None,
+        output_dir=None,
+    ):
         """
         Initialize the annotation tool.
 
@@ -99,8 +106,11 @@ class TkLimbAnnotator:
             image (np.ndarray): Optionally the already loaded image
             initial_stretch (float): Initial vertical stretch factor
             initial_zoom (float): Initial zoom level (None = auto-fit)
+            output_dir (str or Path, optional): Directory for saved JSON files.
+                Defaults to the same directory as image_path.
         """
         self.image_path = image_path
+        self.output_dir = Path(output_dir) if output_dir is not None else None
         self.vertical_stretch = initial_stretch
 
         # Load image
@@ -610,16 +620,29 @@ class TkLimbAnnotator:
         return target
 
     def save_points(self):
-        """Save points to JSON."""
+        """Save points to JSON, prompting user to confirm or edit the save path."""
         if not self.points:
             messagebox.showwarning("No Points", "No points to save")
             return
 
-        output_path = (
-            Path(self.image_path).parent
-            / f"{Path(self.image_path).stem}_limb_points.json"
-        )
+        if self.output_dir is not None:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            save_dir = self.output_dir
+        else:
+            save_dir = Path(self.image_path).parent
+        default_path = save_dir / f"{Path(self.image_path).stem}_limb_points.json"
 
+        chosen = filedialog.asksaveasfilename(
+            title="Save Limb Points",
+            initialdir=str(default_path.parent),
+            initialfile=default_path.name,
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+        )
+        if not chosen:
+            return
+
+        output_path = Path(chosen)
         data = {
             "image_path": str(self.image_path),
             "image_size": [self.width, self.height],
@@ -1260,43 +1283,43 @@ class TkMaskSelector:
         }
 
 
-# Example usage
 if __name__ == "__main__":
+    import argparse
     import sys
 
-    print("Tkinter Manual Limb Annotation Tool")
-    print("=" * 60)
-    print("\nControls:")
-    print("  Left Click:      Add point")
-    print("  Right Click:     Undo last point")
-    print("  Scroll Wheel:    Zoom in/out")
-    print("  +/- keys:        Zoom in/out")
-    print("  Scroll bars:     Navigate image")
-    print("\nButtons:")
-    print("  Zoom: Fit to Window, 100%, +/-")
-    print("  Stretch: Increase/Decrease/Reset (makes curves easier to see)")
-    print("  Generate Target: Create sparse array (.npy)")
-    print("  Save/Load Points: Persist annotations (.json)")
-    print("\n" + "=" * 60)
+    parser = argparse.ArgumentParser(
+        prog="python -m planet_ruler.annotate",
+        description="Manually annotate planet limb points on a horizon image",
+    )
+    parser.add_argument("image", help="Path to the image to annotate")
+    parser.add_argument(
+        "--output-dir",
+        "-o",
+        type=Path,
+        default=None,
+        help=(
+            "Directory to save the *_limb_points.json file "
+            "(default: same directory as the image)"
+        ),
+    )
+    parser.add_argument(
+        "--stretch",
+        type=float,
+        default=1.0,
+        help="Initial vertical stretch factor (default: 1.0)",
+    )
+    args = parser.parse_args()
 
-    if len(sys.argv) > 1:
-        image_path = sys.argv[1]
-    else:
-        print("\nUsage: python tk_annotator.py <image_path>")
-        print("\nOr in your code:")
-        print("  from tk_annotator import TkLimbAnnotator")
-        print("  annotator = TkLimbAnnotator('image.jpg')")
-        print("  annotator.run()")
-        sys.exit(0)
-
-    # Create and run
-    annotator = TkLimbAnnotator(image_path, initial_stretch=1.0)
+    annotator = TkLimbAnnotator(
+        args.image,
+        initial_stretch=args.stretch,
+        output_dir=args.output_dir,
+    )
     annotator.run()
 
-    # After closing, get target if points were added
     if len(annotator.points) >= 3:
         target = annotator.get_target()
-        print(f"\n✓ Generated target with {np.sum(~np.isnan(target))} points")
+        print(f"Generated target with {np.sum(~np.isnan(target))} points")
 
 
 def load_limb_points_from_json(json_path, return_metadata=False):
