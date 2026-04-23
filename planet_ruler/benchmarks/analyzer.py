@@ -22,7 +22,7 @@ stored in SQLite database.
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -190,6 +190,14 @@ class BenchmarkAnalyzer:
                 lambda x: param in x if isinstance(x, list) else False
             )
 
+        # Expose minimizer method from minimizer_config JSON column
+        df["minimizer"] = df["minimizer_config"].apply(
+            lambda x: x if isinstance(x, str) else (
+                x.get("method") or x.get("minimizer")
+                if isinstance(x, dict) else None
+            )
+        )
+
         # Explode fit_params (max_iter, resolution_stages, etc.)
         all_fit_params = set()
         for fit_dict in df["fit_params"]:
@@ -259,39 +267,118 @@ class BenchmarkAnalyzer:
         return summary.reset_index()
 
     def get_pareto_frontier(
-        self, time_col: str = "total_time", error_col: str = "relative_error"
+        self,
+        metrics: Sequence[tuple],
+        df: Optional[pd.DataFrame] = None,
     ) -> pd.DataFrame:
         """
-        Identify Pareto frontier in time-accuracy tradeoff.
+        Identify the Pareto-optimal frontier across N metrics.
+
+        A row is Pareto-optimal if no other row is at least as good on every
+        metric and strictly better on at least one.
 
         Args:
-            time_col (str): Column name for time metric.
-            error_col (str): Column name for error metric.
+            metrics: Sequence of ``(column, direction)`` pairs where
+                ``direction`` is ``"min"`` or ``"max"``.  All listed columns
+                must be present in the DataFrame.
+            df: DataFrame to filter.  If None, loads all successful results.
 
         Returns:
-            pd.DataFrame: Results on Pareto frontier (no run is both faster and more accurate).
+            pd.DataFrame: Non-dominated rows sorted by the first metric.
+
+        Example::
+
+            pareto = analyzer.get_pareto_frontier(
+                [("total_time", "min"), ("relative_error", "min")]
+            )
         """
-        df = self.get_results()
-        df = df[df["convergence_status"] == "success"].copy()
+        if df is None:
+            df = self.get_results()
+        if "convergence_status" in df.columns:
+            df = df[df["convergence_status"] == "success"].copy()
+        else:
+            df = df.copy()
+        if df.empty:
+            return df
 
-        # Find Pareto frontier
-        pareto_mask = np.ones(len(df), dtype=bool)
+        # Build a (n_rows, n_metrics) array where lower is always better
+        cols = []
+        for col, direction in metrics:
+            vals = df[col].to_numpy(dtype=float)
+            cols.append(vals if direction == "min" else -vals)
+        mat = np.column_stack(cols)  # shape (n, k)
 
-        for i in range(len(df)):
-            if pareto_mask[i]:
-                # Check if any other point dominates this one
-                dominates = (
-                    (df[time_col] <= df[time_col].iloc[i])
-                    & (df[error_col] <= df[error_col].iloc[i])
-                    & (
-                        (df[time_col] < df[time_col].iloc[i])
-                        | (df[error_col] < df[error_col].iloc[i])
-                    )
-                )
-                if dominates.any():
-                    pareto_mask[i] = False
+        n = len(mat)
+        dominated = np.zeros(n, dtype=bool)
+        for i in range(n):
+            if dominated[i]:
+                continue
+            # Any row j that is ≤ i on all dims and < i on at least one
+            leq = np.all(mat <= mat[i], axis=1)  # (n,)
+            lt_any = np.any(mat < mat[i], axis=1)  # (n,)
+            mask = leq & lt_any
+            mask[i] = False
+            if mask.any():
+                dominated[i] = True
 
-        return df[pareto_mask].sort_values(time_col)
+        first_col = metrics[0][0]
+        return df[~dominated].sort_values(first_col)
+
+    def score_pareto(
+        self,
+        df: pd.DataFrame,
+        metrics: Sequence[tuple],
+    ) -> pd.Series:
+        """
+        Compute a weighted score for each row (lower = better).
+
+        Each metric is normalised to [0, 1] (min-max across the supplied
+        DataFrame), then multiplied by its weight and summed.  "max" metrics
+        are flipped before normalisation so that lower score always means
+        better.
+
+        Args:
+            df: DataFrame to score (e.g. the output of ``get_pareto_frontier``).
+            metrics: Sequence of ``(column, direction, weight)`` triples.
+
+        Returns:
+            pd.Series: Weighted scores indexed like ``df``.
+        """
+        score = pd.Series(0.0, index=df.index)
+        for col, direction, weight in metrics:
+            vals = df[col].astype(float)
+            lo, hi = vals.min(), vals.max()
+            if hi == lo:
+                normalised = pd.Series(0.0, index=df.index)
+            else:
+                normalised = (vals - lo) / (hi - lo)
+            if direction == "max":
+                normalised = 1.0 - normalised
+            score += weight * normalised
+        return score
+
+    def reliability(
+        self,
+        df: pd.DataFrame,
+        threshold: float = 0.10,
+        error_col: str = "relative_error",
+    ) -> float:
+        """
+        Fraction of rows whose relative error is below *threshold*.
+
+        Args:
+            df: DataFrame slice to evaluate.
+            threshold: Maximum acceptable relative error (default 0.10 = 10 %).
+            error_col: Column containing relative error values.
+
+        Returns:
+            float: Fraction in [0, 1], or ``float("nan")`` if all values are
+            NaN.
+        """
+        vals = df[error_col].dropna()
+        if vals.empty:
+            return float("nan")
+        return float((vals < threshold).mean())
 
     def compare_scenarios(
         self, scenarios: List[str], metric: str = "total_time"
