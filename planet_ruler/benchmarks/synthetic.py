@@ -68,13 +68,20 @@ def generate_synthetic_case(
     seed: int = 0,
     output_dir: Optional[Path] = None,
     name: Optional[str] = None,
+    theta_x_offset: float = 0.0,
+    theta_y: float = 0.0,
+    theta_z: float = np.pi,
 ) -> dict:
     """
     Generate a synthetic limb observation with exact ground truth.
 
-    Camera orientation uses theta_x = limb_camera_angle(r, h) (the natural
-    angle at which the horizon appears for the given altitude), theta_y = 0,
-    theta_z = 0 — physically correct for a level, unrotated camera.
+    Camera orientation: theta_x = limb_camera_angle(r, h) + theta_x_offset.
+    Default (all offsets zero, theta_z=π) is a level camera pointing at the
+    horizon with the near-side limb centred — matching real horizon photos.
+
+    Off-axis variants (theta_x_offset != 0, theta_y != 0, theta_z != π) let
+    robustness tests check whether the optimizer recovers from non-standard
+    camera orientations.
 
     Args:
         r: Planet radius (m).
@@ -87,6 +94,10 @@ def generate_synthetic_case(
         seed: RNG seed for reproducible noise.
         output_dir: If provided, write JPEG and JSON files here.
         name: File stem for output files (required when output_dir given).
+        theta_x_offset: Additional tilt beyond the natural horizon angle (rad).
+            Positive tilts camera further down (more planet visible).
+        theta_y: Roll around the optical axis (rad). Default 0.
+        theta_z: Azimuth rotation (rad). Default π (near-side limb, ∪-arc).
 
     Returns:
         dict with keys:
@@ -107,14 +118,7 @@ def generate_synthetic_case(
     f_m = f_mm * 1e-3   # meters
     w_m = w_mm * 1e-3   # meters
 
-    # Natural tilt angle: camera points at horizon.
-    # theta_z = π rotates 180° around the vertical axis so the visible limb
-    # arc is the near side, producing a ∪-shaped arc (more planet at center
-    # than edges) matching real horizon photos.
-    # Note: theta_y has no effect — the limb circle is coaxial with the y-axis,
-    # making y-rotation a pure phase shift in φ with no impact on projection.
-    theta_x = limb_camera_angle(r, h)
-    theta_z = np.pi
+    theta_x = limb_camera_angle(r, h) + theta_x_offset
 
     # ---- annotation points (sparse, n_points) ----------------------------
     # x0/y0 must match LimbObservation: principal point = image centre.
@@ -134,7 +138,7 @@ def generate_synthetic_case(
         x0=x0,
         y0=y0,
         theta_x=theta_x,
-        theta_y=0.0,
+        theta_y=theta_y,
         theta_z=theta_z,
         x_coords=x_sparse,
     )
@@ -165,7 +169,8 @@ def generate_synthetic_case(
         "f_m": f_m,
         "w_m": w_m,
         "theta_x": float(theta_x),
-        "theta_y": 0.0,
+        "theta_x_offset": float(theta_x_offset),
+        "theta_y": float(theta_y),
         "theta_z": float(theta_z),
         "n_pix_x": n_pix_x,
         "n_pix_y": n_pix_y,
@@ -196,7 +201,7 @@ def generate_synthetic_case(
             x0=x0,
             y0=y0,
             theta_x=theta_x,
-            theta_y=0.0,
+            theta_y=theta_y,
             theta_z=theta_z,
         )
 
@@ -310,12 +315,26 @@ def _write_annotation(
     return path
 
 
-def _build_name(camera: str, h_m: float, noise_sigma: float) -> str:
-    """Build a canonical file stem from camera + altitude + noise."""
+def _build_name(
+    camera: str,
+    h_m: float,
+    noise_sigma: float,
+    theta_x_offset: float = 0.0,
+    theta_y: float = 0.0,
+    theta_z: float = np.pi,
+) -> str:
+    """Build a canonical file stem from camera + altitude + noise + angles."""
     cam_key = camera.lower().replace(" ", "_").replace("/", "_")
     h_km = int(h_m / 1000)
     noise_tag = f"_noisy{int(noise_sigma)}px" if noise_sigma > 0 else "_clean"
-    return f"synth_{cam_key}_h{h_km}km{noise_tag}"
+    off_axis = ""
+    if theta_x_offset != 0.0:
+        off_axis += f"_txo{int(round(np.degrees(theta_x_offset)))}"
+    if theta_y != 0.0:
+        off_axis += f"_ty{int(round(np.degrees(theta_y)))}"
+    if theta_z != np.pi:
+        off_axis += f"_tz{int(round(np.degrees(theta_z)))}"
+    return f"synth_{cam_key}_h{h_km}km{noise_tag}{off_axis}"
 
 
 def generate_canonical_dataset(output_dir: Path, r: float = 6371000.0) -> list:
@@ -411,6 +430,12 @@ def _parse_args() -> argparse.Namespace:
     single.add_argument("--seed", type=int, default=0)
     single.add_argument("--output-dir", type=Path, default=None)
     single.add_argument("--name", type=str, default=None)
+    single.add_argument("--theta-x-offset", type=float, default=0.0,
+                        help="Extra tilt beyond natural horizon angle (degrees)")
+    single.add_argument("--theta-y", type=float, default=0.0,
+                        help="Roll around optical axis (degrees)")
+    single.add_argument("--theta-z", type=float, default=180.0,
+                        help="Azimuth rotation (degrees, default 180)")
 
     # --- canonical dataset ---
     canon = sub.add_parser(
@@ -438,8 +463,11 @@ def main():
             print(f"  {res['image_path']}  ({len(res['points'])} points)")
 
     elif args.command == "single":
+        tx_offset = np.radians(args.theta_x_offset)
+        ty = np.radians(args.theta_y)
+        tz = np.radians(args.theta_z)
         name = args.name or _build_name(
-            args.camera, args.h, args.noise_sigma
+            args.camera, args.h, args.noise_sigma, tx_offset, ty, tz
         )
         result = generate_synthetic_case(
             r=args.r,
@@ -450,6 +478,9 @@ def main():
             seed=args.seed,
             output_dir=args.output_dir,
             name=name,
+            theta_x_offset=tx_offset,
+            theta_y=ty,
+            theta_z=tz,
         )
         print(f"Generated {len(result['points'])} limb points.")
         print(f"Ground truth: {result['params']}")

@@ -88,6 +88,9 @@ class BenchmarkResult:
     init_parameter_values: Dict[str, float]  # Initial values from fit_config
     parameter_limits: Dict[str, List[float]]  # Bounds from fit_config
     minimizer_config: Dict[str, Any]
+    minimizer_preset: Optional[str]
+    constrain_radius_n_sigma: Optional[float]
+    perturbation_factors: Optional[str]
 
     # Image metadata
     image_width: int
@@ -289,6 +292,9 @@ class BenchmarkRunner:
                 init_parameter_values TEXT NOT NULL,
                 parameter_limits TEXT NOT NULL,
                 minimizer_config TEXT NOT NULL,
+                minimizer_preset TEXT,
+                constrain_radius_n_sigma REAL,
+                perturbation_factors TEXT,
 
                 image_width INTEGER,
                 image_height INTEGER,
@@ -386,17 +392,39 @@ class BenchmarkRunner:
 
     def _make_grid_scenario_name(self, params: dict) -> str:
         """Compact, human-readable name encoding all grid axes."""
+        if params.get("constrain_radius_only"):
+            fp = self._fp_code(params.get("free_parameters", ["r"]))
+            pf_val = params.get("perturbation_factor", 1.0)
+            h_pf = (
+                float(pf_val.get("h", 1.0))
+                if isinstance(pf_val, dict)
+                else float(pf_val)
+            )
+            phf = f"ph{int(h_pf * 100):03d}"
+            return f"g_cr_only_{fp}_{phf}"
+
         m = self._MINIMIZER_ABBR.get(params.get("minimizer", ""), "xx")
         p = self._PRESET_ABBR.get(params.get("minimizer_preset", ""), "xx")
         fp = self._fp_code(params.get("free_parameters", ["r"]))
-        rl = self._rl_code(params.get("r_limits_km", [1000, 100000]))
+        cr_n = params.get("constrain_radius_n_sigma")
+        if cr_n is not None:
+            rl = f"cr{int(float(cr_n) * 10):02d}"  # cr10=1σ, cr30=3σ, cr50=5σ
+        else:
+            rl = self._rl_code(params.get("r_limits_km", [1000, 100000]))
         h_pct = params.get("h_limits_pct")
         hl = f"h{int(h_pct * 100):02d}" if h_pct else "hw"
         pf_val = params.get("perturbation_factor", 1.0)
-        pf = f"p{int(pf_val * 100):03d}"
+        if isinstance(pf_val, dict):
+            r_pf = float(pf_val.get("r", pf_val.get("default", 1.0)))
+            h_pf = float(pf_val.get("h", 1.0))
+        else:
+            r_pf = float(pf_val)
+            h_pf = float(pf_val)
+        pf = f"p{int(r_pf * 100):03d}"
+        phf = f"ph{int(h_pf * 100):03d}"
         it = params.get("fit_params", {}).get("max_iter", 1000)
         it_s = f"i{it}" if it < 1000 else f"i{it // 1000}k"
-        return f"g_{m}_{p}_{fp}_{rl}_{hl}_{pf}_{it_s}"
+        return f"g_{m}_{p}_{fp}_{rl}_{hl}_{pf}_{phf}_{it_s}"
 
     def _expand_top_level_grid(self) -> List[Dict[str, Any]]:
         """
@@ -697,6 +725,14 @@ class BenchmarkRunner:
             init_parameter_values={},  # Will be filled from actual fit
             parameter_limits={},  # Will be filled from actual fit
             minimizer_config=scenario.get("minimizer", {}),
+            minimizer_preset=scenario.get("minimizer_preset"),
+            constrain_radius_n_sigma=scenario.get("constrain_radius_n_sigma"),
+            perturbation_factors=json.dumps(
+                scenario.get("perturbation_factor", 1.0)
+                if isinstance(scenario.get("perturbation_factor"), dict)
+                else {"r": float(scenario.get("perturbation_factor", 1.0)),
+                      "h": float(scenario.get("perturbation_factor", 1.0))}
+            ),
             image_width=0,
             image_height=0,
             altitude=None,
@@ -779,10 +815,8 @@ class BenchmarkRunner:
                     if not annot_path.exists():
                         raise FileNotFoundError(
                             f"Annotation file not found: {annot_path}\n"
-                            f"For manual detection, create annotation with:\n"
-                            f"  python -m planet_ruler.annotate {image_path}\n"
-                            f"Then convert with:\n"
-                            f"  python -m planet_ruler.benchmarks.copy_test_annotations"
+                            f"Create annotation with:\n"
+                            f"  python -m planet_ruler.annotate {image_path} --output-dir {annot_path.parent}"
                         )
 
                     with open(annot_path) as f:
@@ -835,60 +869,75 @@ class BenchmarkRunner:
             # For other detection methods, detect_limb is called automatically during fit
             # (gradient-field, gradient-break, segmentation)
 
+            # Apply data-driven r bounds from the registered limb arc before fitting.
+            cr_n = scenario.get("constrain_radius_n_sigma")
+            if cr_n is not None and limb_detection == "manual":
+                obs.constrain_radius(sigma_px="auto", n_sigma=float(cr_n))
+
             result.detection_time = time.time() - detect_start
 
             # Optimization phase
             opt_start = time.time()
 
-            # Extract fit parameters from scenario
-            fit_params = scenario.get("fit_params", {})
-            loss_function = (
-                "gradient_field"
-                if limb_detection == "gradient-field"
-                else "l2"
-            )
+            if scenario.get("constrain_radius_only"):
+                # Skip the optimizer — use the sagitta estimate as the final answer.
+                result.best_parameters = dict(obs.init_parameter_values)
+                result.fitted_radius = obs.init_parameter_values.get("r")
+                result.free_parameters = list(scenario.get("free_parameters", []))
+                result.init_parameter_values = dict(obs.init_parameter_values)
+                result.parameter_limits = dict(obs.parameter_limits)
+                result.iterations = 0
+                result.convergence_status = "success"
+            else:
+                # Extract fit parameters from scenario
+                fit_params = scenario.get("fit_params", {})
+                loss_function = (
+                    "gradient_field"
+                    if limb_detection == "gradient-field"
+                    else "l2"
+                )
 
-            # Call fit_limb with actual parameters
-            fit_limb_kwargs = dict(
-                loss_function=loss_function,
-                max_iter=fit_params.get("max_iter", 15000),
-                resolution_stages=fit_params.get("resolution_stages"),
-                seed=0,
-                verbose=False,
-                minimizer=minimizer_method,
-                minimizer_kwargs=minimizer_kwargs,
-            )
-            if minimizer_preset is not None:
-                fit_limb_kwargs["minimizer_preset"] = minimizer_preset
-            obs.fit_limb(**fit_limb_kwargs)
+                # Call fit_limb with actual parameters
+                fit_limb_kwargs = dict(
+                    loss_function=loss_function,
+                    max_iter=fit_params.get("max_iter", 15000),
+                    resolution_stages=fit_params.get("resolution_stages"),
+                    seed=0,
+                    verbose=False,
+                    minimizer=minimizer_method,
+                    minimizer_kwargs=minimizer_kwargs,
+                )
+                if minimizer_preset is not None:
+                    fit_limb_kwargs["minimizer_preset"] = minimizer_preset
+                obs.fit_limb(**fit_limb_kwargs)
 
-            result.optimization_time = time.time() - opt_start
+                result.optimization_time = time.time() - opt_start
 
-            # Extract fit configuration that was actually used
-            result.free_parameters = (
-                obs.free_parameters if hasattr(obs, "free_parameters") else []
-            )
-            result.init_parameter_values = (
-                obs.init_parameter_values
-                if hasattr(obs, "init_parameter_values")
-                else {}
-            )
-            result.parameter_limits = fit_config.get("parameter_limits", {})
+                # Extract fit configuration that was actually used
+                result.free_parameters = (
+                    obs.free_parameters if hasattr(obs, "free_parameters") else []
+                )
+                result.init_parameter_values = (
+                    obs.init_parameter_values
+                    if hasattr(obs, "init_parameter_values")
+                    else {}
+                )
+                result.parameter_limits = dict(obs.parameter_limits)
 
-            # Extract results
-            if obs.best_parameters is not None:
-                result.best_parameters = obs.best_parameters
-                result.fitted_radius = obs.best_parameters.get(
-                    "r"
-                )  # Extract radius
+                # Extract results
+                if obs.best_parameters is not None:
+                    result.best_parameters = obs.best_parameters
+                    result.fitted_radius = obs.best_parameters.get("r")
 
-                # Get iteration count from fit results
-                if obs.fit_results is not None:
-                    result.iterations = getattr(obs.fit_results, "nit", None)
-                    if result.iterations is None and hasattr(
-                        obs.fit_results, "nfev"
-                    ):
-                        result.iterations = obs.fit_results.nfev
+                    # Get iteration count from fit results
+                    if obs.fit_results is not None:
+                        result.iterations = getattr(obs.fit_results, "nit", None)
+                        if result.iterations is None and hasattr(
+                            obs.fit_results, "nfev"
+                        ):
+                            result.iterations = obs.fit_results.nfev
+
+                result.convergence_status = "success"
 
             # Calculate accuracy metrics
             if result.fitted_radius is not None:
@@ -901,8 +950,6 @@ class BenchmarkRunner:
                 result.within_uncertainty = (
                     result.absolute_error <= result.uncertainty_radius
                 )
-
-            result.convergence_status = "success"
 
         except Exception as e:
             result.error_message = str(e)
@@ -993,19 +1040,35 @@ class BenchmarkRunner:
         # Resample init values from their finalised bounds for any params listed
         # in perturb_params.  This runs after all limit overrides so sampling
         # always uses the correct scenario-specific bounds with no clipping risk.
+        # perturbation_factor may be a scalar (applied to all params) or a dict
+        # mapping param name → factor, with an optional "default" fallback key.
         perturb_params_list = scenario.get("perturb_params", [])
         if perturb_params_list:
+            from collections import defaultdict
             from planet_ruler.camera import init_params_from_bounds
 
-            sampled = init_params_from_bounds(
-                param_limits=config["parameter_limits"],
-                perturbation_factor=float(
-                    scenario.get("perturbation_factor", 1.0)
-                ),
-                seed=0,
-                params=list(perturb_params_list),
-            )
-            config["init_parameter_values"].update(sampled)
+            pf = scenario.get("perturbation_factor", 1.0)
+            if isinstance(pf, dict):
+                default_factor = float(pf.get("default", 1.0))
+                factor_groups: Dict[float, List[str]] = defaultdict(list)
+                for p in perturb_params_list:
+                    factor_groups[float(pf.get(p, default_factor))].append(p)
+                for factor, group_params in factor_groups.items():
+                    sampled = init_params_from_bounds(
+                        param_limits=config["parameter_limits"],
+                        perturbation_factor=factor,
+                        seed=0,
+                        params=group_params,
+                    )
+                    config["init_parameter_values"].update(sampled)
+            else:
+                sampled = init_params_from_bounds(
+                    param_limits=config["parameter_limits"],
+                    perturbation_factor=float(pf),
+                    seed=0,
+                    params=list(perturb_params_list),
+                )
+                config["init_parameter_values"].update(sampled)
 
         return config
 

@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Parameter limits are now set initially via preset combinations of tolerance, rather than as a flat fraction.
 - Minimizer presets now lead to different optimized parameters depending on which detection method is being employed.
+- User can now control where manual annotations are saved.
 
 ### Fixed
 
