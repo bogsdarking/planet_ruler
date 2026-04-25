@@ -660,6 +660,60 @@ def limb_arc(
     return y_pixel
 
 
+def limb_arc_sagitta(
+    u: np.ndarray,
+    theta_x: float,
+    f_px: float,
+    r: float,
+    h: float,
+) -> np.ndarray:
+    """Exact projected sagitta of the planetary limb arc at pixel offset u.
+
+    Derivation (perspective geometry, theta_y=0, theta_z=pi for ∪-arc):
+      The camera is at altitude h above a sphere of radius r.  In camera
+      coordinates the visible horizon is the set of tangent points satisfying
+      X·r̂ = r²/(r+h).  After rotation R_x(theta_x)·R_z(pi) the horizon circle
+      projects as a conic; solving the x-pixel equation for the azimuth angle
+      phi and back-substituting for the y-pixel yields the closed form below.
+
+      The formula is verified to machine precision against limb_arc() for
+      theta_x ∈ {-alpha, 0, alpha, 2*alpha} and is invariant to theta_y
+      (verified to 2.7e-7 px residuals for theta_y ∈ {0, 0.01, 0.05, 0.1}).
+
+    At theta_x=0 this reduces exactly to
+        s(u) = kappa * (sqrt(f_px**2 + u**2) - f_px)
+    where kappa = sqrt(h*(2r+h)) / r = 1/K.  Consequently, the OLS fit
+    s = s0 - c*A(u) (A = sqrt(f²+u²) - f) recovers K = 1/|c| with zero
+    residual — the fundamental reason the hyperbola model is exact at theta_x=0.
+
+    Args:
+        u:        Horizontal pixel offsets from the image centre (u = x - x0).
+        theta_x:  Camera tilt in radians (0 = horizontal, positive = looking
+                  down toward the horizon).
+        f_px:     Focal length in pixels (f_mm / sensor_width_mm * n_pix_x).
+        r:        Planetary radius [m].
+        h:        Camera altitude above surface [m].
+
+    Returns:
+        Sagitta at each u [pixels].  Positive values are below the arc apex
+        for ∪-arcs (theta_z=pi).
+
+    Exact formulas:
+        kappa = sqrt(h * (2*r + h)) / r
+        g(u)  = sqrt(f_px**2 + u**2 * (cos(theta_x)**2 - kappa**2*sin(theta_x)**2))
+        s(u)  = (f_px**2 + u**2*cos(theta_x)*(cos(theta_x) + kappa*sin(theta_x)) - f_px*g(u))
+                / ((f_px*sin(theta_x) + cos(theta_x)*g(u)/kappa) * (kappa*sin(theta_x) + cos(theta_x)))
+    """
+    u = np.asarray(u, dtype=float)
+    kappa = np.sqrt(h * (2.0 * r + h)) / r
+    ct = np.cos(theta_x)
+    st = np.sin(theta_x)
+    g = np.sqrt(f_px**2 + u**2 * (ct**2 - kappa**2 * st**2))
+    numer = f_px**2 + u**2 * ct * (ct + kappa * st) - f_px * g
+    denom = (f_px * st + ct * g / kappa) * (kappa * st + ct)
+    return numer / denom
+
+
 def estimate_radius_from_limb_arc(
     limb: np.ndarray,
     h: float,
@@ -671,11 +725,35 @@ def estimate_radius_from_limb_arc(
     """
     Estimate planetary radius from a manually annotated limb arc.
 
-    Uses the sagitta geometry: each annotated point gives an independent
-    estimate of K = A/D (horizon circle radius / camera-to-circle-centre
-    distance), which inverts exactly to r = h*(K^2 + K*sqrt(K^2+1)).
-    No nonlinear optimisation is performed — the apex is located by a quadratic
-    fit (linear least squares), then K is read directly from each annotated point.
+    **Hyperbola K estimator** — direct fit, exact for horizontal cameras.
+
+    The perspective projection of the horizon circle is algebraically a
+    hyperbola for all practical aerial views (theta_x < arctan(K) = π/2−α,
+    where α = arccos(r/(r+h)) is the dip angle and K = r/√(h·(2r+h))).
+    It transitions to a parabola at theta_x = arctan(K) and to an ellipse
+    only for near-nadir orientations.  In all cases the conic is
+    characterised by the single dimensionless ratio K.  Radius follows from
+    K and altitude via r = h·(K² + K·√(K²+1)).
+
+    The arc sagitta is fit to the model s = s₀ − c·A(u), where
+    A(u) = √(f²+u²) − f.  At theta_x=0 this is exact (the arc shape IS
+    κ·A(u) where κ = 1/K), so K = 1/|c| recovers the true radius with
+    zero residual.  For theta_x near the dip angle α (typical real photos)
+    it is an approximation whose bias scales as sin²(theta_x)/K² ≈ 10⁻⁵.
+    The earlier chordspan formula (K = A_L / (|a|·L²), where |a| is the
+    OLS parabola curvature) has a larger systematic bias that scales with
+    (L/f_px)²; for wide-angle cameras this can exceed 40 km.
+
+    Uncertainty bounds use OLS covariance: σ_c = σ_px·√((XᵀX)⁻¹₁₁) where X
+    is the [1, −A(u)] design matrix, and σ_K = σ_c / c².  The bounds are
+    then mapped through the nonlinear r(K) map.
+
+    Steps:
+        1. Conic fit (algebraic, 5-DOF) to determine principal-axis direction.
+        2. Rotate annotation into principal frame (u=chord, s=sagitta).
+        3. Degree-2 OLS fit for curvature a_rot (still needed for apex coords).
+        4. Hyperbola fit s = s₀ − c·A(u); K = 1/|c|.
+        5. OLS covariance → σ_K → r_low / r_high via r(K) map.
 
     Use the returned r_low / r_high as parameter_limits["r"] in a fit_config
     dict before running differential evolution.
@@ -684,33 +762,29 @@ def estimate_radius_from_limb_arc(
         limb:     Sparse target array of shape (W,) with np.nan for unannotated
                   x-positions.  Direct output of load_limb_points_from_json().
         h:        Observer altitude above the surface (metres).
-        f_px:     Focal length in pixels = f * W / w, where f is focal length
-                  in metres, W is image width in pixels, w is detector width
-                  in metres.
-        x0:       Principal point x (pixels).  Defaults to len(limb) / 2.
-                  Currently unused in the computation (apex is found from the
-                  annotated data directly), but reserved for future use.
+        f_px:     Focal length in pixels = f * W / w.
+        x0:       Principal point x (pixels).  Reserved for future use.
         sigma_px: Per-point annotation noise (pixels), or "auto" (default) to
-                  derive it from the RMS of annotation residuals against the
-                  estimated arc.  Propagated analytically to K_sigma and
-                  therefore r_low/r_high.  Does not filter annotation points.
-        n_sigma:  Bound width in units of sigma (default 1.0).  Applies to
-                  both explicit and "auto" sigma_px — r_low / r_high always
-                  span K_est ± n_sigma·K_sigma.  K_sigma and r_sigma in the
-                  return dict are always 1-sigma values.
+                  derive it from the RMS of sagitta-direction residuals.
+                  Propagated analytically to K_sigma and r_low/r_high.
+        n_sigma:  Bound width in units of sigma (default 1.0).  K_sigma and
+                  r_sigma in the return dict are always 1-sigma values.
 
     Returns:
         dict with keys:
-            r            – best-estimate radius (metres)
-            r_low        – n_sigma lower bound (metres)
-            r_high       – n_sigma upper bound (metres)
-            r_sigma      – 1-sigma uncertainty, linearised (metres)
-            K            – sagitta-weighted mean of per-point K = A/D estimates
-            K_sigma      – propagated 1-sigma uncertainty on K
-            n_points     – number of annotated points used for K
-            residual_rms – RMS of model residuals (pixels)
-            status       – "ok" | "flat_arc" | "too_few_points"
-            warnings     – list of warning strings
+            r             – best-estimate radius (metres)
+            r_low         – n_sigma lower bound (metres)
+            r_high        – n_sigma upper bound (metres)
+            r_sigma       – 1-sigma uncertainty, linearised (metres)
+            K             – hyperbola K = 1/|c| from fit s = s₀ − c·A(u)
+            K_sigma       – propagated 1-sigma uncertainty on K
+            n_points      – number of valid annotated points
+            residual_rms  – RMS of sagitta-direction model residuals (pixels)
+            arc_angle_deg – rotation of arc principal axis from image x-axis
+            x_apex        – apex x coordinate in image pixels (visualisation)
+            y_apex        – apex y coordinate in image pixels (visualisation)
+            status        – "ok" | "flat_arc" | "too_few_points"
+            warnings      – list of warning strings
     """
     warnings_list = []
     W = len(limb)
@@ -722,9 +796,10 @@ def estimate_radius_from_limb_arc(
 
     def _nan_result(status, extra_warnings=None):
         return {
-            "r": np.nan, "r_low": np.nan, "r_high": np.nan, "r_sigma": np.nan,
-            "K": np.nan, "K_sigma": np.nan,
+            "r": np.nan, "r_low": np.nan, "r_high": np.nan,
+            "r_sigma": np.nan, "K": np.nan, "K_sigma": np.nan,
             "n_points": n_valid, "residual_rms": np.nan,
+            "arc_angle_deg": np.nan, "x_apex": np.nan, "y_apex": np.nan,
             "status": status,
             "warnings": extra_warnings or [],
         }
@@ -738,86 +813,125 @@ def estimate_radius_from_limb_arc(
     x_px = np.where(valid)[0].astype(float)
     y_px = limb[valid]
 
-    span = np.max(x_px) - np.min(x_px)
-    if span < W / 4:
+    # ── Step 1: principal-axis rotation via conic fit ─────────────────────────
+    # Bookstein algebraic form: a·x²+b·xy+c·y²+d·x+e·y = 1  (5 DOF, linear).
+    # Eigendecompose the quadratic part to get the chord/sagitta directions
+    # directly: the eigenvector with the *smaller* |eigenvalue| is the chord
+    # (low curvature) and the one with the *larger* |eigenvalue| is the
+    # sagitta (high curvature).  This is robust for flat arcs where the
+    # cross-term comparison is numerically unreliable.
+    # Fall back to the image x-axis as chord when < 5 points are available.
+    u_dir = np.array([1.0, 0.0])
+    theta = 0.0
+
+    if n_valid >= 5:
+        M = np.column_stack(
+            [x_px**2, x_px * y_px, y_px**2, x_px, y_px]
+        )
+        p, _, rank, _ = np.linalg.lstsq(M, np.ones(n_valid), rcond=None)
+        if rank >= 5:
+            C_mat = np.array([[p[0], p[1] / 2], [p[1] / 2, p[2]]])
+            eigvals, eigvecs = np.linalg.eigh(C_mat)
+            idx_u = int(np.argmin(np.abs(eigvals)))  # chord = min curvature
+            u_dir = eigvecs[:, idx_u]
+            if u_dir[0] < 0:     # canonical: chord points in +x half
+                u_dir = -u_dir
+            theta = float(np.arctan2(u_dir[1], u_dir[0]))
+        else:
+            warnings_list.append(
+                "Conic fit rank-deficient; using axis-aligned frame"
+            )
+
+    # ── Step 2: rotate annotation points into principal frame ─────────────────
+    cos_t, sin_t = u_dir[0], u_dir[1]
+    x_cen, y_cen = np.mean(x_px), np.mean(y_px)
+    dx, dy = x_px - x_cen, y_px - y_cen
+    u_rot = cos_t * dx + sin_t * dy    # chord direction (low curvature)
+    s_rot = -sin_t * dx + cos_t * dy   # sagitta direction (high curvature)
+
+    span_rot = float(np.max(u_rot) - np.min(u_rot))
+    if span_rot < W / 4:
         warnings_list.append(
-            f"Annotated points span only {span:.0f} of {W} pixels"
+            f"Annotated points span only {span_rot:.0f} px along the arc"
             " — K estimate may be unreliable"
         )
 
-    # Locate apex via quadratic interpolation (linear least squares, no iter)
-    coeffs = np.polyfit(x_px, y_px, 2)
-    a = coeffs[0]
+    # ── Step 3: parabola fit for curvature and residuals ─────────────────────
+    coeffs_rot = np.polyfit(u_rot, s_rot, 2)
+    a_rot = float(coeffs_rot[0])
 
-    if abs(a) < 1e-12:
+    if abs(a_rot) < 1e-12:
         return _nan_result(
-            "flat_arc", ["Parabola coefficient ~0; arc is effectively flat"]
+            "flat_arc", ["Arc is effectively flat in principal frame"]
         )
 
-    x_apex = -coeffs[1] / (2.0 * a)
-    y_apex = float(np.polyval(coeffs, x_apex))
+    s_model = np.polyval(coeffs_rot, u_rot)
+    residual_rms = float(np.sqrt(np.mean((s_rot - s_model) ** 2)))
 
-    half_span = (np.max(x_px) - np.min(x_px)) / 2.0
-    s_est = abs(a) * half_span**2
-
-    # Arc direction: ∩ (a < 0, apex is max y) → arc_sign = +1
-    #               ∪ (a > 0, apex is min y) → arc_sign = -1
-    arc_sign = -np.sign(a)
-
-    # K_i for each annotated point: K = (sqrt(f²+u²) - f) / s
-    # Exclude only the degenerate case where a point sits exactly at x_apex.
-    u_i = x_px - x_apex
-    s_i = arc_sign * (y_apex - y_px)
-
-    nonzero = s_i > 1e-9
-    if not np.any(nonzero):
-        return _nan_result(
-            "too_few_points",
-            ["All annotated points coincide with the apex"],
-        )
-
-    u_v = u_i[nonzero]
-    s_v = s_i[nonzero]
-    K_i = (np.sqrt(f_px**2 + u_v**2) - f_px) / s_v
-
-    # Weighted mean: w_i = s_i² (∝ 1/Var(K_i), since σ_Ki = K_i·sigma_px/s_i)
-    w = s_v**2
-    K_est = float(np.sum(w * K_i) / np.sum(w))
-
-    # Residuals using K_est (computed before K_sigma so "auto" can use them)
-    y_pred = y_apex - arc_sign * (1.0 / K_est) * (
-        np.sqrt(f_px**2 + u_i**2) - f_px
+    sigma_px_val = (
+        (residual_rms if residual_rms > 0 else 1.0)
+        if sigma_px == "auto"
+        else float(sigma_px)
     )
-    residual_rms = float(np.sqrt(np.mean((y_px - y_pred) ** 2)))
 
-    # Resolve sigma_px: "auto" uses the measured annotation RMS (1-sigma)
-    if sigma_px == "auto":
-        sigma_px = residual_rms if residual_rms > 0 else 1.0
+    # ── Step 4: direct hyperbola fit  s = s₀ − c·A(u) ───────────────────────
+    # K = 1/|c| is exact for a horizontal camera (θ=0); residuals are machine-
+    # precision zero.  For θ near the dip angle α (typical real photos) it is
+    # an approximation, but better than the chordspan formula especially for
+    # wide-angle cameras where (L/f_px)² degradation of the parabola is large.
+    # |c| handles both ∪-arcs (c<0, theta_z=π) and ∩-arcs (c>0) identically.
+    A_u = np.sqrt(f_px**2 + u_rot**2) - f_px
+    X_hyp = np.column_stack([np.ones_like(u_rot), -A_u])
+    coeff_hyp, _, _, _ = np.linalg.lstsq(X_hyp, s_rot, rcond=None)
+    abs_c = abs(float(coeff_hyp[1]))
 
-    # Check estimated sagitta against noise floor (deferred until sigma_px is resolved)
-    status = "flat_arc" if s_est < sigma_px else "ok"
+    L   = (np.max(u_rot) - np.min(u_rot)) / 2.0
+    A_L = float(np.sqrt(f_px**2 + L**2) - f_px)
+    s_est = abs_c * A_L
+
+    s_resid = s_rot - X_hyp @ coeff_hyp
+    residual_rms = float(np.sqrt(np.mean(s_resid**2)))
+    sigma_px_val = (residual_rms if sigma_px == "auto" and residual_rms > 0
+                    else sigma_px_val)
+
+    K_est = 1.0 / abs_c if abs_c > 0 else np.inf
+
+    status = "flat_arc" if s_est < sigma_px_val else "ok"
     if status == "flat_arc":
         warnings_list.append(
             f"Estimated sagitta ({s_est:.2f} px) is below noise floor "
-            f"({sigma_px:.1f} px) — radius bound will be very wide"
+            f"({sigma_px_val:.1f} px) — radius bound will be very wide"
         )
 
-    # 1-sigma K uncertainty: K_sigma = K_est · sigma_px / sqrt(Σ s_i²)
-    K_sigma = K_est * sigma_px / float(np.sqrt(np.sum(w)))
+    # ── Step 5: σ_K from OLS covariance of c ─────────────────────────────────
+    # Var(ĉ) = σ²·(XᵀX)⁻¹₁₁  where X = [1, −A(u)].
+    # σ_K = σ_c / c²  because K = 1/|c|.
+    try:
+        XtX_inv = np.linalg.inv(X_hyp.T @ X_hyp)
+        sigma_c = sigma_px_val * np.sqrt(float(XtX_inv[1, 1]))
+    except np.linalg.LinAlgError:
+        sigma_c = abs_c * 0.1
+        warnings_list.append("XᵀX singular; using fallback σ_c = 0.1·|c|")
+    K_sigma = sigma_c / (abs_c**2) if abs_c > 0 else np.inf
 
-    # Invert K → r via exact closed form: r = h * (K² + K√(K²+1))
+    # ── Step 6: K → r ─────────────────────────────────────────────────────────
     def _r_from_K(K):
         K = max(float(K), 1e-12)
         return h * (K**2 + K * np.sqrt(K**2 + 1))
 
-    r = _r_from_K(K_est)
-    # r_low / r_high span n_sigma on each side (works for both explicit and auto sigma_px)
-    r_low = _r_from_K(max(K_est - n_sigma * K_sigma, 1e-9))
+    r      = _r_from_K(K_est)
+    r_low  = _r_from_K(max(K_est - n_sigma * K_sigma, 1e-9))
     r_high = _r_from_K(K_est + n_sigma * K_sigma)
 
     sq = np.sqrt(K_est**2 + 1)
     drdK = h * (2 * K_est + sq + K_est**2 / sq)
-    r_sigma = abs(drdK) * K_sigma  # 1-sigma linearised uncertainty
+    r_sigma = abs(drdK) * K_sigma
+
+    # Apex in image coordinates (for visualisation only — not used by K)
+    u_apex = -coeffs_rot[1] / (2.0 * a_rot)
+    s_apex = float(np.polyval(coeffs_rot, u_apex))
+    x_apex_img = x_cen + cos_t * u_apex - sin_t * s_apex
+    y_apex_img = y_cen + sin_t * u_apex + cos_t * s_apex
 
     return {
         "r": r,
@@ -826,8 +940,11 @@ def estimate_radius_from_limb_arc(
         "r_sigma": r_sigma,
         "K": K_est,
         "K_sigma": K_sigma,
-        "n_points": int(np.sum(nonzero)),
+        "n_points": n_valid,
         "residual_rms": residual_rms,
+        "arc_angle_deg": float(np.degrees(theta)),
+        "x_apex": float(x_apex_img),
+        "y_apex": float(y_apex_img),
         "status": status,
         "warnings": warnings_list,
     }

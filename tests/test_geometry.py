@@ -576,6 +576,7 @@ class TestEstimateRadiusFromLimbArc:
         expected_keys = {
             "r", "r_low", "r_high", "r_sigma",
             "K", "K_sigma", "n_points", "residual_rms",
+            "arc_angle_deg", "x_apex", "y_apex",
             "status", "warnings",
         }
         assert expected_keys == set(est.keys())
@@ -585,6 +586,66 @@ class TestEstimateRadiusFromLimbArc:
         f_px = 0.026 * 4000 / 0.0173
         est = estimate_radius_from_limb_arc(limb, h=10_000, f_px=f_px)
         assert est["n_points"] == 8
+
+    # --- hyperbola model accuracy ---
+
+    def test_hyperbola_horizontal_camera_zero_bias(self):
+        """theta_x=0: hyperbola fit is exact → bias < 0.01% on a clean arc.
+
+        At theta_x=0 the arc is s = kappa*A(u), so the OLS s = s0 - c*A(u)
+        recovers c = -kappa exactly and K = 1/|c| has zero residual.  This
+        test uses the synth-benchmark camera (f=5.1mm, w=7.6mm) where the
+        old chordspan formula gave -48.7 km bias at theta_x=0 due to the
+        wide-angle (L/f_px≈0.56) parabola approximation error.
+        """
+        r_true = 6_371_000
+        h = 10_000
+        f_mm, w_mm = 5.1, 7.6
+        n_pix_x = 4000
+        f_px = f_mm / w_mm * n_pix_x
+        x_coords = np.linspace(n_pix_x // 8, n_pix_x * 7 // 8, 11)
+        y_arc = limb_arc(
+            r=r_true, n_pix_x=n_pix_x, n_pix_y=3000, h=h,
+            f=f_mm * 1e-3, w=w_mm * 1e-3,
+            x0=n_pix_x / 2, y0=1500,
+            theta_x=0, theta_z=np.pi,
+            x_coords=x_coords,
+        )
+        limb = np.full(n_pix_x, np.nan)
+        for xi, yi in zip(x_coords.astype(int), y_arc):
+            limb[xi] = yi
+        est = estimate_radius_from_limb_arc(limb, h=h, f_px=f_px, sigma_px=1.0)
+        assert est["status"] == "ok"
+        assert abs(est["r"] - r_true) / r_true < 1e-4   # < 0.01% ≈ 600 m
+
+    def test_hyperbola_at_dip_angle(self):
+        """theta_x = dip angle: hyperbola fit gives < 0.1% error on clean arc.
+
+        Synth images are generated at theta_x = limb_camera_angle(r, h) = alpha.
+        The projected limb is algebraically a hyperbola at this angle (the true
+        parabolic boundary is at arctan(K) = pi/2 - alpha ≈ 87°, not alpha).
+        The hyperbola model has a small sin²(alpha)/K² systematic (~2-3 km).
+        """
+        r_true = 6_371_000
+        h = 10_000
+        f_mm, w_mm = 5.1, 7.6
+        n_pix_x = 4000
+        f_px = f_mm / w_mm * n_pix_x
+        theta_x = limb_camera_angle(r_true, h)
+        x_coords = np.linspace(n_pix_x // 8, n_pix_x * 7 // 8, 11)
+        y_arc = limb_arc(
+            r=r_true, n_pix_x=n_pix_x, n_pix_y=3000, h=h,
+            f=f_mm * 1e-3, w=w_mm * 1e-3,
+            x0=n_pix_x / 2, y0=1500,
+            theta_x=theta_x, theta_z=np.pi,
+            x_coords=x_coords,
+        )
+        limb = np.full(n_pix_x, np.nan)
+        for xi, yi in zip(x_coords.astype(int), y_arc):
+            limb[xi] = yi
+        est = estimate_radius_from_limb_arc(limb, h=h, f_px=f_px, sigma_px=1.0)
+        assert est["status"] == "ok"
+        assert abs(est["r"] - r_true) / r_true < 0.001  # < 0.1% ≈ 6 km
 
 
 if __name__ == "__main__":

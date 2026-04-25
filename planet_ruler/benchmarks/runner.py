@@ -91,6 +91,8 @@ class BenchmarkResult:
     minimizer_preset: Optional[str]
     constrain_radius_n_sigma: Optional[float]
     perturbation_factors: Optional[str]
+    # JSON [lo_km, hi_km] from scenario config (pre-constrain_radius)
+    r_limits_configured: Optional[str]
 
     # Image metadata
     image_width: int
@@ -295,6 +297,7 @@ class BenchmarkRunner:
                 minimizer_preset TEXT,
                 constrain_radius_n_sigma REAL,
                 perturbation_factors TEXT,
+                r_limits_configured TEXT,
 
                 image_width INTEGER,
                 image_height INTEGER,
@@ -732,6 +735,10 @@ class BenchmarkRunner:
                 if isinstance(scenario.get("perturbation_factor"), dict)
                 else {"r": float(scenario.get("perturbation_factor", 1.0)),
                       "h": float(scenario.get("perturbation_factor", 1.0))}
+            ),
+            r_limits_configured=(
+                json.dumps(list(scenario["r_limits_km"]))
+                if scenario.get("r_limits_km") is not None else None
             ),
             image_width=0,
             image_height=0,
