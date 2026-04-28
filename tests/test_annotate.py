@@ -341,8 +341,8 @@ class TestManualLimbDetectionIntegration:
             mock_annotator.run = Mock()
             mock_annotator_class.return_value = mock_annotator
 
-            # Mock fit_limb to avoid complex setup
-            with patch.object(obs, "fit_limb", return_value=obs):
+            # Mock fit_arc to avoid complex setup
+            with patch.object(obs, "fit_arc", return_value=obs):
                 # Use analyze method (should call detect_limb internally)
                 result = obs.analyze()
 

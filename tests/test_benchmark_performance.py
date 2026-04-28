@@ -42,7 +42,7 @@ from planet_ruler.geometry import (
     intrinsic_transform,
     extrinsic_transform,
 )
-from planet_ruler.fit import CostFunction, unpack_parameters, pack_parameters
+from planet_ruler.fit import L2CostFunction, unpack_parameters, pack_parameters
 from planet_ruler.image import gradient_break, smooth_limb, MaskSegmenter
 from planet_ruler.observation import LimbObservation, PlanetObservation
 from planet_ruler.camera import (
@@ -197,7 +197,7 @@ class TestFitBenchmarks:
             noise = np.random.normal(0, params.get("noise", 1), n_points)
             return observed + noise
 
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=observed,
             function=dummy_function,
             free_parameters=["radius", "altitude", "noise"],
@@ -220,7 +220,7 @@ class TestFitBenchmarks:
             results = {}
             init_params = {"param1": 1.0}
             for loss_type in ["l1", "l2", "log-l1"]:
-                cost_func = CostFunction(
+                cost_func = L2CostFunction(
                     target=observed,
                     function=lambda **p: predicted,
                     free_parameters=["param1"],
@@ -645,12 +645,11 @@ class TestLimbDetectionBenchmarks:
 
         def run_gradient_field():
             # Use a minimal fitting to benchmark the gradient field approach
-            obs.fit_limb(
-                loss_function="gradient_field",
+            obs.fit_gradient(
                 minimizer="dual-annealing",
-                max_iter=150,  # More iterations for robust analysis
+                max_iter=150,
                 verbose=False,
-                resolution_stages=[2, 1],  # Quick multi-resolution
+                resolution_stages=[2, 1],
                 image_smoothing=2.0,
                 kernel_smoothing=8.0,
             )
@@ -717,7 +716,7 @@ class TestLimbDetectionBenchmarks:
             obs.register_limb(limb_target)
 
             # Fit using L1 loss (standard for manual detection)
-            obs.fit_limb(
+            obs.fit_arc(
                 loss_function="l1",
                 minimizer="differential-evolution",
                 max_iter=300,
@@ -872,15 +871,14 @@ class TestFullPipelineBenchmarks:
             obs = LimbObservation(image_filepath=image_path, fit_config=config)
 
             # Step 5: Quick gradient-field fit (for speed)
-            obs.fit_limb(
-                loss_function="gradient_field",
+            obs.fit_gradient(
                 minimizer="differential-evolution",
                 minimizer_preset="scipy-default",
                 max_iter=300,
                 verbose=False,
                 resolution_stages=[8, 4],
-                image_smoothing=2.0,  # Remove high-frequency image artifacts
-                kernel_smoothing=8.0,  # Smooth gradient field for stability
+                image_smoothing=2.0,
+                kernel_smoothing=8.0,
                 prefer_direction=None,
                 seed=0,
             )

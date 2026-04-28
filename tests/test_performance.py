@@ -131,7 +131,7 @@ def test_performance_smoke_convergence(
     results = runner.run(parallel=False)
 
     total = len(results)
-    successful = sum(1 for r in results if r.convergence_status == "success")
+    successful = sum(1 for r in results if r.convergence_status in ["ok", "success"])
     success_rate = successful / total if total > 0 else 0
 
     assert success_rate >= min_success_rate, (

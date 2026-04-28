@@ -24,8 +24,8 @@ from planet_ruler.geometry import (
     intrinsic_transform,
     extrinsic_transform,
     limb_arc,
-    estimate_radius_from_limb_arc,
 )
+from planet_ruler.fit import estimate_radius_via_sagitta, SagittaFitter
 
 
 class TestBasicGeometry:
@@ -437,7 +437,7 @@ def _make_synthetic_limb(
     y_arc = limb_arc(
         r=r, n_pix_x=W, n_pix_y=H, h=h, f=f, w=w,
         x0=W // 2, y0=H // 2,
-        theta_x=theta_x, theta_y=0, theta_z=0,
+        theta_x=theta_x, theta_y=0, theta_z=np.pi,
     )
     rng = np.random.default_rng(seed)
     margin = W // 10
@@ -449,7 +449,7 @@ def _make_synthetic_limb(
 
 
 class TestEstimateRadiusFromLimbArc:
-    """Tests for estimate_radius_from_limb_arc."""
+    """Tests for estimate_radius_via_sagitta."""
 
     # --- accuracy across altitudes ---
 
@@ -459,7 +459,7 @@ class TestEstimateRadiusFromLimbArc:
         limb = _make_synthetic_limb(r=r_true, h=h, noise_std=0.0)
         f, w, W = 0.026, 0.0173, 4000
         f_px = f * W / w
-        est = estimate_radius_from_limb_arc(limb, h=h, f_px=f_px, sigma_px=1.0)
+        est = estimate_radius_via_sagitta(limb, h=h, f_px=f_px, sigma_px=1.0)
         assert est["status"] == "ok"
         assert abs(est["r"] - r_true) / r_true < 0.05
 
@@ -473,7 +473,7 @@ class TestEstimateRadiusFromLimbArc:
         )
         f, w, W = 0.026, 0.0173, 4000
         f_px = f * W / w
-        est = estimate_radius_from_limb_arc(
+        est = estimate_radius_via_sagitta(
             limb, h=h, f_px=f_px, sigma_px=noise_std, n_sigma=3.0
         )
         assert est["status"] == "ok"
@@ -484,7 +484,7 @@ class TestEstimateRadiusFromLimbArc:
     def test_bounds_bracket_estimate(self):
         limb = _make_synthetic_limb()
         f_px = 0.026 * 4000 / 0.0173
-        est = estimate_radius_from_limb_arc(
+        est = estimate_radius_via_sagitta(
             limb, h=10_000, f_px=f_px, sigma_px=1.0
         )
         assert est["r_low"] < est["r"] < est["r_high"]
@@ -492,10 +492,10 @@ class TestEstimateRadiusFromLimbArc:
     def test_wider_sigma_gives_wider_bounds(self):
         limb = _make_synthetic_limb()
         f_px = 0.026 * 4000 / 0.0173
-        narrow = estimate_radius_from_limb_arc(
+        narrow = estimate_radius_via_sagitta(
             limb, h=10_000, f_px=f_px, sigma_px=1.0
         )
-        wide = estimate_radius_from_limb_arc(
+        wide = estimate_radius_via_sagitta(
             limb, h=10_000, f_px=f_px, sigma_px=5.0
         )
         narrow_width = narrow["r_high"] - narrow["r_low"]
@@ -507,10 +507,10 @@ class TestEstimateRadiusFromLimbArc:
     def test_n_sigma_scales_auto_bounds(self):
         limb = _make_synthetic_limb()
         f_px = 0.026 * 4000 / 0.0173
-        one = estimate_radius_from_limb_arc(
+        one = estimate_radius_via_sagitta(
             limb, h=10_000, f_px=f_px, sigma_px="auto", n_sigma=1.0
         )
-        two = estimate_radius_from_limb_arc(
+        two = estimate_radius_via_sagitta(
             limb, h=10_000, f_px=f_px, sigma_px="auto", n_sigma=2.0
         )
         assert (two["r_high"] - two["r_low"]) > (one["r_high"] - one["r_low"])
@@ -519,10 +519,10 @@ class TestEstimateRadiusFromLimbArc:
         """n_sigma widens bounds even when sigma_px is an explicit float."""
         limb = _make_synthetic_limb()
         f_px = 0.026 * 4000 / 0.0173
-        a = estimate_radius_from_limb_arc(
+        a = estimate_radius_via_sagitta(
             limb, h=10_000, f_px=f_px, sigma_px=2.0, n_sigma=1.0
         )
-        b = estimate_radius_from_limb_arc(
+        b = estimate_radius_via_sagitta(
             limb, h=10_000, f_px=f_px, sigma_px=2.0, n_sigma=3.0
         )
         # Point estimate and 1-sigma K_sigma are unchanged; bounds widen
@@ -535,7 +535,7 @@ class TestEstimateRadiusFromLimbArc:
     def test_auto_sigma_uses_residual_rms(self):
         limb = _make_synthetic_limb(noise_std=2.0)
         f_px = 0.026 * 4000 / 0.0173
-        est = estimate_radius_from_limb_arc(
+        est = estimate_radius_via_sagitta(
             limb, h=10_000, f_px=f_px, sigma_px="auto"
         )
         assert est["status"] == "ok"
@@ -552,7 +552,7 @@ class TestEstimateRadiusFromLimbArc:
         limb[200] = 502.0
         limb[300] = 503.0  # only 3 points
         f_px = 0.026 * 4000 / 0.0173
-        est = estimate_radius_from_limb_arc(limb, h=10_000, f_px=f_px)
+        est = estimate_radius_via_sagitta(limb, h=10_000, f_px=f_px)
         assert est["status"] == "too_few_points"
         assert np.isnan(est["r"])
 
@@ -562,7 +562,7 @@ class TestEstimateRadiusFromLimbArc:
         for x in xs:
             limb[x] = 200.0  # perfectly flat line
         f_px = 0.026 * 400 / 0.0173
-        est = estimate_radius_from_limb_arc(
+        est = estimate_radius_via_sagitta(
             limb, h=10_000, f_px=f_px, sigma_px=1.0
         )
         assert est["status"] == "flat_arc"
@@ -572,19 +572,19 @@ class TestEstimateRadiusFromLimbArc:
     def test_return_dict_keys(self):
         limb = _make_synthetic_limb()
         f_px = 0.026 * 4000 / 0.0173
-        est = estimate_radius_from_limb_arc(limb, h=10_000, f_px=f_px)
+        est = estimate_radius_via_sagitta(limb, h=10_000, f_px=f_px)
         expected_keys = {
             "r", "r_low", "r_high", "r_sigma",
-            "K", "K_sigma", "n_points", "residual_rms",
+            "K", "K_sigma", "K_sigma_jack", "n_points", "residual_rms",
             "arc_angle_deg", "x_apex", "y_apex",
-            "status", "warnings",
+            "theta_x_est", "status", "warnings",
         }
         assert expected_keys == set(est.keys())
 
     def test_n_points_matches_annotated(self):
         limb = _make_synthetic_limb(n_points=8)
         f_px = 0.026 * 4000 / 0.0173
-        est = estimate_radius_from_limb_arc(limb, h=10_000, f_px=f_px)
+        est = estimate_radius_via_sagitta(limb, h=10_000, f_px=f_px)
         assert est["n_points"] == 8
 
     # --- hyperbola model accuracy ---
@@ -614,7 +614,7 @@ class TestEstimateRadiusFromLimbArc:
         limb = np.full(n_pix_x, np.nan)
         for xi, yi in zip(x_coords.astype(int), y_arc):
             limb[xi] = yi
-        est = estimate_radius_from_limb_arc(limb, h=h, f_px=f_px, sigma_px=1.0)
+        est = estimate_radius_via_sagitta(limb, h=h, f_px=f_px, sigma_px=1.0)
         assert est["status"] == "ok"
         assert abs(est["r"] - r_true) / r_true < 1e-4   # < 0.01% ≈ 600 m
 
@@ -643,9 +643,112 @@ class TestEstimateRadiusFromLimbArc:
         limb = np.full(n_pix_x, np.nan)
         for xi, yi in zip(x_coords.astype(int), y_arc):
             limb[xi] = yi
-        est = estimate_radius_from_limb_arc(limb, h=h, f_px=f_px, sigma_px=1.0)
+        est = estimate_radius_via_sagitta(limb, h=h, f_px=f_px, sigma_px=1.0)
         assert est["status"] == "ok"
         assert abs(est["r"] - r_true) / r_true < 0.001  # < 0.1% ≈ 6 km
+
+
+class TestSagittaEstimatorExtensions:
+    """Tests for bias correction, jackknife, and SagittaFitter."""
+
+    def test_bias_correct_reduces_error(self):
+        """Bias correction via y0 reduces error when theta_x exceeds the
+        theta_x=0 OLS approximation."""
+        r_true = 6_371_000
+        h = 10_000
+        f, w, W, H = 0.026, 0.0173, 4000, 3000
+        f_px = f * W / w
+        theta_x = 0.1  # ~5.7° — large enough that OLS has residual bias
+
+        y_full = limb_arc(
+            r=r_true, n_pix_x=W, n_pix_y=H,
+            h=h, f=f, w=w, x0=W // 2, y0=H // 2,
+            theta_x=theta_x, theta_z=np.pi,
+        )
+        margin = W // 10
+        limb = np.full(W, np.nan)
+        for xi in np.linspace(margin, W - margin - 1, 20, dtype=int):
+            limb[xi] = y_full[xi]
+
+        y0 = H / 2.0
+        est_raw = estimate_radius_via_sagitta(
+            limb, h=h, f_px=f_px, sigma_px=1.0
+        )
+        est_bc = estimate_radius_via_sagitta(
+            limb, h=h, f_px=f_px, sigma_px=1.0, y0=y0, bias_correct=True
+        )
+        err_raw = abs(est_raw["r"] - r_true)
+        err_bc = abs(est_bc["r"] - r_true)
+        assert err_bc < err_raw
+
+    def test_bias_correct_skipped_without_y0(self):
+        """bias_correct=True without y0 should not raise, just skip correction."""
+        limb = _make_synthetic_limb()
+        f_px = 0.026 * 4000 / 0.0173
+        est = estimate_radius_via_sagitta(
+            limb, h=10_000, f_px=f_px, bias_correct=True  # no y0
+        )
+        assert est["status"] == "ok"
+
+    def test_jackknife_sigma_for_noisy_arc(self):
+        """Jackknife sigma is finite and positive for a noisy arc."""
+        limb = _make_synthetic_limb(n_points=20, noise_std=3.0)
+        f_px = 0.026 * 4000 / 0.0173
+        est = estimate_radius_via_sagitta(
+            limb, h=10_000, f_px=f_px, uncertainty="jackknife"
+        )
+        assert np.isfinite(est["K_sigma_jack"])
+        assert est["K_sigma_jack"] > 0
+
+    def test_sagitta_fitter_dip_angle(self):
+        """SagittaFitter recovers radius within 1% at a 5° dip angle."""
+        r_true = 6_371_000
+        h = 10_000
+        f = 0.026
+        w = 0.0173
+        n_pix_x = 4000
+        f_px = f / w * n_pix_x
+        theta_x = 0.087  # ~5°
+
+        x_coords = np.linspace(0, n_pix_x - 1, 60).astype(float)
+        y_arc = limb_arc(
+            r=r_true, n_pix_x=n_pix_x, n_pix_y=3000,
+            h=h, f=f, w=w,
+            theta_x=theta_x, theta_z=np.pi,
+            x_coords=x_coords,
+        )
+        limb = np.full(n_pix_x, np.nan)
+        for xi, yi in zip(x_coords.astype(int), y_arc):
+            limb[xi] = yi
+
+        init_vals = {
+            "r": 7_000_000, "h": h, "f": f, "w": w,
+            "theta_x": 0.0, "theta_y": 0.0, "theta_z": np.pi,
+        }
+        limits = {
+            "r": [2_000_000, 14_000_000],
+            "h": [5_000, 20_000],
+            "f": [0.01, 0.1], "w": [0.005, 0.05],
+            "theta_x": [-0.3, 0.3],
+            "theta_y": [-0.3, 0.3],
+            "theta_z": [-np.pi, np.pi],
+        }
+
+        fitter = SagittaFitter(
+            limb=limb,
+            h=h,
+            f_px=f_px,
+            y0=3000 / 2.0,
+            free_parameters=["r", "theta_x"],
+            init_parameter_values=init_vals,
+            parameter_limits=limits,
+            sigma_px="auto",
+            n_sigma=2.0,
+            uncertainty="ols",
+        )
+        result = fitter.fit()
+        r_fitted = result["updated_init"]["r"]
+        assert abs(r_fitted - r_true) / r_true < 0.01
 
 
 if __name__ == "__main__":
