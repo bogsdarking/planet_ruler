@@ -127,6 +127,9 @@ class BenchmarkResult:
     # Error info
     error_message: Optional[str]
 
+    # Fit stages (JSON list of stage dicts, e.g. '[{"method":"arc"}]')
+    fit_stages: Optional[str] = None
+
 
 def _run_batch_worker(task: tuple) -> List["BenchmarkResult"]:
     """
@@ -321,7 +324,8 @@ class BenchmarkRunner:
                 optimization_time REAL,
                 timing_details TEXT,
 
-                error_message TEXT
+                error_message TEXT,
+                fit_stages TEXT
             )
         """
         )
@@ -340,6 +344,20 @@ class BenchmarkRunner:
         """
         )
 
+        conn.commit()
+
+        # Migration: add fit_stages column to existing databases
+        try:
+            cursor.execute(
+                "ALTER TABLE benchmark_results ADD COLUMN fit_stages TEXT"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        cursor.execute(
+            "UPDATE benchmark_results"
+            " SET fit_stages = ? WHERE fit_stages IS NULL",
+            ('[{"method":"arc"}]',),
+        )
         conn.commit()
         conn.close()
 
@@ -395,6 +413,22 @@ class BenchmarkRunner:
 
     def _make_grid_scenario_name(self, params: dict) -> str:
         """Compact, human-readable name encoding all grid axes."""
+        fit_stages = params.get("fit_stages")
+        if fit_stages:
+            sag = [s for s in fit_stages if s.get("method") == "sagitta"]
+            has_opt = any(
+                s.get("method") in ("arc", "gradient") for s in fit_stages
+            )
+            if not has_opt:
+                fp = self._fp_code(params.get("free_parameters", ["r"]))
+                n_s = float(sag[-1].get("n_sigma", 2.0)) if sag else 2.0
+                return f"g_sag_only_{fp}_s{int(n_s * 10):02d}"
+            if sag:
+                params = dict(params)
+                params["constrain_radius_n_sigma"] = float(
+                    sag[-1].get("n_sigma", 2.0)
+                )
+
         if params.get("constrain_radius_only"):
             fp = self._fp_code(params.get("free_parameters", ["r"]))
             pf_val = params.get("perturbation_factor", 1.0)
@@ -460,8 +494,9 @@ class BenchmarkRunner:
         for spec in param_grid:
             sweep: Dict[str, list] = {}
             scalar: Dict[str, Any] = {}
+            NON_SWEEP_KEYS = {"fit_stages"}
             for k, v in spec.items():
-                if isinstance(v, list):
+                if isinstance(v, list) and k not in NON_SWEEP_KEYS:
                     sweep[k] = v
                 else:
                     scalar[k] = v
@@ -694,6 +729,56 @@ class BenchmarkRunner:
 
         return batch
 
+    def _build_fit_stages(
+        self,
+        scenario: Dict[str, Any],
+        limb_detection: str,
+        fit_params: Dict[str, Any],
+        minimizer_method: str,
+        minimizer_preset: Optional[str],
+        minimizer_kwargs: Optional[Dict],
+    ) -> List[Dict[str, Any]]:
+        """Build the ordered fit stages list from scenario config.
+
+        Explicit ``fit_stages`` in the scenario takes precedence.
+        Falls back to a single arc or gradient stage.
+        """
+        if "fit_stages" in scenario:
+            stages = [dict(s) for s in scenario["fit_stages"]]
+            for s in stages:
+                if s.get("method") in ("arc", "gradient"):
+                    s.setdefault("minimizer", minimizer_method)
+                    if minimizer_preset is not None:
+                        s.setdefault("minimizer_preset", minimizer_preset)
+                    if minimizer_kwargs:
+                        s.setdefault("minimizer_kwargs", minimizer_kwargs)
+            return stages
+
+        if limb_detection == "gradient-field":
+            stage: Dict[str, Any] = {
+                "method": "gradient",
+                "max_iter": fit_params.get("max_iter", 15000),
+                "minimizer": minimizer_method,
+                "seed": 0,
+            }
+            if fit_params.get("resolution_stages") is not None:
+                stage["resolution_stages"] = fit_params["resolution_stages"]
+        else:
+            stage = {
+                "method": "arc",
+                "loss_function": "l2",
+                "max_iter": fit_params.get("max_iter", 15000),
+                "minimizer": minimizer_method,
+                "seed": 0,
+            }
+
+        if minimizer_preset is not None:
+            stage["minimizer_preset"] = minimizer_preset
+        if minimizer_kwargs:
+            stage["minimizer_kwargs"] = minimizer_kwargs
+
+        return [stage]
+
     def _run_single(
         self,
         scenario: Dict[str, Any],
@@ -873,77 +958,53 @@ class BenchmarkRunner:
                     # Register limb with observation
                     obs.register_limb(limb_target)
 
-            # For other detection methods, detect_limb is called automatically during fit
-            # (gradient-field, gradient-break, segmentation)
-
-            # Apply data-driven r bounds from the registered limb arc before fitting.
-            cr_n = scenario.get("constrain_radius_n_sigma")
-            if cr_n is not None and limb_detection == "manual":
-                obs.constrain_radius(sigma_px="auto", n_sigma=float(cr_n))
-
             result.detection_time = time.time() - detect_start
 
             # Optimization phase
+            fit_params = scenario.get("fit_params", {})
             opt_start = time.time()
 
-            if scenario.get("constrain_radius_only"):
-                # Skip the optimizer — use the sagitta estimate as the final answer.
-                result.best_parameters = dict(obs.init_parameter_values)
-                result.fitted_radius = obs.init_parameter_values.get("r")
-                result.free_parameters = list(scenario.get("free_parameters", []))
-                result.init_parameter_values = dict(obs.init_parameter_values)
-                result.parameter_limits = dict(obs.parameter_limits)
-                result.iterations = 0
-                result.convergence_status = "success"
+            stages = self._build_fit_stages(
+                scenario,
+                limb_detection,
+                fit_params,
+                minimizer_method,
+                minimizer_preset,
+                minimizer_kwargs,
+            )
+            obs.fit_limb(stages)
+            result.fit_stages = json.dumps(stages)
+
+            result.optimization_time = time.time() - opt_start
+
+            # Extract fit configuration that was actually used
+            result.free_parameters = list(
+                obs.free_parameters if obs.free_parameters else []
+            )
+            result.init_parameter_values = dict(obs.init_parameter_values)
+            result.parameter_limits = dict(obs.parameter_limits)
+
+            # Extract results
+            if obs.best_parameters is not None:
+                result.best_parameters = obs.best_parameters
+                result.fitted_radius = obs.best_parameters.get("r")
+
+                if obs.fit_results is not None:
+                    result.iterations = getattr(
+                        obs.fit_results, "nit", None
+                    )
+                    if result.iterations is None and hasattr(
+                        obs.fit_results, "nfev"
+                    ):
+                        result.iterations = obs.fit_results.nfev
+                else:
+                    result.iterations = 0
+
+            if obs.stage_results:
+                result.convergence_status = obs.stage_results[-1].get(
+                    "status", "success"
+                )
             else:
-                # Extract fit parameters from scenario
-                fit_params = scenario.get("fit_params", {})
-                loss_function = (
-                    "gradient_field"
-                    if limb_detection == "gradient-field"
-                    else "l2"
-                )
-
-                # Call fit_limb with actual parameters
-                fit_limb_kwargs = dict(
-                    loss_function=loss_function,
-                    max_iter=fit_params.get("max_iter", 15000),
-                    resolution_stages=fit_params.get("resolution_stages"),
-                    seed=0,
-                    verbose=False,
-                    minimizer=minimizer_method,
-                    minimizer_kwargs=minimizer_kwargs,
-                )
-                if minimizer_preset is not None:
-                    fit_limb_kwargs["minimizer_preset"] = minimizer_preset
-                obs.fit_limb(**fit_limb_kwargs)
-
-                result.optimization_time = time.time() - opt_start
-
-                # Extract fit configuration that was actually used
-                result.free_parameters = (
-                    obs.free_parameters if hasattr(obs, "free_parameters") else []
-                )
-                result.init_parameter_values = (
-                    obs.init_parameter_values
-                    if hasattr(obs, "init_parameter_values")
-                    else {}
-                )
-                result.parameter_limits = dict(obs.parameter_limits)
-
-                # Extract results
-                if obs.best_parameters is not None:
-                    result.best_parameters = obs.best_parameters
-                    result.fitted_radius = obs.best_parameters.get("r")
-
-                    # Get iteration count from fit results
-                    if obs.fit_results is not None:
-                        result.iterations = getattr(obs.fit_results, "nit", None)
-                        if result.iterations is None and hasattr(
-                            obs.fit_results, "nfev"
-                        ):
-                            result.iterations = obs.fit_results.nfev
-
                 result.convergence_status = "success"
 
             # Calculate accuracy metrics

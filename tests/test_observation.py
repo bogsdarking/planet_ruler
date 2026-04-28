@@ -462,17 +462,15 @@ class TestLimbObservation:
             os.unlink(tmp_file.name)
 
     @patch("planet_ruler.observation.limb_arc")
-    @patch("planet_ruler.observation.differential_evolution")
-    @patch("planet_ruler.observation.CostFunction")
+    @patch("planet_ruler.observation.LimbFitter")
     def test_fit_limb(
         self,
-        mock_cost_function_class,
-        mock_diff_evolution,
+        mock_lf_class,
         mock_limb_arc,
         sample_horizon_image,
         config_file,
     ):
-        """Test limb fitting functionality"""
+        """Test limb arc fitting via fit_arc()"""
         image_data = sample_horizon_image()
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
@@ -485,40 +483,45 @@ class TestLimbObservation:
             limb_data = np.random.random(image_data.shape[1])
             obs.features["limb"] = limb_data
 
-            # Mock cost function
-            mock_cost_function = Mock()
-            mock_cost_function_class.return_value = mock_cost_function
+            # Mock LimbFitter
+            mock_lf = Mock()
+            mock_fit_result = {
+                "best_parameters": {
+                    "r": 6500000.0, "h": 15000.0,
+                    "n_pix_x": image_data.shape[1], "n_pix_y": image_data.shape[0],
+                    "x0": image_data.shape[1] // 2, "y0": image_data.shape[0] // 2,
+                    "f": 0.024, "w": 0.036,
+                },
+                "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
+                "updated_init": {"r": 6500000.0, "h": 15000.0},
+                "updated_limits": {},
+                "status": "ok",
+                "warnings": [],
+            }
+            mock_lf.fit.return_value = mock_fit_result
+            mock_lf_class.return_value = mock_lf
 
-            # Mock differential evolution results
-            mock_result = Mock()
-            mock_result.x = np.array([6500000.0, 15000.0])  # Best fit parameters
-            mock_diff_evolution.return_value = mock_result
-
-            # Mock limb_arc (which is what actually gets called for fitted_limb)
+            # Mock limb_arc (called for fitted_limb overlay)
             fitted_limb = np.random.random(image_data.shape[1])
             mock_limb_arc.return_value = fitted_limb
 
-            obs.fit_limb(loss_function="l2", max_iter=100, n_jobs=1, seed=42)
+            obs.fit_arc(loss_function="l2", max_iter=100, seed=42)
 
-            # Verify cost function creation
-            mock_cost_function_class.assert_called_once()
-            call_args = mock_cost_function_class.call_args
-            assert np.array_equal(call_args[1]["target"], limb_data)
-            assert call_args[1]["free_parameters"] == ["r", "h"]
-            assert call_args[1]["loss_function"] == "l2"
-
-            # Verify differential evolution call
-            mock_diff_evolution.assert_called_once()
-            de_args = mock_diff_evolution.call_args
-            assert de_args[1]["maxiter"] == 100
-            assert de_args[1]["seed"] == 42
+            # Verify LimbFitter was created with correct args
+            mock_lf_class.assert_called_once()
+            call_kwargs = mock_lf_class.call_args[1]
+            assert np.array_equal(call_kwargs["target"], limb_data)
+            assert call_kwargs["free_parameters"] == ["r", "h"]
+            assert call_kwargs["loss_function"] == "l2"
+            assert call_kwargs["max_iter"] == 100
+            assert call_kwargs["seed"] == 42
 
             # Verify results
-            assert obs.fit_results == mock_result
+            assert obs.fit_results == mock_fit_result["fit_results"]
             assert np.array_equal(obs.features["fitted_limb"], fitted_limb)
             assert obs.best_parameters is not None
-            assert obs.best_parameters["r"] is not None
-            assert obs.best_parameters["h"] is not None
+            assert obs.best_parameters["r"] == 6500000.0
+            assert obs.best_parameters["h"] == 15000.0
 
             os.unlink(tmp_file.name)
 
@@ -1041,7 +1044,7 @@ class TestObservationPropertyMethods:
             )
 
             with patch.object(obs, "detect_limb") as mock_detect:
-                with patch.object(obs, "fit_limb") as mock_fit:
+                with patch.object(obs, "fit_arc") as mock_fit:
                     result = obs.analyze()
 
                     # Should return self for chaining
@@ -1066,12 +1069,13 @@ class TestObservationPropertyMethods:
             )
 
             with patch.object(obs, "detect_limb") as mock_detect:
-                with patch.object(obs, "fit_limb") as mock_fit:
+                with patch.object(obs, "fit_arc") as mock_fit:
                     detect_kwargs = {"log": True, "y_min": 10}
                     fit_kwargs = {"loss_function": "l1", "max_iter": 500}
 
                     obs.analyze(
-                        detect_limb_kwargs=detect_kwargs, fit_limb_kwargs=fit_kwargs
+                        detect_limb_kwargs=detect_kwargs,
+                        fit_method_kwargs=fit_kwargs,
                     )
 
                     mock_detect.assert_called_once_with(**detect_kwargs)
@@ -1199,7 +1203,7 @@ class TestObservationIntegration:
 
 
 class TestObservationMultiResolution:
-    """Test multi-resolution optimization workflow"""
+    """Test multi-resolution optimization workflow (fit_gradient)"""
 
     @pytest.fixture
     def config_file(self, sample_fit_config):
@@ -1210,17 +1214,31 @@ class TestObservationMultiResolution:
             yield f.name
         os.unlink(f.name)
 
-    @patch("planet_ruler.observation.CostFunction")
-    @patch("planet_ruler.observation.differential_evolution")
+    def _mock_lf_result(self, npix_x=3000, npix_y=2500):
+        return {
+            "best_parameters": {
+                "r": 6500000.0, "h": 15000.0,
+                "n_pix_x": npix_x, "n_pix_y": npix_y,
+                "x0": npix_x // 2, "y0": npix_y // 2,
+                "f": 0.024, "w": 0.036,
+            },
+            "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
+            "updated_init": {"r": 6500000.0, "h": 15000.0},
+            "updated_limits": {},
+            "status": "ok",
+            "warnings": [],
+        }
+
+    @patch("planet_ruler.observation.limb_arc")
+    @patch("planet_ruler.observation.LimbFitter")
     def test_multi_resolution_auto_stages(
         self,
-        mock_diff_evolution,
-        mock_cost_function_class,
+        mock_lf_class,
+        mock_limb_arc,
         sample_horizon_image,
         config_file,
     ):
-        """Test multi-resolution with auto-determined stages"""
-        # Create large image to trigger multi-stage
+        """Test fit_gradient with auto-determined resolution stages"""
         large_image = np.random.random((2500, 3000))
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
@@ -1233,46 +1251,29 @@ class TestObservationMultiResolution:
                 limb_detection="gradient-field",
             )
 
-            # Mock cost function
-            mock_cost_function = Mock()
-            mock_cost_function_class.return_value = mock_cost_function
+            mock_lf = Mock()
+            mock_lf.fit.return_value = self._mock_lf_result()
+            mock_lf_class.return_value = mock_lf
+            mock_limb_arc.return_value = np.random.random(large_image.shape[1])
 
-            # Mock differential evolution results
-            mock_result = Mock()
-            mock_result.x = np.array([6500000.0, 15000.0])
-            mock_result.success = True
-            mock_diff_evolution.return_value = mock_result
+            obs.fit_gradient(resolution_stages="auto", max_iter=300, verbose=True)
 
-            # Mock fitted limb
-            fitted_limb = np.random.random(large_image.shape[1])
-            mock_cost_function.evaluate.return_value = fitted_limb
-            mock_cost_function.cost.return_value = (
-                0.123456  # Real number for formatting
-            )
-
-            obs.fit_limb(
-                loss_function="gradient_field",
-                resolution_stages="auto",
-                max_iter=300,
-                verbose=True,
-            )
-
-            # Should call differential_evolution multiple times (multi-stage)
-            assert mock_diff_evolution.call_count >= 2
+            # auto → [4, 2, 1] for min_dim=2500, so LimbFitter called 3 times
+            assert mock_lf_class.call_count >= 2
             assert obs.best_parameters is not None
 
             os.unlink(tmp_file.name)
 
-    @patch("planet_ruler.observation.CostFunction")
-    @patch("planet_ruler.observation.differential_evolution")
+    @patch("planet_ruler.observation.limb_arc")
+    @patch("planet_ruler.observation.LimbFitter")
     def test_multi_resolution_custom_stages(
         self,
-        mock_diff_evolution,
-        mock_cost_function_class,
+        mock_lf_class,
+        mock_limb_arc,
         sample_horizon_image,
         config_file,
     ):
-        """Test multi-resolution with custom stages"""
+        """Test fit_gradient with custom resolution stages"""
         image_data = np.random.random((1000, 1200))
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
@@ -1285,46 +1286,36 @@ class TestObservationMultiResolution:
                 limb_detection="gradient-field",
             )
 
-            # Mock cost function
-            mock_cost_function = Mock()
-            mock_cost_function_class.return_value = mock_cost_function
+            mock_lf = Mock()
+            mock_lf.fit.return_value = self._mock_lf_result(1200, 1000)
+            mock_lf_class.return_value = mock_lf
+            mock_limb_arc.return_value = np.random.random(image_data.shape[1])
 
-            # Mock differential evolution results
-            mock_result = Mock()
-            mock_result.x = np.array([6500000.0, 15000.0])
-            mock_result.success = True
-            mock_diff_evolution.return_value = mock_result
-
-            fitted_limb = np.random.random(image_data.shape[1])
-            mock_cost_function.evaluate.return_value = fitted_limb
-            mock_cost_function.cost.return_value = 0.123456  # Mock cost function return
-
-            obs.fit_limb(
-                loss_function="gradient_field",
+            obs.fit_gradient(
                 resolution_stages=[4, 2, 1],
                 max_iter_per_stage=[50, 100, 150],
                 verbose=True,
             )
 
-            # Should call differential_evolution 3 times (3 stages)
-            assert mock_diff_evolution.call_count == 3
+            # Should call LimbFitter 3 times (one per stage)
+            assert mock_lf_class.call_count == 3
             assert obs.best_parameters is not None
 
             os.unlink(tmp_file.name)
 
-    @patch("planet_ruler.observation.CostFunction")
-    @patch("planet_ruler.observation.differential_evolution")
+    @patch("planet_ruler.observation.limb_arc")
+    @patch("planet_ruler.observation.LimbFitter")
     @patch("cv2.resize")
     def test_multi_resolution_image_scaling(
         self,
         mock_cv2_resize,
-        mock_diff_evolution,
-        mock_cost_function_class,
+        mock_lf_class,
+        mock_limb_arc,
         sample_horizon_image,
         config_file,
     ):
-        """Test that images are properly scaled in multi-resolution"""
-        image_data = np.random.random((800, 1000))
+        """Test that images are properly resized in multi-resolution fit_gradient"""
+        image_data = np.random.random((800, 1000)).astype("float32")
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
@@ -1336,128 +1327,83 @@ class TestObservationMultiResolution:
                 limb_detection="gradient-field",
             )
 
-            # Mock resized images for different stages
-            stage1_image = np.random.random((200, 250))  # 1/4 resolution
-            stage2_image = np.random.random((400, 500))  # 1/2 resolution
+            stage1_image = np.random.random((200, 250)).astype("float32")
+            stage2_image = np.random.random((400, 500)).astype("float32")
             mock_cv2_resize.side_effect = [stage1_image, stage2_image]
 
-            # Mock cost function and results
-            mock_cost_function = Mock()
-            mock_cost_function_class.return_value = mock_cost_function
+            mock_lf = Mock()
+            mock_lf.fit.return_value = self._mock_lf_result(1000, 800)
+            mock_lf_class.return_value = mock_lf
+            mock_limb_arc.return_value = np.random.random(image_data.shape[1])
 
-            mock_result = Mock()
-            mock_result.x = np.array([6500000.0, 15000.0])
-            mock_result.success = True
-            mock_diff_evolution.return_value = mock_result
+            obs.fit_gradient(resolution_stages=[4, 2, 1], verbose=True)
 
-            fitted_limb = np.random.random(image_data.shape[1])
-            mock_cost_function.evaluate.return_value = fitted_limb
-            mock_cost_function.cost.return_value = (
-                0.234567  # Real number for formatting
-            )
-
-            obs.fit_limb(
-                loss_function="gradient_field",
-                resolution_stages=[4, 2, 1],
-                verbose=True,
-            )
-
-            # Should resize image twice (stages 1 and 2, stage 3 uses full resolution)
+            # Stages 1 and 2 resize, stage 3 uses full resolution
             assert mock_cv2_resize.call_count == 2
 
             os.unlink(tmp_file.name)
 
-    def test_multi_resolution_with_traditional_loss_warns(
-        self, sample_horizon_image, config_file
+    @patch("planet_ruler.observation.limb_arc")
+    @patch("planet_ruler.observation.LimbFitter")
+    def test_fit_gradient_single_stage(
+        self, mock_lf_class, mock_limb_arc, sample_horizon_image, config_file
     ):
-        """Test that multi-resolution with traditional loss functions falls back"""
+        """Test fit_gradient with a single (default) resolution stage"""
         image_data = sample_horizon_image()
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
-            obs.features["limb"] = np.random.random(image_data.shape[1])
+            obs = LimbObservation(
+                image_filepath=tmp_file.name,
+                fit_config=config_file,
+                limb_detection="gradient-field",
+            )
 
-            with patch("planet_ruler.observation.logging") as mock_logging:
-                with patch(
-                    "planet_ruler.observation.CostFunction"
-                ) as mock_cost_function_class:
-                    with patch(
-                        "planet_ruler.observation.differential_evolution"
-                    ) as mock_diff_evolution:
-                        # Mock cost function
-                        mock_cost_function = Mock()
-                        mock_cost_function_class.return_value = mock_cost_function
+            mock_lf = Mock()
+            mock_lf.fit.return_value = self._mock_lf_result(
+                image_data.shape[1], image_data.shape[0]
+            )
+            mock_lf_class.return_value = mock_lf
+            mock_limb_arc.return_value = np.random.random(image_data.shape[1])
 
-                        # Mock differential evolution results with proper numeric values
-                        mock_result = Mock()
-                        mock_result.x = np.array([6500000.0, 15000.0])  # r, h
-                        mock_result.success = True
-                        mock_diff_evolution.return_value = mock_result
+            obs.fit_gradient()  # default: single stage
 
-                        # Mock fitted limb
-                        fitted_limb = np.random.random(image_data.shape[1])
-                        mock_cost_function.evaluate.return_value = fitted_limb
-
-                        obs.fit_limb(
-                            loss_function="l2",  # Traditional loss
-                            resolution_stages="auto",  # Should be ignored
-                        )
-
-                        # Should log warning about fallback
-                        mock_logging.warning.assert_called_once()
-                        warning_msg = mock_logging.warning.call_args[0][0]
-                        assert (
-                            "Multi-resolution optimization is only supported"
-                            in warning_msg
-                        )
+            mock_lf_class.assert_called_once()
+            assert obs.best_parameters is not None
 
             os.unlink(tmp_file.name)
 
     def test_scale_parameters_for_resolution(self, sample_horizon_image, config_file):
-        """Test parameter scaling for different resolutions"""
-        image_data = sample_horizon_image()
+        """Test parameter scaling utility in geometry module"""
+        from planet_ruler.geometry import _scale_parameters_for_resolution
 
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
-            plt.imsave(tmp_file.name, image_data, cmap="gray")
-            tmp_file.flush()
+        params = {
+            "n_pix_x": 1000,
+            "n_pix_y": 800,
+            "x0": 500,
+            "y0": 400,
+            "r": 6371000.0,
+            "h": 50000.0,
+            "f": 0.024,
+        }
 
-            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
+        scaled_params = _scale_parameters_for_resolution(params, 0.5)
 
-            # Test parameters
-            params = {
-                "n_pix_x": 1000,
-                "n_pix_y": 800,
-                "x0": 500,
-                "y0": 400,
-                "r": 6371000.0,  # Should not scale
-                "h": 50000.0,  # Should not scale
-                "f": 0.024,  # Should not scale
-            }
+        assert scaled_params["n_pix_x"] == 500
+        assert scaled_params["n_pix_y"] == 400
+        assert scaled_params["x0"] == 250
+        assert scaled_params["y0"] == 200
+        assert scaled_params["r"] == 6371000.0
+        assert scaled_params["h"] == 50000.0
+        assert scaled_params["f"] == 0.024
 
-            # Test scaling down by half
-            scaled_params = obs._scale_parameters_for_resolution(params, 0.5)
-
-            assert scaled_params["n_pix_x"] == 500
-            assert scaled_params["n_pix_y"] == 400
-            assert scaled_params["x0"] == 250
-            assert scaled_params["y0"] == 200
-            # Physical parameters should not scale
-            assert scaled_params["r"] == 6371000.0
-            assert scaled_params["h"] == 50000.0
-            assert scaled_params["f"] == 0.024
-
-            # Test scaling up by double
-            scaled_params = obs._scale_parameters_for_resolution(params, 2.0)
-
-            assert scaled_params["n_pix_x"] == 2000
-            assert scaled_params["n_pix_y"] == 1600
-            assert scaled_params["x0"] == 1000
-            assert scaled_params["y0"] == 800
-
-            os.unlink(tmp_file.name)
+        scaled_params2 = _scale_parameters_for_resolution(params, 2.0)
+        assert scaled_params2["n_pix_x"] == 2000
+        assert scaled_params2["n_pix_y"] == 1600
+        assert scaled_params2["x0"] == 1000
+        assert scaled_params2["y0"] == 800
 
 
 class TestObservationMinimizers:
@@ -1472,16 +1418,16 @@ class TestObservationMinimizers:
             yield f.name
         os.unlink(f.name)
 
-    @patch("scipy.optimize.dual_annealing")
-    @patch("planet_ruler.observation.CostFunction")
+    @patch("planet_ruler.observation.limb_arc")
+    @patch("planet_ruler.observation.LimbFitter")
     def test_dual_annealing_minimizer(
         self,
-        mock_cost_function_class,
-        mock_dual_annealing,
+        mock_lf_class,
+        mock_limb_arc,
         sample_horizon_image,
         config_file,
     ):
-        """Test dual annealing minimizer"""
+        """Test that fit_arc passes dual-annealing preset correctly to LimbFitter"""
         image_data = sample_horizon_image()
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
@@ -1495,20 +1441,23 @@ class TestObservationMinimizers:
             )
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
-            # Mock cost function
-            mock_cost_function = Mock()
-            mock_cost_function_class.return_value = mock_cost_function
+            mock_lf = Mock()
+            mock_lf.fit.return_value = {
+                "best_parameters": {
+                    "r": 6500000.0, "h": 15000.0,
+                    "n_pix_x": image_data.shape[1], "n_pix_y": image_data.shape[0],
+                    "x0": image_data.shape[1] // 2, "y0": image_data.shape[0] // 2,
+                },
+                "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
+                "updated_init": {"r": 6500000.0, "h": 15000.0},
+                "updated_limits": {},
+                "status": "ok",
+                "warnings": [],
+            }
+            mock_lf_class.return_value = mock_lf
+            mock_limb_arc.return_value = np.random.random(image_data.shape[1])
 
-            # Mock dual annealing results
-            mock_result = Mock()
-            mock_result.x = np.array([6500000.0, 15000.0])
-            mock_result.success = True
-            mock_dual_annealing.return_value = mock_result
-
-            fitted_limb = np.random.random(image_data.shape[1])
-            mock_cost_function.evaluate.return_value = fitted_limb
-
-            obs.fit_limb(
+            obs.fit_arc(
                 loss_function="l2",
                 minimizer_preset="fast",
                 max_iter=100,
@@ -1516,31 +1465,32 @@ class TestObservationMinimizers:
                 verbose=True,
             )
 
-            # Verify dual_annealing was called
-            mock_dual_annealing.assert_called_once()
-            call_args = mock_dual_annealing.call_args
-            assert call_args[1]["maxiter"] == 100
-            assert call_args[1]["seed"] == 42
+            # Verify LimbFitter got the right minimizer, preset kwargs, seed
+            mock_lf_class.assert_called_once()
+            call_kwargs = mock_lf_class.call_args[1]
+            assert call_kwargs["minimizer"] == "dual-annealing"
+            assert call_kwargs["max_iter"] == 100
+            assert call_kwargs["seed"] == 42
+            assert call_kwargs["verbose"] is True
 
-            # Check preset was applied
             expected_preset = MINIMIZER_PRESETS["dual-annealing"]["fast"]
             for key, value in expected_preset.items():
-                assert call_args[1][key] == value
+                assert call_kwargs["minimizer_kwargs"][key] == value
 
-            assert obs.fit_results == mock_result
+            assert obs.fit_results == mock_lf.fit.return_value["fit_results"]
 
             os.unlink(tmp_file.name)
 
-    @patch("scipy.optimize.basinhopping")
-    @patch("planet_ruler.observation.CostFunction")
+    @patch("planet_ruler.observation.limb_arc")
+    @patch("planet_ruler.observation.LimbFitter")
     def test_basinhopping_minimizer(
         self,
-        mock_cost_function_class,
-        mock_basinhopping,
+        mock_lf_class,
+        mock_limb_arc,
         sample_horizon_image,
         config_file,
     ):
-        """Test basinhopping minimizer"""
+        """Test that fit_arc passes basinhopping preset correctly to LimbFitter"""
         image_data = sample_horizon_image()
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
@@ -1554,20 +1504,23 @@ class TestObservationMinimizers:
             )
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
-            # Mock cost function
-            mock_cost_function = Mock()
-            mock_cost_function_class.return_value = mock_cost_function
+            mock_lf = Mock()
+            mock_lf.fit.return_value = {
+                "best_parameters": {
+                    "r": 6500000.0, "h": 15000.0,
+                    "n_pix_x": image_data.shape[1], "n_pix_y": image_data.shape[0],
+                    "x0": image_data.shape[1] // 2, "y0": image_data.shape[0] // 2,
+                },
+                "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
+                "updated_init": {"r": 6500000.0, "h": 15000.0},
+                "updated_limits": {},
+                "status": "ok",
+                "warnings": [],
+            }
+            mock_lf_class.return_value = mock_lf
+            mock_limb_arc.return_value = np.random.random(image_data.shape[1])
 
-            # Mock basinhopping results
-            mock_result = Mock()
-            mock_result.x = np.array([6500000.0, 15000.0])
-            mock_result.success = True
-            mock_basinhopping.return_value = mock_result
-
-            fitted_limb = np.random.random(image_data.shape[1])
-            mock_cost_function.evaluate.return_value = fitted_limb
-
-            obs.fit_limb(
+            obs.fit_arc(
                 loss_function="l2",
                 minimizer_preset="robust",
                 max_iter=200,
@@ -1575,23 +1528,18 @@ class TestObservationMinimizers:
                 verbose=True,
             )
 
-            # Verify basinhopping was called
-            mock_basinhopping.assert_called_once()
-            call_args = mock_basinhopping.call_args
+            # Verify LimbFitter got the right minimizer and preset kwargs
+            mock_lf_class.assert_called_once()
+            call_kwargs = mock_lf_class.call_args[1]
+            assert call_kwargs["minimizer"] == "basinhopping"
+            assert call_kwargs["max_iter"] == 200
+            assert call_kwargs["seed"] == 123
 
-            # Check preset was applied (minus local_maxiter which is handled specially)
-            expected_preset = MINIMIZER_PRESETS["basinhopping"]["robust"].copy()
-            local_maxiter = expected_preset.pop("local_maxiter", 100)
+            expected_preset = MINIMIZER_PRESETS["basinhopping"]["robust"]
             for key, value in expected_preset.items():
-                assert call_args[1][key] == value
+                assert call_kwargs["minimizer_kwargs"][key] == value
 
-            # Check minimizer_kwargs has bounds and local options
-            minimizer_kwargs = call_args[1]["minimizer_kwargs"]
-            assert minimizer_kwargs["method"] == "L-BFGS-B"
-            assert "bounds" in minimizer_kwargs
-            assert minimizer_kwargs["options"]["maxiter"] == local_maxiter
-
-            assert obs.fit_results == mock_result
+            assert obs.fit_results == mock_lf.fit.return_value["fit_results"]
 
             os.unlink(tmp_file.name)
 
@@ -1607,7 +1555,7 @@ class TestObservationMinimizers:
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
             with pytest.raises(ValueError, match="Unknown preset"):
-                obs.fit_limb(minimizer_preset="invalid-preset")  # type: ignore
+                obs.fit_arc(minimizer_preset="invalid-preset")  # type: ignore
 
             os.unlink(tmp_file.name)
 
@@ -1623,20 +1571,20 @@ class TestObservationMinimizers:
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
             with pytest.raises(ValueError, match="Unknown minimizer"):
-                obs.fit_limb(minimizer="invalid-minimizer")  # type: ignore
+                obs.fit_arc(minimizer="invalid-minimizer")  # type: ignore
 
             os.unlink(tmp_file.name)
 
-    @patch("planet_ruler.observation.differential_evolution")
-    @patch("planet_ruler.observation.CostFunction")
+    @patch("planet_ruler.observation.limb_arc")
+    @patch("planet_ruler.observation.LimbFitter")
     def test_minimizer_kwargs_override(
         self,
-        mock_cost_function_class,
-        mock_diff_evolution,
+        mock_lf_class,
+        mock_limb_arc,
         sample_horizon_image,
         config_file,
     ):
-        """Test that minimizer_kwargs override preset values"""
+        """Test that minimizer_kwargs override preset values passed to LimbFitter"""
         image_data = sample_horizon_image()
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
@@ -1646,41 +1594,42 @@ class TestObservationMinimizers:
             obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
-            # Mock cost function and results
-            mock_cost_function = Mock()
-            mock_cost_function_class.return_value = mock_cost_function
+            mock_lf = Mock()
+            mock_lf.fit.return_value = {
+                "best_parameters": {
+                    "r": 6500000.0, "h": 15000.0,
+                    "n_pix_x": image_data.shape[1], "n_pix_y": image_data.shape[0],
+                    "x0": image_data.shape[1] // 2, "y0": image_data.shape[0] // 2,
+                },
+                "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
+                "updated_init": {"r": 6500000.0, "h": 15000.0},
+                "updated_limits": {},
+                "status": "ok",
+                "warnings": [],
+            }
+            mock_lf_class.return_value = mock_lf
+            mock_limb_arc.return_value = np.random.random(image_data.shape[1])
 
-            mock_result = Mock()
-            mock_result.x = np.array([6500000.0, 15000.0])
-            mock_result.success = True
-            mock_diff_evolution.return_value = mock_result
-
-            fitted_limb = np.random.random(image_data.shape[1])
-            mock_cost_function.evaluate.return_value = fitted_limb
-
-            # Override some preset parameters
             custom_kwargs = {
                 "popsize": 25,
                 "mutation": [0.2, 2.0],
                 "custom_param": "test",
             }
 
-            obs.fit_limb(
+            obs.fit_arc(
                 loss_function="l2",
                 minimizer_preset="balanced",
                 minimizer_kwargs=custom_kwargs,
             )
 
-            # Verify overrides were applied
-            call_args = mock_diff_evolution.call_args
-            assert call_args[1]["popsize"] == 25
-            assert call_args[1]["mutation"] == [0.2, 2.0]
-            assert call_args[1]["custom_param"] == "test"
+            call_kwargs = mock_lf_class.call_args[1]
+            assert call_kwargs["minimizer_kwargs"]["popsize"] == 25
+            assert call_kwargs["minimizer_kwargs"]["mutation"] == [0.2, 2.0]
+            assert call_kwargs["minimizer_kwargs"]["custom_param"] == "test"
 
-            # Verify other preset values are still there
             expected_preset = MINIMIZER_PRESETS["differential-evolution"]["balanced"]
-            assert call_args[1]["strategy"] == expected_preset["strategy"]
-            assert call_args[1]["recombination"] == expected_preset["recombination"]
+            assert call_kwargs["minimizer_kwargs"]["strategy"] == expected_preset["strategy"]
+            assert call_kwargs["minimizer_kwargs"]["recombination"] == expected_preset["recombination"]
 
             os.unlink(tmp_file.name)
 
@@ -1697,18 +1646,18 @@ class TestObservationImageSmoothing:
             yield f.name
         os.unlink(f.name)
 
+    @patch("planet_ruler.observation.limb_arc")
+    @patch("planet_ruler.observation.LimbFitter")
     @patch("cv2.GaussianBlur")
-    @patch("planet_ruler.observation.CostFunction")
-    @patch("planet_ruler.observation.differential_evolution")
     def test_image_smoothing_applied_and_restored(
         self,
-        mock_diff_evolution,
-        mock_cost_function_class,
         mock_gaussian_blur,
+        mock_lf_class,
+        mock_limb_arc,
         sample_horizon_image,
         config_file,
     ):
-        """Test that image smoothing is applied and then restored"""
+        """Test that fit_gradient applies image_smoothing then restores the image"""
         original_image = np.random.random((400, 500)).astype("float32")
         smoothed_image = original_image + 0.1
 
@@ -1722,90 +1671,87 @@ class TestObservationImageSmoothing:
                 limb_detection="gradient-field",
             )
 
-            # Mock Gaussian blur to return modified image
             mock_gaussian_blur.return_value = smoothed_image
 
-            # Mock cost function and results
-            mock_cost_function = Mock()
-            mock_cost_function_class.return_value = mock_cost_function
+            mock_lf = Mock()
+            mock_lf.fit.return_value = {
+                "best_parameters": {
+                    "r": 6500000.0, "h": 15000.0,
+                    "n_pix_x": 500, "n_pix_y": 400, "x0": 250, "y0": 200,
+                },
+                "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
+                "updated_init": {"r": 6500000.0, "h": 15000.0},
+                "updated_limits": {},
+                "status": "ok",
+                "warnings": [],
+            }
+            mock_lf_class.return_value = mock_lf
+            mock_limb_arc.return_value = np.random.random(original_image.shape[1])
 
-            mock_result = Mock()
-            mock_result.x = np.array([6500000.0, 15000.0])
-            mock_result.success = True
-            mock_diff_evolution.return_value = mock_result
-
-            fitted_limb = np.random.random(original_image.shape[1])
-            mock_cost_function.evaluate.return_value = fitted_limb
-
-            # Store original image for comparison
             obs_original_image = obs.image.copy()
 
-            obs.fit_limb(
-                loss_function="gradient_field",
-                image_smoothing=2.5,
-                verbose=True,
-            )
+            obs.fit_gradient(image_smoothing=2.5, verbose=True)
 
-            # Verify Gaussian blur was called with correct parameters
             mock_gaussian_blur.assert_called_once()
             call_args = mock_gaussian_blur.call_args
             assert call_args[1]["sigmaX"] == 2.5
             assert call_args[1]["sigmaY"] == 2.5
 
-            # Verify image was restored to original after fitting
+            # Image restored to original after fitting
             np.testing.assert_array_equal(obs.image, obs_original_image)
 
             os.unlink(tmp_file.name)
 
-    @patch("planet_ruler.observation.CostFunction")
-    @patch("planet_ruler.observation.differential_evolution")
-    def test_image_smoothing_only_for_gradient_field(
+    @patch("planet_ruler.observation.limb_arc")
+    @patch("planet_ruler.observation.LimbFitter")
+    def test_fit_gradient_no_smoothing_when_none(
         self,
-        mock_diff_evolution,
-        mock_cost_function_class,
+        mock_lf_class,
+        mock_limb_arc,
         sample_horizon_image,
         config_file,
     ):
-        """Test that image smoothing is only applied for gradient_field loss"""
+        """Test that fit_gradient without image_smoothing does not apply blur"""
         image_data = sample_horizon_image()
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
             plt.imsave(tmp_file.name, image_data, cmap="gray")
             tmp_file.flush()
 
-            obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
-            obs.features["limb"] = np.random.random(image_data.shape[1])
+            obs = LimbObservation(
+                image_filepath=tmp_file.name,
+                fit_config=config_file,
+                limb_detection="gradient-field",
+            )
 
-            # Mock cost function and results
-            mock_cost_function = Mock()
-            mock_cost_function_class.return_value = mock_cost_function
-
-            mock_result = Mock()
-            mock_result.x = np.array([6500000.0, 15000.0])
-            mock_diff_evolution.return_value = mock_result
-
-            fitted_limb = np.random.random(image_data.shape[1])
-            mock_cost_function.evaluate.return_value = fitted_limb
-
+            mock_lf = Mock()
+            mock_lf.fit.return_value = {
+                "best_parameters": {
+                    "r": 6500000.0, "h": 15000.0,
+                    "n_pix_x": image_data.shape[1], "n_pix_y": image_data.shape[0],
+                    "x0": image_data.shape[1] // 2, "y0": image_data.shape[0] // 2,
+                },
+                "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
+                "updated_init": {"r": 6500000.0, "h": 15000.0},
+                "updated_limits": {},
+                "status": "ok",
+                "warnings": [],
+            }
+            mock_lf_class.return_value = mock_lf
+            mock_limb_arc.return_value = np.random.random(image_data.shape[1])
             original_image = obs.image.copy()
 
             with patch("cv2.GaussianBlur") as mock_blur:
-                obs.fit_limb(
-                    loss_function="l2",  # Not gradient_field
-                    image_smoothing=2.0,  # Should be ignored
-                )
-
-                # Blur should not be called for traditional loss functions
+                obs.fit_gradient()  # No image_smoothing
                 mock_blur.assert_not_called()
 
-                # Image should remain unchanged
-                np.testing.assert_array_equal(obs.image, original_image)
+            np.testing.assert_array_equal(obs.image, original_image)
 
             os.unlink(tmp_file.name)
 
 
 class TestObservationDashboard:
-    """Test dashboard integration"""
+    """Test FitDashboard lifecycle managed by fit_limb orchestrator"""
 
     @pytest.fixture
     def config_file(self, sample_fit_config):
@@ -1816,18 +1762,18 @@ class TestObservationDashboard:
             yield f.name
         os.unlink(f.name)
 
+    @patch("planet_ruler.observation.limb_arc")
+    @patch("planet_ruler.observation.LimbFitter")
     @patch("planet_ruler.observation.FitDashboard")
-    @patch("planet_ruler.observation.CostFunction")
-    @patch("planet_ruler.observation.differential_evolution")
-    def test_single_resolution_dashboard(
+    def test_single_stage_dashboard(
         self,
-        mock_diff_evolution,
-        mock_cost_function_class,
         mock_dashboard_class,
+        mock_lf_class,
+        mock_limb_arc,
         sample_horizon_image,
         config_file,
     ):
-        """Test dashboard integration in single-resolution fit"""
+        """Test dashboard lifecycle for a single arc stage via fit_limb"""
         image_data = sample_horizon_image()
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
@@ -1837,54 +1783,59 @@ class TestObservationDashboard:
             obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
-            # Mock dashboard
             mock_dashboard = Mock()
             mock_dashboard_class.return_value = mock_dashboard
 
-            # Mock cost function and results
-            mock_cost_function = Mock()
-            mock_cost_function_class.return_value = mock_cost_function
-
-            mock_result = Mock()
-            mock_result.x = np.array([6500000.0, 15000.0])
-            mock_result.success = True
-            mock_diff_evolution.return_value = mock_result
-
-            fitted_limb = np.random.random(image_data.shape[1])
-            mock_cost_function.evaluate.return_value = fitted_limb
+            mock_lf = Mock()
+            mock_lf.fit.return_value = {
+                "best_parameters": {
+                    "r": 6500000.0, "h": 15000.0,
+                    "n_pix_x": image_data.shape[1],
+                    "n_pix_y": image_data.shape[0],
+                    "x0": image_data.shape[1] // 2,
+                    "y0": image_data.shape[0] // 2,
+                },
+                "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
+                "updated_init": {"r": 6500000.0, "h": 15000.0},
+                "updated_limits": {},
+                "status": "ok",
+                "warnings": [],
+            }
+            mock_lf_class.return_value = mock_lf
+            mock_limb_arc.return_value = np.random.random(image_data.shape[1])
 
             obs.fit_limb(
-                loss_function="l2",
-                max_iter=100,
+                [{"method": "arc", "max_iter": 100}],
                 dashboard=True,
                 dashboard_kwargs={"some_option": "test"},
                 target_planet="mars",
             )
 
-            # Verify dashboard was created with correct parameters
+            # Dashboard created with correct parameters
             mock_dashboard_class.assert_called_once()
-            call_args = mock_dashboard_class.call_args
-            assert call_args[1]["max_iter"] == 100
-            assert call_args[1]["target_planet"] == "mars"
-            assert call_args[1]["some_option"] == "test"
+            call_kwargs = mock_dashboard_class.call_args[1]
+            assert call_kwargs["max_iter"] == 100
+            assert call_kwargs["target_planet"] == "mars"
+            assert call_kwargs["some_option"] == "test"
+            assert call_kwargs["total_stages"] == 1
 
-            # Verify dashboard was finalized
+            # Dashboard finalized at end
             mock_dashboard.finalize.assert_called_once()
 
             os.unlink(tmp_file.name)
 
+    @patch("planet_ruler.observation.limb_arc")
+    @patch("planet_ruler.observation.LimbFitter")
     @patch("planet_ruler.observation.FitDashboard")
-    @patch("planet_ruler.observation.CostFunction")
-    @patch("planet_ruler.observation.differential_evolution")
     def test_multi_resolution_dashboard(
         self,
-        mock_diff_evolution,
-        mock_cost_function_class,
         mock_dashboard_class,
+        mock_lf_class,
+        mock_limb_arc,
         sample_horizon_image,
         config_file,
     ):
-        """Test dashboard integration in multi-resolution fit"""
+        """Test dashboard tracks resolution stages inside a gradient fit_limb call"""
         image_data = np.random.random((1200, 1500))
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
@@ -1897,41 +1848,41 @@ class TestObservationDashboard:
                 limb_detection="gradient-field",
             )
 
-            # Mock dashboard
             mock_dashboard = Mock()
             mock_dashboard_class.return_value = mock_dashboard
 
-            # Mock cost function and results
-            mock_cost_function = Mock()
-            mock_cost_function_class.return_value = mock_cost_function
-
-            mock_result = Mock()
-            mock_result.x = np.array([6500000.0, 15000.0])
-            mock_result.success = True
-            mock_diff_evolution.return_value = mock_result
-
-            fitted_limb = np.random.random(image_data.shape[1])
-            mock_cost_function.evaluate.return_value = fitted_limb
+            mock_lf = Mock()
+            mock_lf.fit.return_value = {
+                "best_parameters": {
+                    "r": 6500000.0, "h": 15000.0,
+                    "n_pix_x": 1500, "n_pix_y": 1200, "x0": 750, "y0": 600,
+                },
+                "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
+                "updated_init": {"r": 6500000.0, "h": 15000.0},
+                "updated_limits": {},
+                "status": "ok",
+                "warnings": [],
+            }
+            mock_lf_class.return_value = mock_lf
+            mock_limb_arc.return_value = np.random.random(image_data.shape[1])
 
             obs.fit_limb(
-                loss_function="gradient_field",
-                resolution_stages=[2, 1],
-                max_iter=200,
+                [{"method": "gradient", "resolution_stages": [2, 1], "max_iter": 200}],
                 dashboard=True,
                 target_planet="jupiter",
             )
 
-            # Verify dashboard was created
+            # Dashboard created with total_stages=2 (two resolution stages)
             mock_dashboard_class.assert_called_once()
-            call_args = mock_dashboard_class.call_args
-            assert call_args[1]["total_stages"] == 2
-            assert call_args[1]["target_planet"] == "jupiter"
+            call_kwargs = mock_dashboard_class.call_args[1]
+            assert call_kwargs["total_stages"] == 2
+            assert call_kwargs["target_planet"] == "jupiter"
 
-            # Verify start_stage was called for second stage
-            # Auto-calculated iterations for [2, 1] stages with 200 total: [67, 133]
+            # start_stage called once for the second resolution stage
+            # Auto-split for [2, 1] with max_iter=200: weight 1+2=3 → [67, 133]
             mock_dashboard.start_stage.assert_called_once_with(2, "full", 133)
 
-            # Verify dashboard was finalized
+            # Dashboard finalized at end
             mock_dashboard.finalize.assert_called_once()
 
             os.unlink(tmp_file.name)
@@ -2134,7 +2085,7 @@ class TestObservationErrorHandling:
     def test_fit_limb_without_limb_for_traditional_loss(
         self, sample_horizon_image, config_file
     ):
-        """Test that fitting without limb data raises error for traditional loss"""
+        """Test that fit_arc raises ValueError when no limb is detected"""
         image_data = sample_horizon_image()
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
@@ -2144,8 +2095,8 @@ class TestObservationErrorHandling:
             obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
             # No limb data registered
 
-            with pytest.raises(ValueError, match="requires detected limb"):
-                obs.fit_limb(loss_function="l2")
+            with pytest.raises(ValueError, match="Must detect limb"):
+                obs.fit_arc(loss_function="l2")
 
             os.unlink(tmp_file.name)
 
@@ -2285,7 +2236,7 @@ class TestObservationMiscellaneous:
             obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
 
             with patch.object(obs, "detect_limb") as mock_detect:
-                with patch.object(obs, "fit_limb") as mock_fit:
+                with patch.object(obs, "fit_arc") as mock_fit:
                     # Pass None explicitly - should convert to empty dict
                     result = obs.analyze()
 
@@ -2294,11 +2245,18 @@ class TestObservationMiscellaneous:
 
             os.unlink(tmp_file.name)
 
-    @patch("planet_ruler.observation.differential_evolution")
+    @patch("planet_ruler.observation.limb_arc")
+    @patch("planet_ruler.observation.LimbFitter")
+    @patch("planet_ruler.observation.FitDashboard")
     def test_dashboard_callback_function(
-        self, mock_diff_evolution, sample_horizon_image, config_file
+        self,
+        mock_dashboard_class,
+        mock_lf_class,
+        mock_limb_arc,
+        sample_horizon_image,
+        config_file,
     ):
-        """Test dashboard callback function handles different minimizer signatures"""
+        """Test dashboard callback is wired into LimbFitter minimizer_kwargs"""
         image_data = sample_horizon_image()
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
@@ -2308,45 +2266,56 @@ class TestObservationMiscellaneous:
             obs = LimbObservation(image_filepath=tmp_file.name, fit_config=config_file)
             obs.features["limb"] = np.random.random(image_data.shape[1])
 
-            # Mock dashboard
-            with patch("planet_ruler.observation.FitDashboard") as mock_dashboard_class:
-                mock_dashboard = Mock()
-                mock_dashboard_class.return_value = mock_dashboard
+            mock_dashboard = Mock()
+            mock_dashboard_class.return_value = mock_dashboard
 
-                # Set up callback capture
-                captured_callback = None
+            mock_lf = Mock()
+            mock_lf.fit.return_value = {
+                "best_parameters": {
+                    "r": 6500000.0,
+                    "h": 15000.0,
+                    "n_pix_x": image_data.shape[1],
+                    "n_pix_y": image_data.shape[0],
+                    "x0": image_data.shape[1] // 2,
+                    "y0": image_data.shape[0] // 2,
+                },
+                "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
+                "updated_init": {"r": 6500000.0, "h": 15000.0},
+                "updated_limits": {},
+                "status": "ok",
+                "warnings": [],
+            }
+            mock_lf_class.return_value = mock_lf
+            mock_limb_arc.return_value = np.random.random(image_data.shape[1])
 
-                def capture_callback(*args, **kwargs):
-                    nonlocal captured_callback
-                    captured_callback = kwargs.get("callback")
-                    # Mock result
-                    mock_result = Mock()
-                    mock_result.x = np.array([6500000.0, 15000.0])
-                    mock_result.success = True
-                    return mock_result
+            obs.fit_limb(
+                [{"method": "arc", "max_iter": 100}],
+                dashboard=True,
+            )
 
-                mock_diff_evolution.side_effect = capture_callback
+            # Callback was wired into LimbFitter's minimizer_kwargs
+            lf_call_kwargs = mock_lf_class.call_args[1]
+            minimizer_kwargs = lf_call_kwargs.get("minimizer_kwargs", {})
+            callback = minimizer_kwargs.get("callback")
 
-                with patch("planet_ruler.observation.CostFunction"):
-                    obs.fit_limb(dashboard=True)
+            assert callback is not None, "Expected callback wired into LimbFitter"
 
-                # Test callback with different signatures
-                if captured_callback:
-                    # Test differential_evolution signature: callback(xk, convergence=None)
-                    result = captured_callback(np.array([6500000.0, 15000.0]))
-                    assert result is False  # Should not stop optimization
+            # differential_evolution signature: callback(xk, convergence=None)
+            result = callback(np.array([6500000.0, 15000.0]))
+            assert result is False
+            mock_dashboard.update.assert_called()
 
-                    # Test dual_annealing signature: callback(x, f, context)
-                    result = captured_callback(
-                        np.array([6500000.0, 15000.0]), 0.1, "context"
-                    )
-                    assert result is False
+            # basinhopping/dual-annealing also pass convergence as kwarg
+            mock_dashboard.update.reset_mock()
+            result = callback(np.array([6500000.0, 15000.0]), convergence=0.5)
+            assert result is False
+            mock_dashboard.update.assert_called()
 
             os.unlink(tmp_file.name)
 
 
 # ---------------------------------------------------------------------------
-# Helpers shared by TestConstrainRadius
+# Helpers shared by TestFitSagitta
 # ---------------------------------------------------------------------------
 
 def _synthetic_limb_for_obs(
@@ -2369,77 +2338,84 @@ def _synthetic_limb_for_obs(
     return limb
 
 
-def _mock_obs(limb_array, h=10_000.0, f=0.026, w=0.0173, r_init=6_371_000.0):
-    """Minimal stub that satisfies constrain_radius() without __init__."""
+def _mock_obs_for_sagitta(
+    limb_array, h=10_000.0, f=0.026, w=0.0173, r_init=6_371_000.0
+):
+    """Minimal stub that satisfies fit_sagitta() without __init__."""
     W = len(limb_array)
     stub = MagicMock(spec=LimbObservation)
-    stub._raw_limb = limb_array
+    stub.features = {"limb": limb_array}
     stub.init_parameter_values = {"h": h, "f": f, "w": w, "r": r_init}
     stub.parameter_limits = {"r": [1e6, 1e8]}
     stub.image = MagicMock()
     stub.image.shape = (3000, W, 3)
+    stub.free_parameters = ["r", "h"]
+    stub.stage_results = []
+    stub.best_parameters = None
     return stub
 
 
-class TestConstrainRadius:
-    """Tests for LimbObservation.constrain_radius()."""
+class TestFitSagitta:
+    """Tests for LimbObservation.fit_sagitta()."""
 
     def test_raises_without_limb(self):
-        stub = _mock_obs(np.full(4000, np.nan))
-        stub._raw_limb = None
-        with pytest.raises(RuntimeError, match="register_limb"):
-            LimbObservation.constrain_radius(stub)
+        stub = _mock_obs_for_sagitta(np.full(4000, np.nan))
+        stub.features = {}
+        with pytest.raises(ValueError, match="Must detect limb"):
+            LimbObservation.fit_sagitta(stub)
 
     def test_updates_r_and_limits(self):
         limb = _synthetic_limb_for_obs()
-        stub = _mock_obs(limb)
-        LimbObservation.constrain_radius(stub)
+        stub = _mock_obs_for_sagitta(limb)
+        LimbObservation.fit_sagitta(stub)
         assert stub.init_parameter_values["r"] != 6_371_000.0
         r_low, r_high = stub.parameter_limits["r"]
         assert r_low < stub.init_parameter_values["r"] < r_high
 
     def test_returns_self(self):
         limb = _synthetic_limb_for_obs()
-        stub = _mock_obs(limb)
-        result = LimbObservation.constrain_radius(stub)
+        stub = _mock_obs_for_sagitta(limb)
+        result = LimbObservation.fit_sagitta(stub)
         assert result is stub
-
-    def test_default_sigma_auto(self, capsys):
-        """Default call (sigma_px='auto') prints σ=auto label."""
-        limb = _synthetic_limb_for_obs()
-        stub = _mock_obs(limb)
-        LimbObservation.constrain_radius(stub)
-        out = capsys.readouterr().out
-        assert "σ=auto" in out
-
-    def test_explicit_sigma_label_in_output(self, capsys):
-        limb = _synthetic_limb_for_obs()
-        stub = _mock_obs(limb)
-        LimbObservation.constrain_radius(stub, sigma_px=2.0)
-        out = capsys.readouterr().out
-        assert "σ=2.0 px" in out
 
     def test_n_sigma_widens_bounds(self):
         limb = _synthetic_limb_for_obs()
 
-        stub1 = _mock_obs(limb)
-        LimbObservation.constrain_radius(stub1, sigma_px=1.0, n_sigma=1.0)
+        stub1 = _mock_obs_for_sagitta(limb)
+        LimbObservation.fit_sagitta(stub1, n_sigma=1.0)
         lo1, hi1 = stub1.parameter_limits["r"]
 
-        stub2 = _mock_obs(limb)
-        LimbObservation.constrain_radius(stub2, sigma_px=1.0, n_sigma=3.0)
+        stub2 = _mock_obs_for_sagitta(limb)
+        LimbObservation.fit_sagitta(stub2, n_sigma=3.0)
         lo2, hi2 = stub2.parameter_limits["r"]
 
         assert (hi2 - lo2) > (hi1 - lo1)
 
-    def test_degenerate_limb_leaves_r_unchanged(self, capsys):
-        """Too-few-points limb prints failure message; r is not modified."""
+    def test_appends_stage_result(self):
+        limb = _synthetic_limb_for_obs()
+        stub = _mock_obs_for_sagitta(limb)
+        LimbObservation.fit_sagitta(stub, n_sigma=2.5)
+        assert len(stub.stage_results) == 1
+        entry = stub.stage_results[0]
+        assert entry["method"] == "sagitta"
+        assert entry["n_sigma"] == 2.5
+
+    def test_sets_best_parameters(self):
+        limb = _synthetic_limb_for_obs()
+        stub = _mock_obs_for_sagitta(limb)
+        assert stub.best_parameters is None
+        LimbObservation.fit_sagitta(stub)
+        assert stub.best_parameters is not None
+        assert "r" in stub.best_parameters
+
+    def test_degenerate_limb_behavior(self):
+        """Too-few-points limb: SagittaFitter returns too_few_points; r unchanged."""
         limb = np.full(4000, np.nan)
         limb[500] = 1200.0
         limb[1000] = 1202.0
-        limb[1500] = 1203.0  # only 3 points
-        stub = _mock_obs(limb, r_init=6_371_000.0)
-        LimbObservation.constrain_radius(stub)
-        out = capsys.readouterr().out
-        assert "could not constrain" in out
+        limb[1500] = 1203.0  # only 3 points — below the 4-point threshold
+        stub = _mock_obs_for_sagitta(limb, r_init=6_371_000.0)
+        LimbObservation.fit_sagitta(stub)
+        # SagittaFitter returns updated_init={} for too_few_points → r unchanged
         assert stub.init_parameter_values["r"] == 6_371_000.0
+        assert len(stub.stage_results) == 1

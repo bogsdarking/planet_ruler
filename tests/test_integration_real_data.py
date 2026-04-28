@@ -38,7 +38,7 @@ import planet_ruler.geometry as geom
 import planet_ruler.image as img
 import planet_ruler.observation as obs
 import planet_ruler.demo as demo
-from planet_ruler.fit import CostFunction, pack_parameters, unpack_parameters
+from planet_ruler.fit import L2CostFunction, pack_parameters, unpack_parameters
 
 
 class TestRealDemoDataIntegration:
@@ -262,7 +262,7 @@ class TestRealDemoDataIntegration:
         )
 
         # Create cost function
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=true_limb,
             function=lambda **kwargs: geom.limb_arc(
                 n_pix_x=n_pix_x, n_pix_y=n_pix_y, **kwargs

@@ -714,237 +714,50 @@ def limb_arc_sagitta(
     return numer / denom
 
 
-def estimate_radius_from_limb_arc(
-    limb: np.ndarray,
-    h: float,
-    f_px: float,
-    x0: Optional[float] = None,
-    sigma_px: "float | str" = "auto",
-    n_sigma: float = 1.0,
-) -> dict:
-    """
-    Estimate planetary radius from a manually annotated limb arc.
+def _r_from_K(K: float, h: float) -> float:
+    """Invert K = r / sqrt(h*(2r+h)) to recover r.
 
-    **Hyperbola K estimator** — direct fit, exact for horizontal cameras.
-
-    The perspective projection of the horizon circle is algebraically a
-    hyperbola for all practical aerial views (theta_x < arctan(K) = π/2−α,
-    where α = arccos(r/(r+h)) is the dip angle and K = r/√(h·(2r+h))).
-    It transitions to a parabola at theta_x = arctan(K) and to an ellipse
-    only for near-nadir orientations.  In all cases the conic is
-    characterised by the single dimensionless ratio K.  Radius follows from
-    K and altitude via r = h·(K² + K·√(K²+1)).
-
-    The arc sagitta is fit to the model s = s₀ − c·A(u), where
-    A(u) = √(f²+u²) − f.  At theta_x=0 this is exact (the arc shape IS
-    κ·A(u) where κ = 1/K), so K = 1/|c| recovers the true radius with
-    zero residual.  For theta_x near the dip angle α (typical real photos)
-    it is an approximation whose bias scales as sin²(theta_x)/K² ≈ 10⁻⁵.
-    The earlier chordspan formula (K = A_L / (|a|·L²), where |a| is the
-    OLS parabola curvature) has a larger systematic bias that scales with
-    (L/f_px)²; for wide-angle cameras this can exceed 40 km.
-
-    Uncertainty bounds use OLS covariance: σ_c = σ_px·√((XᵀX)⁻¹₁₁) where X
-    is the [1, −A(u)] design matrix, and σ_K = σ_c / c².  The bounds are
-    then mapped through the nonlinear r(K) map.
-
-    Steps:
-        1. Conic fit (algebraic, 5-DOF) to determine principal-axis direction.
-        2. Rotate annotation into principal frame (u=chord, s=sagitta).
-        3. Degree-2 OLS fit for curvature a_rot (still needed for apex coords).
-        4. Hyperbola fit s = s₀ − c·A(u); K = 1/|c|.
-        5. OLS covariance → σ_K → r_low / r_high via r(K) map.
-
-    Use the returned r_low / r_high as parameter_limits["r"] in a fit_config
-    dict before running differential evolution.
+    Exact closed form via the quadratic h*K^2 + h - r*(1 - K^2) = 0,
+    taking the physically meaningful (positive) root.
 
     Args:
-        limb:     Sparse target array of shape (W,) with np.nan for unannotated
-                  x-positions.  Direct output of load_limb_points_from_json().
-        h:        Observer altitude above the surface (metres).
-        f_px:     Focal length in pixels = f * W / w.
-        x0:       Principal point x (pixels).  Reserved for future use.
-        sigma_px: Per-point annotation noise (pixels), or "auto" (default) to
-                  derive it from the RMS of sagitta-direction residuals.
-                  Propagated analytically to K_sigma and r_low/r_high.
-        n_sigma:  Bound width in units of sigma (default 1.0).  K_sigma and
-                  r_sigma in the return dict are always 1-sigma values.
-
+        K: Dimensionless ratio r / sqrt(h*(2r+h)).  K >> 1 for h << r.
+        h: Observer altitude above the surface (same units as returned r).
     Returns:
-        dict with keys:
-            r             – best-estimate radius (metres)
-            r_low         – n_sigma lower bound (metres)
-            r_high        – n_sigma upper bound (metres)
-            r_sigma       – 1-sigma uncertainty, linearised (metres)
-            K             – hyperbola K = 1/|c| from fit s = s₀ − c·A(u)
-            K_sigma       – propagated 1-sigma uncertainty on K
-            n_points      – number of valid annotated points
-            residual_rms  – RMS of sagitta-direction model residuals (pixels)
-            arc_angle_deg – rotation of arc principal axis from image x-axis
-            x_apex        – apex x coordinate in image pixels (visualisation)
-            y_apex        – apex y coordinate in image pixels (visualisation)
-            status        – "ok" | "flat_arc" | "too_few_points"
-            warnings      – list of warning strings
+        r: Planetary radius in the same units as h.
     """
-    warnings_list = []
-    W = len(limb)
-    if x0 is None:
-        x0 = W / 2.0
+    K = max(float(K), 1e-12)
+    return h * (K**2 + K * np.sqrt(K**2 + 1))
 
-    valid = ~np.isnan(limb)
-    n_valid = int(np.sum(valid))
 
-    def _nan_result(status, extra_warnings=None):
-        return {
-            "r": np.nan, "r_low": np.nan, "r_high": np.nan,
-            "r_sigma": np.nan, "K": np.nan, "K_sigma": np.nan,
-            "n_points": n_valid, "residual_rms": np.nan,
-            "arc_angle_deg": np.nan, "x_apex": np.nan, "y_apex": np.nan,
-            "status": status,
-            "warnings": extra_warnings or [],
-        }
+def _scale_parameters_for_resolution(params: dict, scale_factor: float) -> dict:
+    """Scale pixel-space parameters for a different image resolution.
 
-    if n_valid < 4:
-        return _nan_result(
-            "too_few_points",
-            [f"Only {n_valid} annotated point(s); need at least 4"],
-        )
+    Args:
+        params:       Parameter dictionary.
+        scale_factor: Resolution scale (0.5 = half res, 2.0 = double res).
+    Returns:
+        Scaled copy of params.
+    """
+    scaled = params.copy()
+    for key in ("n_pix_x", "n_pix_y", "x0", "y0"):
+        if key in scaled:
+            scaled[key] = int(scaled[key] * scale_factor)
+    return scaled
 
-    x_px = np.where(valid)[0].astype(float)
-    y_px = limb[valid]
 
-    # ── Step 1: principal-axis rotation via conic fit ─────────────────────────
-    # Bookstein algebraic form: a·x²+b·xy+c·y²+d·x+e·y = 1  (5 DOF, linear).
-    # Eigendecompose the quadratic part to get the chord/sagitta directions
-    # directly: the eigenvector with the *smaller* |eigenvalue| is the chord
-    # (low curvature) and the one with the *larger* |eigenvalue| is the
-    # sagitta (high curvature).  This is robust for flat arcs where the
-    # cross-term comparison is numerically unreliable.
-    # Fall back to the image x-axis as chord when < 5 points are available.
-    u_dir = np.array([1.0, 0.0])
-    theta = 0.0
+def _scale_limits(limits: dict, scale_factor: float) -> dict:
+    """Scale pixel-space parameter limits for a different image resolution.
 
-    if n_valid >= 5:
-        M = np.column_stack(
-            [x_px**2, x_px * y_px, y_px**2, x_px, y_px]
-        )
-        p, _, rank, _ = np.linalg.lstsq(M, np.ones(n_valid), rcond=None)
-        if rank >= 5:
-            C_mat = np.array([[p[0], p[1] / 2], [p[1] / 2, p[2]]])
-            eigvals, eigvecs = np.linalg.eigh(C_mat)
-            idx_u = int(np.argmin(np.abs(eigvals)))  # chord = min curvature
-            u_dir = eigvecs[:, idx_u]
-            if u_dir[0] < 0:     # canonical: chord points in +x half
-                u_dir = -u_dir
-            theta = float(np.arctan2(u_dir[1], u_dir[0]))
-        else:
-            warnings_list.append(
-                "Conic fit rank-deficient; using axis-aligned frame"
-            )
-
-    # ── Step 2: rotate annotation points into principal frame ─────────────────
-    cos_t, sin_t = u_dir[0], u_dir[1]
-    x_cen, y_cen = np.mean(x_px), np.mean(y_px)
-    dx, dy = x_px - x_cen, y_px - y_cen
-    u_rot = cos_t * dx + sin_t * dy    # chord direction (low curvature)
-    s_rot = -sin_t * dx + cos_t * dy   # sagitta direction (high curvature)
-
-    span_rot = float(np.max(u_rot) - np.min(u_rot))
-    if span_rot < W / 4:
-        warnings_list.append(
-            f"Annotated points span only {span_rot:.0f} px along the arc"
-            " — K estimate may be unreliable"
-        )
-
-    # ── Step 3: parabola fit for curvature and residuals ─────────────────────
-    coeffs_rot = np.polyfit(u_rot, s_rot, 2)
-    a_rot = float(coeffs_rot[0])
-
-    if abs(a_rot) < 1e-12:
-        return _nan_result(
-            "flat_arc", ["Arc is effectively flat in principal frame"]
-        )
-
-    s_model = np.polyval(coeffs_rot, u_rot)
-    residual_rms = float(np.sqrt(np.mean((s_rot - s_model) ** 2)))
-
-    sigma_px_val = (
-        (residual_rms if residual_rms > 0 else 1.0)
-        if sigma_px == "auto"
-        else float(sigma_px)
-    )
-
-    # ── Step 4: direct hyperbola fit  s = s₀ − c·A(u) ───────────────────────
-    # K = 1/|c| is exact for a horizontal camera (θ=0); residuals are machine-
-    # precision zero.  For θ near the dip angle α (typical real photos) it is
-    # an approximation, but better than the chordspan formula especially for
-    # wide-angle cameras where (L/f_px)² degradation of the parabola is large.
-    # |c| handles both ∪-arcs (c<0, theta_z=π) and ∩-arcs (c>0) identically.
-    A_u = np.sqrt(f_px**2 + u_rot**2) - f_px
-    X_hyp = np.column_stack([np.ones_like(u_rot), -A_u])
-    coeff_hyp, _, _, _ = np.linalg.lstsq(X_hyp, s_rot, rcond=None)
-    abs_c = abs(float(coeff_hyp[1]))
-
-    L   = (np.max(u_rot) - np.min(u_rot)) / 2.0
-    A_L = float(np.sqrt(f_px**2 + L**2) - f_px)
-    s_est = abs_c * A_L
-
-    s_resid = s_rot - X_hyp @ coeff_hyp
-    residual_rms = float(np.sqrt(np.mean(s_resid**2)))
-    sigma_px_val = (residual_rms if sigma_px == "auto" and residual_rms > 0
-                    else sigma_px_val)
-
-    K_est = 1.0 / abs_c if abs_c > 0 else np.inf
-
-    status = "flat_arc" if s_est < sigma_px_val else "ok"
-    if status == "flat_arc":
-        warnings_list.append(
-            f"Estimated sagitta ({s_est:.2f} px) is below noise floor "
-            f"({sigma_px_val:.1f} px) — radius bound will be very wide"
-        )
-
-    # ── Step 5: σ_K from OLS covariance of c ─────────────────────────────────
-    # Var(ĉ) = σ²·(XᵀX)⁻¹₁₁  where X = [1, −A(u)].
-    # σ_K = σ_c / c²  because K = 1/|c|.
-    try:
-        XtX_inv = np.linalg.inv(X_hyp.T @ X_hyp)
-        sigma_c = sigma_px_val * np.sqrt(float(XtX_inv[1, 1]))
-    except np.linalg.LinAlgError:
-        sigma_c = abs_c * 0.1
-        warnings_list.append("XᵀX singular; using fallback σ_c = 0.1·|c|")
-    K_sigma = sigma_c / (abs_c**2) if abs_c > 0 else np.inf
-
-    # ── Step 6: K → r ─────────────────────────────────────────────────────────
-    def _r_from_K(K):
-        K = max(float(K), 1e-12)
-        return h * (K**2 + K * np.sqrt(K**2 + 1))
-
-    r      = _r_from_K(K_est)
-    r_low  = _r_from_K(max(K_est - n_sigma * K_sigma, 1e-9))
-    r_high = _r_from_K(K_est + n_sigma * K_sigma)
-
-    sq = np.sqrt(K_est**2 + 1)
-    drdK = h * (2 * K_est + sq + K_est**2 / sq)
-    r_sigma = abs(drdK) * K_sigma
-
-    # Apex in image coordinates (for visualisation only — not used by K)
-    u_apex = -coeffs_rot[1] / (2.0 * a_rot)
-    s_apex = float(np.polyval(coeffs_rot, u_apex))
-    x_apex_img = x_cen + cos_t * u_apex - sin_t * s_apex
-    y_apex_img = y_cen + sin_t * u_apex + cos_t * s_apex
-
-    return {
-        "r": r,
-        "r_low": r_low,
-        "r_high": r_high,
-        "r_sigma": r_sigma,
-        "K": K_est,
-        "K_sigma": K_sigma,
-        "n_points": n_valid,
-        "residual_rms": residual_rms,
-        "arc_angle_deg": float(np.degrees(theta)),
-        "x_apex": float(x_apex_img),
-        "y_apex": float(y_apex_img),
-        "status": status,
-        "warnings": warnings_list,
-    }
+    Args:
+        limits:       Parameter limits dictionary {param: [lo, hi]}.
+        scale_factor: Resolution scale (0.5 = half res, 2.0 = double res).
+    Returns:
+        Scaled copy of limits.
+    """
+    scaled = limits.copy()
+    for key in ("n_pix_x", "n_pix_y", "x0", "y0"):
+        if key in scaled:
+            lo, hi = scaled[key]
+            scaled[key] = [int(lo * scale_factor), int(hi * scale_factor)]
+    return scaled

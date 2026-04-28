@@ -458,7 +458,7 @@ class TestVetImageBasinhopping:
 
 class TestRunnerConstrainRadius:
     def test_scenario_name_cr_encoding(self, tmp_path):
-        """_make_grid_scenario_name uses cr{N} in place of rl when constrain_radius_n_sigma set."""
+        """_make_grid_scenario_name includes cr{N} when a sagitta+arc fit_stages pipeline is set."""
         from planet_ruler.benchmarks.runner import BenchmarkRunner
 
         config_path = (
@@ -475,7 +475,7 @@ class TestRunnerConstrainRadius:
             "minimizer_preset": "fast",
             "free_parameters": ["r", "h", "theta_x", "theta_y", "theta_z"],
             "r_limits_km": [2000, 14000],
-            "constrain_radius_n_sigma": 3.0,
+            "fit_stages": [{"method": "sagitta", "n_sigma": 3.0}, {"method": "arc"}],
             "h_limits_pct": 0.10,
             "fit_params": {},
         }
@@ -483,13 +483,13 @@ class TestRunnerConstrainRadius:
         assert "cr30" in name_cr
 
         params_rl = {**params_cr}
-        del params_rl["constrain_radius_n_sigma"]
+        del params_rl["fit_stages"]
         name_rl = runner._make_grid_scenario_name(params_rl)
         assert "cr" not in name_rl
         assert "r" in name_rl  # some rl code present
 
-    def test_scenario_name_cr_only(self, tmp_path):
-        """constrain_radius_only scenarios get a distinct name prefix."""
+    def test_scenario_name_sagitta_only(self, tmp_path):
+        """Sagitta-only fit_stages scenarios get the g_sag_only_ name prefix."""
         from planet_ruler.benchmarks.runner import BenchmarkRunner
 
         config_path = (
@@ -501,12 +501,12 @@ class TestRunnerConstrainRadius:
 
         runner = BenchmarkRunner(config_path, db_path=tmp_path / "test.db")
         params = {
-            "constrain_radius_only": True,
+            "fit_stages": [{"method": "sagitta", "n_sigma": 2.0}],
             "free_parameters": ["r", "h", "theta_x", "theta_y", "theta_z"],
             "r_limits_km": [2000, 14000],
         }
         name = runner._make_grid_scenario_name(params)
-        assert "cr_only" in name
+        assert "sag_only" in name
 
 
 @pytest.mark.skipif(
@@ -532,28 +532,8 @@ class TestRunnerConstrainRadiusIntegration:
             "parameter_limits_override": {"theta_z": [-3.1416, 3.1416]},
         }
 
-    def test_parameter_limits_reflect_constrain(self, tmp_path):
-        """r bounds in stored result are tighter than the wide fallback when constrain_radius_n_sigma set."""
-        from planet_ruler.benchmarks.runner import BenchmarkRunner
-
-        config_path = (
-            Path(__file__).parent.parent
-            / "planet_ruler/benchmarks/configs/smoke_test.yaml"
-        )
-        if not config_path.exists():
-            pytest.skip("smoke_test.yaml not found")
-
-        runner = BenchmarkRunner(config_path, db_path=tmp_path / "test.db")
-        scenario = {**self._base_scenario(), "constrain_radius_n_sigma": 2.0}
-        result = runner._run_single(scenario, "synth_iphone_13_h10km_clean")
-
-        r_limits = result.parameter_limits.get("r", [0, 1e12])
-        r_range_km = (r_limits[1] - r_limits[0]) / 1000.0
-        # constrain_radius should produce a range much tighter than [2000, 14000] km
-        assert r_range_km < 12000.0
-
-    def test_constrain_radius_only(self, tmp_path):
-        """constrain_radius_only run skips optimizer: iterations=0, fitted_radius plausible."""
+    def test_parameter_limits_reflect_sagitta_warm_start(self, tmp_path):
+        """r bounds tighten after a sagitta stage relative to the wide initial [2000, 14000] km."""
         from planet_ruler.benchmarks.runner import BenchmarkRunner
 
         config_path = (
@@ -566,13 +546,38 @@ class TestRunnerConstrainRadiusIntegration:
         runner = BenchmarkRunner(config_path, db_path=tmp_path / "test.db")
         scenario = {
             **self._base_scenario(),
-            "name": "test_cr_only",
-            "constrain_radius_only": True,
-            "constrain_radius_n_sigma": 2.0,
+            "fit_stages": [
+                {"method": "sagitta", "n_sigma": 2.0},
+                {"method": "arc"},
+            ],
         }
         result = runner._run_single(scenario, "synth_iphone_13_h10km_clean")
 
-        assert result.convergence_status == "success"
+        r_limits = result.parameter_limits.get("r", [0, 1e12])
+        r_range_km = (r_limits[1] - r_limits[0]) / 1000.0
+        # Sagitta stage should tighten r limits well below [2000, 14000] km
+        assert r_range_km < 12000.0
+
+    def test_sagitta_only_skips_optimizer(self, tmp_path):
+        """Sagitta-only fit_stages run: no optimizer, fitted_radius plausible."""
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        config_path = (
+            Path(__file__).parent.parent
+            / "planet_ruler/benchmarks/configs/smoke_test.yaml"
+        )
+        if not config_path.exists():
+            pytest.skip("smoke_test.yaml not found")
+
+        runner = BenchmarkRunner(config_path, db_path=tmp_path / "test.db")
+        scenario = {
+            **self._base_scenario(),
+            "name": "test_sag_only",
+            "fit_stages": [{"method": "sagitta", "n_sigma": 2.0}],
+        }
+        result = runner._run_single(scenario, "synth_iphone_13_h10km_clean")
+
+        assert result.convergence_status in ("success", "ok")
         assert result.iterations == 0
         assert result.fitted_radius is not None
         # Should be in the right ballpark for Earth (within 50%)
