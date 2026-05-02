@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 list of methods that chain into one another. For example one could run `[{"method": "sagitta"}, 
 {"method": "arc"}]` and the code will find new initial conditions and bounds based on the sagitta method that are fed into the arc fitter for an overall faster and more reliable answer. Play with combinations to see what works best!
 - The old fit_limb() methods for gradient-field and l2, etc. losses have been split up into individual functions that only require the kwargs for their respective methods: fit_arc(), fit_gradient(), and fit_sagitta().
+- Individual method functions do not link independently to the display dashboard -- dashboard is now a fit_limb (staged) tool only.
 - Parameter limits are now set initially via preset combinations of tolerance, rather than as a flat fraction.
 - Minimizer presets now lead to different optimized parameters depending on which detection method is being employed.
 - User can now control where manual annotations are saved.
