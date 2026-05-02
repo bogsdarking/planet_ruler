@@ -268,7 +268,7 @@ class PlanetObservation:
             >>> obs = LimbObservation("airplane.jpg", "config.yaml")
             >>> obs.crop_image()  # Opens interactive crop tool
             >>> obs.detect_limb()
-            >>> obs.fit_limb()
+            >>> obs.fit_arc()
 
         Notes:
             - Works for any PlanetObservation subclass
@@ -554,7 +554,15 @@ class LimbObservation(PlanetObservation):
         """
         if self.best_parameters is None:
             return 0.0
-        return self.best_parameters.get("f", 0.0) * 1000.0
+        f = self.best_parameters.get("f")
+        if f is None:
+            w = self.best_parameters.get("w")
+            fov = self.best_parameters.get("fov")
+            if w is not None and fov is not None:
+                f = focal_length(w, fov)
+            else:
+                return 0.0
+        return f * 1000.0
 
     @property
     def radius_uncertainty(self) -> float:
@@ -663,6 +671,24 @@ class LimbObservation(PlanetObservation):
         """Restore init_parameter_values to the original loaded values (cold start)."""
         self.init_parameter_values = self._original_init_parameter_values.copy()
         return self
+
+    def _apply_updated_limits(self, updated_limits: dict) -> None:
+        """Apply stage-returned bounds, always intersecting (never widening)."""
+        for param, bounds in updated_limits.items():
+            lo, hi = float(bounds[0]), float(bounds[1])
+            if param in self.parameter_limits:
+                cur_lo, cur_hi = self.parameter_limits[param]
+                self.parameter_limits[param] = [max(cur_lo, lo), min(cur_hi, hi)]
+            else:
+                self.parameter_limits[param] = [lo, hi]
+
+    def _apply_updated_init(self, updated_init: dict) -> None:
+        """Apply stage-returned init values, clipping each to its current bounds."""
+        for k, v in updated_init.items():
+            if k in self.parameter_limits:
+                lo, hi = self.parameter_limits[k]
+                v = max(lo, min(hi, float(v)))
+            self.init_parameter_values[k] = v
 
     def plot_3d(self, **kwargs) -> None:
         """
@@ -861,7 +887,7 @@ class LimbObservation(PlanetObservation):
         self,
         n_sigma: float = 2.0,
         bias_correct: bool = False,
-        uncertainty: str = "jackknife",
+        uncertainty: str = "both",
     ) -> "LimbObservation":
         """
         Estimate planetary radius using the sagitta (arc-height) method.
@@ -876,7 +902,7 @@ class LimbObservation(PlanetObservation):
             bias_correct: If True and y0 is provided, correct for camera tilt bias using
                 the apex y-offset to estimate theta_x, then refine kappa via 1-D minimization.
             uncertainty: Bound-width method — "ols" (cheap, single pass),
-                "jackknife" (leave-one-out, default), or "both" (quadrature sum).
+                "jackknife" (leave-one-out), or "both" (quadrature sum, default).
 
         Returns:
             self: For method chaining.
@@ -922,10 +948,8 @@ class LimbObservation(PlanetObservation):
 
         result = fitter.fit()
 
-        for k, v in result.get("updated_init", {}).items():
-            self.init_parameter_values[k] = v
-        for k, v in result.get("updated_limits", {}).items():
-            self.parameter_limits[k] = v
+        self._apply_updated_limits(result.get("updated_limits", {}))
+        self._apply_updated_init(result.get("updated_init", {}))
 
         working_parameters = self.init_parameter_values.copy()
         working_parameters.update(
@@ -942,6 +966,7 @@ class LimbObservation(PlanetObservation):
             "method": "sagitta",
             "n_sigma": n_sigma,
             "uncertainty": uncertainty,
+            "bias_correct": bias_correct,
         }
         stage_entry.update(
             {
@@ -994,6 +1019,8 @@ class LimbObservation(PlanetObservation):
             max_iter: Maximum iterations.
             seed: Random seed.
             verbose: Print progress.
+            n_jobs: Parallel workers. Effective only for differential-evolution
+                and shgo; emits a UserWarning for other minimizers.
             _dashboard: Internal — FitDashboard instance passed by fit_limb.
 
         Returns:
@@ -1056,10 +1083,8 @@ class LimbObservation(PlanetObservation):
 
         result = fitter.fit()
 
-        for k, v in result.get("updated_init", {}).items():
-            self.init_parameter_values[k] = v
-        for k, v in result.get("updated_limits", {}).items():
-            self.parameter_limits[k] = v
+        self._apply_updated_limits(result.get("updated_limits", {}))
+        self._apply_updated_init(result.get("updated_init", {}))
 
         self.best_parameters = result["best_parameters"]
         self.fit_results = result["fit_results"]
@@ -1136,6 +1161,8 @@ class LimbObservation(PlanetObservation):
             max_iter_per_stage: Explicit per-stage iteration budget.
             seed: Random seed.
             verbose: Print progress.
+            n_jobs: Parallel workers. Effective only for differential-evolution
+                and shgo; emits a UserWarning for other minimizers.
 
         Returns:
             self: For method chaining.
@@ -1253,8 +1280,8 @@ class LimbObservation(PlanetObservation):
 
                 result = fitter.fit()
 
-                for k, v in result.get("updated_init", {}).items():
-                    self.init_parameter_values[k] = v
+                self._apply_updated_limits(result.get("updated_limits", {}))
+                self._apply_updated_init(result.get("updated_init", {}))
 
                 self.best_parameters = result["best_parameters"]
                 self.fit_results = result["fit_results"]
@@ -1312,6 +1339,8 @@ class LimbObservation(PlanetObservation):
             dashboard: Show a live FitDashboard during optimization.
             dashboard_kwargs: Extra kwargs forwarded to FitDashboard.__init__.
             target_planet: Planet name for dashboard reference radius.
+            n_jobs: Parallel workers forwarded to each arc/gradient stage.
+                Effective only for differential-evolution and shgo.
 
         Returns:
             self: For method chaining.

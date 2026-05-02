@@ -2352,6 +2352,8 @@ def _mock_obs_for_sagitta(
     stub.free_parameters = ["r", "h"]
     stub.stage_results = []
     stub.best_parameters = None
+    stub._apply_updated_limits = lambda lims: LimbObservation._apply_updated_limits(stub, lims)
+    stub._apply_updated_init = lambda inits: LimbObservation._apply_updated_init(stub, inits)
     return stub
 
 
@@ -2379,17 +2381,20 @@ class TestFitSagitta:
         assert result is stub
 
     def test_n_sigma_widens_bounds(self):
+        # n_sigma controls SagittaFitter's bound width; check raw stage output
+        # (parameter_limits reflects the intersection with initial bounds, which
+        # may clamp the sagitta bounds when sigma is large).
         limb = _synthetic_limb_for_obs()
 
         stub1 = _mock_obs_for_sagitta(limb)
         LimbObservation.fit_sagitta(stub1, n_sigma=1.0)
-        lo1, hi1 = stub1.parameter_limits["r"]
+        width1 = stub1.stage_results[0]["r_high"] - stub1.stage_results[0]["r_low"]
 
         stub2 = _mock_obs_for_sagitta(limb)
         LimbObservation.fit_sagitta(stub2, n_sigma=3.0)
-        lo2, hi2 = stub2.parameter_limits["r"]
+        width2 = stub2.stage_results[0]["r_high"] - stub2.stage_results[0]["r_low"]
 
-        assert (hi2 - lo2) > (hi1 - lo1)
+        assert width2 > width1
 
     def test_appends_stage_result(self):
         limb = _synthetic_limb_for_obs()

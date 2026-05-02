@@ -89,7 +89,6 @@ class BenchmarkResult:
     parameter_limits: Dict[str, List[float]]  # Bounds from fit_config
     minimizer_config: Dict[str, Any]
     minimizer_preset: Optional[str]
-    constrain_radius_n_sigma: Optional[float]
     perturbation_factors: Optional[str]
     # JSON [lo_km, hi_km] from scenario config (pre-constrain_radius)
     r_limits_configured: Optional[str]
@@ -298,7 +297,6 @@ class BenchmarkRunner:
                 parameter_limits TEXT NOT NULL,
                 minimizer_config TEXT NOT NULL,
                 minimizer_preset TEXT,
-                constrain_radius_n_sigma REAL,
                 perturbation_factors TEXT,
                 r_limits_configured TEXT,
 
@@ -396,6 +394,14 @@ class BenchmarkRunner:
         return code
 
     @staticmethod
+    def _sag_code(stage: dict) -> str:
+        """Compact suffix encoding bias_correct and uncertainty for a sagitta stage."""
+        bc = int(bool(stage.get("bias_correct", False)))
+        u = str(stage.get("uncertainty", "both"))
+        u_map = {"ols": "uo", "jackknife": "uj", "both": "ub"}
+        return f"bc{bc}_{u_map.get(u, 'u?')}"
+
+    @staticmethod
     def _rl_code(r_limits_km: list) -> str:
         """Short code for r_limits_km relative to Earth radius."""
         lo, hi = r_limits_km
@@ -414,6 +420,7 @@ class BenchmarkRunner:
     def _make_grid_scenario_name(self, params: dict) -> str:
         """Compact, human-readable name encoding all grid axes."""
         fit_stages = params.get("fit_stages")
+        sag_suffix = ""
         if fit_stages:
             sag = [s for s in fit_stages if s.get("method") == "sagitta"]
             has_opt = any(
@@ -422,12 +429,14 @@ class BenchmarkRunner:
             if not has_opt:
                 fp = self._fp_code(params.get("free_parameters", ["r"]))
                 n_s = float(sag[-1].get("n_sigma", 2.0)) if sag else 2.0
-                return f"g_sag_only_{fp}_s{int(n_s * 10):02d}"
+                sc = self._sag_code(sag[-1]) if sag else "bc0_ub"
+                return f"g_sag_only_{fp}_s{int(n_s * 10):02d}_{sc}"
             if sag:
                 params = dict(params)
                 params["constrain_radius_n_sigma"] = float(
                     sag[-1].get("n_sigma", 2.0)
                 )
+                sag_suffix = f"_{self._sag_code(sag[-1])}"
 
         if params.get("constrain_radius_only"):
             fp = self._fp_code(params.get("free_parameters", ["r"]))
@@ -461,7 +470,7 @@ class BenchmarkRunner:
         phf = f"ph{int(h_pf * 100):03d}"
         it = params.get("fit_params", {}).get("max_iter", 1000)
         it_s = f"i{it}" if it < 1000 else f"i{it // 1000}k"
-        return f"g_{m}_{p}_{fp}_{rl}_{hl}_{pf}_{phf}_{it_s}"
+        return f"g_{m}_{p}_{fp}_{rl}{sag_suffix}_{hl}_{pf}_{phf}_{it_s}"
 
     def _expand_top_level_grid(self) -> List[Dict[str, Any]]:
         """
@@ -814,7 +823,6 @@ class BenchmarkRunner:
             parameter_limits={},  # Will be filled from actual fit
             minimizer_config=scenario.get("minimizer", {}),
             minimizer_preset=scenario.get("minimizer_preset"),
-            constrain_radius_n_sigma=scenario.get("constrain_radius_n_sigma"),
             perturbation_factors=json.dumps(
                 scenario.get("perturbation_factor", 1.0)
                 if isinstance(scenario.get("perturbation_factor"), dict)
