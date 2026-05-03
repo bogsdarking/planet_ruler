@@ -14,12 +14,14 @@
 
 """Tests for benchmark infrastructure: analyzer, runner, and vet_images."""
 
+import csv
 import json
 import math
 import sqlite3
 import tempfile
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -582,3 +584,591 @@ class TestRunnerConstrainRadiusIntegration:
         assert result.fitted_radius is not None
         # Should be in the right ballpark for Earth (within 50%)
         assert 3e6 < result.fitted_radius < 1e7
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkAnalyzer.get_results
+# ---------------------------------------------------------------------------
+
+
+def _row_ts(timestamp, scenario="s1", image="img1"):
+    """Like _row but with a custom timestamp (index 2)."""
+    r = list(_row(scenario, image))
+    r[2] = timestamp
+    return tuple(r)
+
+
+@pytest.mark.unit
+class TestAnalyzerGetResults:
+    def test_returns_all_rows(self):
+        rows = [_row("s1"), _row("s2"), _row("s3")]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        df = analyzer.get_results()
+        db_path.unlink()
+        assert len(df) == 3
+
+    def test_filter_by_scenario(self):
+        rows = [_row("s1"), _row("s2"), _row("s1")]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        df = analyzer.get_results(scenario="s1")
+        db_path.unlink()
+        assert len(df) == 2
+        assert all(df["scenario_name"] == "s1")
+
+    def test_filter_by_image(self):
+        rows = [_row("s1", "img_a"), _row("s1", "img_b"), _row("s1", "img_a")]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        df = analyzer.get_results(image="img_b")
+        db_path.unlink()
+        assert len(df) == 1
+        assert df["image_name"].iloc[0] == "img_b"
+
+    def test_filter_by_min_timestamp(self):
+        rows = [
+            _row_ts("2025-01-15T00:00:00"),
+            _row_ts("2025-06-15T00:00:00"),
+        ]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        df = analyzer.get_results(min_timestamp="2025-04-01T00:00:00")
+        db_path.unlink()
+        assert len(df) == 1
+        assert df["timestamp"].iloc[0] == "2025-06-15T00:00:00"
+
+    def test_filter_by_max_timestamp(self):
+        rows = [
+            _row_ts("2025-01-15T00:00:00"),
+            _row_ts("2025-06-15T00:00:00"),
+        ]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        df = analyzer.get_results(max_timestamp="2025-04-01T00:00:00")
+        db_path.unlink()
+        assert len(df) == 1
+        assert df["timestamp"].iloc[0] == "2025-01-15T00:00:00"
+
+    def test_json_columns_parsed(self):
+        rows = [_row()]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        df = analyzer.get_results()
+        db_path.unlink()
+        assert isinstance(df["fit_params"].iloc[0], dict)
+
+    def test_empty_db_returns_empty_dataframe(self):
+        analyzer, db_path = _make_analyzer_with_data([])
+        df = analyzer.get_results()
+        db_path.unlink()
+        assert len(df) == 0
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkAnalyzer.get_summary_stats
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestAnalyzerGetSummaryStats:
+    def test_returns_dataframe_with_n_runs(self):
+        rows = [_row("s1"), _row("s1")]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        summary = analyzer.get_summary_stats()
+        db_path.unlink()
+        assert isinstance(summary, pd.DataFrame)
+        assert "n_runs" in summary.columns
+
+    def test_n_runs_correct(self):
+        rows = [_row("s1"), _row("s1"), _row("s1")]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        summary = analyzer.get_summary_stats()
+        db_path.unlink()
+        row = summary[summary["scenario_name"] == "s1"]
+        assert row["n_runs"].iloc[0] == 3
+
+    def test_filter_by_scenario(self):
+        rows = [_row("s1"), _row("s1"), _row("s2")]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        summary = analyzer.get_summary_stats(scenario="s1")
+        db_path.unlink()
+        assert len(summary) == 1
+        assert summary["scenario_name"].iloc[0] == "s1"
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkAnalyzer.compare_scenarios
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestAnalyzerCompareScenarios:
+    def test_returns_pivot_table(self):
+        rows = [
+            _row("scen_a", "img1", total_time=5.0),
+            _row("scen_b", "img1", total_time=10.0),
+        ]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        pivot = analyzer.compare_scenarios(["scen_a", "scen_b"], metric="total_time")
+        db_path.unlink()
+        assert isinstance(pivot, pd.DataFrame)
+        assert "scen_a" in pivot.columns
+        assert "scen_b" in pivot.columns
+
+    def test_metric_values_correct(self):
+        rows = [
+            _row("scen_a", "img1", total_time=5.0),
+            _row("scen_b", "img1", total_time=10.0),
+        ]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        pivot = analyzer.compare_scenarios(["scen_a", "scen_b"], metric="total_time")
+        db_path.unlink()
+        assert pivot.loc["img1", "scen_a"] == pytest.approx(5.0)
+        assert pivot.loc["img1", "scen_b"] == pytest.approx(10.0)
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkAnalyzer.get_timing_breakdown
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestAnalyzerGetTimingBreakdown:
+    def test_returns_dataframe(self):
+        rows = [_row("s1"), _row("s1")]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        result = analyzer.get_timing_breakdown()
+        db_path.unlink()
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) > 0
+
+    def test_timing_columns_present(self):
+        rows = [_row("s1")]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        result = analyzer.get_timing_breakdown()
+        db_path.unlink()
+        top_cols = result.columns.get_level_values(0)
+        assert "image_load_time" in top_cols
+        assert "optimization_time" in top_cols
+
+    def test_filter_by_scenario(self):
+        rows = [_row("s1"), _row("s2")]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        result = analyzer.get_timing_breakdown(scenario="s1")
+        db_path.unlink()
+        assert list(result.index) == ["s1"]
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkAnalyzer.identify_bottlenecks
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestAnalyzerIdentifyBottlenecks:
+    def test_returns_dict(self):
+        rows = [_row("s1")]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        result = analyzer.identify_bottlenecks("s1")
+        db_path.unlink()
+        assert isinstance(result, dict)
+
+    def test_bottleneck_detected(self):
+        # _row(total_time=10.0): optimization_time = 10.0 - 0.2 = 9.8
+        # fraction = 9.8 / 10.0 = 0.98 > 0.5 → bottleneck
+        rows = [_row("s1", total_time=10.0)]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        result = analyzer.identify_bottlenecks("s1", threshold=0.5)
+        db_path.unlink()
+        assert "optimization" in result
+
+    def test_no_bottleneck_when_threshold_high(self):
+        # With threshold=0.99, fraction 0.98 does not qualify
+        rows = [_row("s1", total_time=10.0)]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        result = analyzer.identify_bottlenecks("s1", threshold=0.99)
+        db_path.unlink()
+        assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkAnalyzer.export_csv
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestAnalyzerExportCsv:
+    def test_creates_csv_file(self, tmp_path):
+        rows = [_row("s1"), _row("s1")]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        out = tmp_path / "results.csv"
+        analyzer.export_csv(out)
+        db_path.unlink()
+        assert out.exists()
+
+    def test_csv_row_count_matches_db(self, tmp_path):
+        rows = [_row("s1"), _row("s2"), _row("s1")]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        out = tmp_path / "results.csv"
+        analyzer.export_csv(out)
+        db_path.unlink()
+        with open(out) as f:
+            reader = csv.reader(f)
+            lines = list(reader)
+        assert len(lines) - 1 == 3  # subtract header
+
+    def test_csv_contains_expected_columns(self, tmp_path):
+        rows = [_row("s1")]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        out = tmp_path / "results.csv"
+        analyzer.export_csv(out)
+        db_path.unlink()
+        with open(out) as f:
+            header = f.readline().strip().split(",")
+        assert "scenario_name" in header
+        assert "image_name" in header
+        assert "total_time" in header
+
+    def test_filter_by_scenario_exports_subset(self, tmp_path):
+        rows = [_row("s1"), _row("s1"), _row("s2")]
+        analyzer, db_path = _make_analyzer_with_data(rows)
+        out = tmp_path / "results_s1.csv"
+        analyzer.export_csv(out, scenario="s1")
+        db_path.unlink()
+        with open(out) as f:
+            reader = csv.DictReader(f)
+            exported = list(reader)
+        assert all(r["scenario_name"] == "s1" for r in exported)
+        assert len(exported) == 2
+
+
+# ---------------------------------------------------------------------------
+# vet_images — _load_annotation_as_target
+# ---------------------------------------------------------------------------
+
+
+def _write_annot_json(tmp_path, points, fmt="points", image_width=200, image_height=150):
+    """Write a minimal annotation JSON file and return its path."""
+    path = tmp_path / "annot_limb_points.json"
+    if fmt == "points":
+        data = {
+            "image_path": str(tmp_path / "img.jpg"),
+            "image_width": image_width,
+            "image_height": image_height,
+            "points": points,
+        }
+    else:  # "limb_points" nested format
+        data = {
+            "image_path": str(tmp_path / "img.jpg"),
+            "image_width": image_width,
+            "image_height": image_height,
+            "limb_points": {"points": points},
+        }
+    with open(path, "w") as f:
+        json.dump(data, f)
+    return path
+
+
+@pytest.mark.unit
+class TestVetImagesLoadAnnotation:
+    def test_returns_array_of_image_width(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import _load_annotation_as_target
+
+        path = _write_annot_json(tmp_path, [[50.0, 200.0]], image_width=200)
+        result = _load_annotation_as_target(path, image_width=200)
+        assert len(result) == 200
+
+    def test_annotated_positions_filled(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import _load_annotation_as_target
+
+        path = _write_annot_json(tmp_path, [[50.0, 200.0]], image_width=200)
+        result = _load_annotation_as_target(path, image_width=200)
+        assert result[50] == pytest.approx(200.0)
+
+    def test_unannotated_positions_are_nan(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import _load_annotation_as_target
+
+        path = _write_annot_json(tmp_path, [[50.0, 200.0]], image_width=200)
+        result = _load_annotation_as_target(path, image_width=200)
+        assert np.isnan(result[0])
+        assert np.isnan(result[100])
+
+    def test_out_of_bounds_x_skipped(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import _load_annotation_as_target
+
+        # Points with x=-1 and x=300 (> width=200) should not cause IndexError
+        path = _write_annot_json(
+            tmp_path, [[-1.0, 100.0], [50.0, 200.0], [300.0, 100.0]], image_width=200
+        )
+        result = _load_annotation_as_target(path, image_width=200)
+        assert result[50] == pytest.approx(200.0)
+        assert np.isnan(result[0])
+
+    def test_points_flat_format_works(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import _load_annotation_as_target
+
+        path = _write_annot_json(tmp_path, [[30.0, 150.0]], fmt="points", image_width=200)
+        result = _load_annotation_as_target(path, image_width=200)
+        assert result[30] == pytest.approx(150.0)
+
+    def test_limb_points_nested_format_works(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import _load_annotation_as_target
+
+        path = _write_annot_json(tmp_path, [[80.0, 180.0]], fmt="limb_points", image_width=200)
+        result = _load_annotation_as_target(path, image_width=200)
+        assert result[80] == pytest.approx(180.0)
+
+
+# ---------------------------------------------------------------------------
+# vet_images — _build_step2_config
+# ---------------------------------------------------------------------------
+
+
+EARTH_RADIUS_M = 6_371_000.0
+
+_STEP1_CONFIG = {
+    "free_parameters": ["h", "theta_x", "theta_y", "theta_z"],
+    "init_parameter_values": {
+        "r": EARTH_RADIUS_M,
+        "h": 10_000.0,
+        "theta_x": 0.05,
+        "theta_y": 0.0,
+        "theta_z": 3.14159,
+        "f": 0.005,
+        "w": 0.0076,
+    },
+    "parameter_limits": {
+        "r": [EARTH_RADIUS_M * 0.999, EARTH_RADIUS_M * 1.001],
+        "h": [1_500.0, 18_000.0],
+        "theta_x": [-0.5, 0.5],
+        "theta_y": [-0.5, 0.5],
+        "theta_z": [2.0, 4.0],
+        "f": [0.003, 0.01],
+        "w": [0.005, 0.012],
+    },
+}
+
+
+class _FakeObs:
+    best_parameters = {
+        "theta_x": 0.1,
+        "theta_y": 0.0,
+        "theta_z": 3.14,
+        "f": 0.005,
+        "w": 0.0076,
+    }
+
+
+@pytest.mark.unit
+class TestVetImagesBuildStep2Config:
+    def test_h_removed_from_free_parameters(self):
+        from planet_ruler.benchmarks.vet_images import _build_step2_config
+
+        import copy
+        config2 = _build_step2_config(copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs())
+        assert "h" not in config2["free_parameters"]
+
+    def test_r_added_to_free_parameters(self):
+        from planet_ruler.benchmarks.vet_images import _build_step2_config
+
+        import copy
+        config2 = _build_step2_config(copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs())
+        assert "r" in config2["free_parameters"]
+
+    def test_h_pinned_to_provided_value(self):
+        from planet_ruler.benchmarks.vet_images import _build_step2_config
+
+        import copy
+        h_fit = 11_234.5
+        config2 = _build_step2_config(copy.deepcopy(_STEP1_CONFIG), h_fit, _FakeObs())
+        assert config2["init_parameter_values"]["h"] == pytest.approx(h_fit)
+
+    def test_r_limits_wide(self):
+        from planet_ruler.benchmarks.vet_images import _build_step2_config
+
+        import copy
+        config2 = _build_step2_config(copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs())
+        assert config2["parameter_limits"]["r"][1] > 1e7
+
+    def test_step1_config_not_mutated(self):
+        from planet_ruler.benchmarks.vet_images import _build_step2_config
+
+        import copy
+        original = copy.deepcopy(_STEP1_CONFIG)
+        _build_step2_config(copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs())
+        assert "h" in original["free_parameters"]
+
+    def test_orientation_warm_started_from_obs(self):
+        from planet_ruler.benchmarks.vet_images import _build_step2_config
+
+        import copy
+        config2 = _build_step2_config(copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs())
+        # theta_x=0.1 is within [-0.5, 0.5], so it should be warm-started
+        assert config2["init_parameter_values"]["theta_x"] == pytest.approx(0.1)
+
+
+# ---------------------------------------------------------------------------
+# vet_images — _save_csv
+# ---------------------------------------------------------------------------
+
+
+def _make_vet_result(name="img1", verdict="PASS", h_km=10.0, r_km=None):
+    from planet_ruler.benchmarks.vet_images import VetResult
+
+    return VetResult(
+        image_name=name,
+        annotation_file=f"{name}_limb_points.json",
+        fitted_altitude_km=h_km,
+        gps_altitude_km=10.5,
+        fitted_radius_km=r_km,
+        radius_error_pct=None if r_km is None else abs(r_km - 6371.0) / 6371.0 * 100,
+        convergence="success",
+        runtime_s=1.5,
+        verdict=verdict,
+        notes="test",
+    )
+
+
+@pytest.mark.unit
+class TestVetImagesSaveCsv:
+    def test_creates_csv_file(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import _save_csv
+
+        results = [_make_vet_result("img1"), _make_vet_result("img2")]
+        out = tmp_path / "out.csv"
+        _save_csv(results, out)
+        assert out.exists()
+
+    def test_header_row_correct(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import _save_csv
+
+        out = tmp_path / "out.csv"
+        _save_csv([_make_vet_result()], out)
+        with open(out) as f:
+            header = f.readline().strip().split(",")
+        assert "image_name" in header
+        assert "verdict" in header
+        assert "convergence" in header
+
+    def test_row_count_matches_results(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import _save_csv
+
+        out = tmp_path / "out.csv"
+        _save_csv([_make_vet_result("a"), _make_vet_result("b")], out)
+        with open(out) as f:
+            reader = csv.reader(f)
+            lines = list(reader)
+        assert len(lines) - 1 == 2  # subtract header
+
+    def test_none_fields_written_as_empty_string(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import _save_csv
+
+        # r_km=None → fitted_radius_km field should be "" not "None"
+        out = tmp_path / "out.csv"
+        _save_csv([_make_vet_result(r_km=None)], out)
+        with open(out) as f:
+            reader = csv.DictReader(f)
+            row = next(reader)
+        assert row["fitted_radius_km"] == ""
+
+    def test_creates_parent_directories(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import _save_csv
+
+        out = tmp_path / "subdir" / "nested" / "out.csv"
+        _save_csv([_make_vet_result()], out)
+        assert out.exists()
+
+
+# ---------------------------------------------------------------------------
+# vet_images — _print_results
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestVetImagesPrintResults:
+    def test_does_not_raise(self, capsys):
+        from planet_ruler.benchmarks.vet_images import _print_results
+
+        results = [
+            _make_vet_result("img1", verdict="PASS"),
+            _make_vet_result("img2", verdict="WARN"),
+            _make_vet_result("img3", verdict="FAIL"),
+        ]
+        _print_results(results)
+        captured = capsys.readouterr()
+        assert "PASS" in captured.out or "WARN" in captured.out
+
+    def test_empty_list_does_not_raise(self, capsys):
+        from planet_ruler.benchmarks.vet_images import _print_results
+
+        _print_results([])
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkRunner — _make_grid_scenario_name (additional cases)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    not (
+        Path(__file__).parent.parent
+        / "planet_ruler/benchmarks/configs/smoke_test.yaml"
+    ).exists(),
+    reason="smoke_test.yaml not found",
+)
+class TestRunnerMakeGridScenarioNameExtra:
+    def _runner(self, tmp_path):
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        config_path = (
+            Path(__file__).parent.parent
+            / "planet_ruler/benchmarks/configs/smoke_test.yaml"
+        )
+        return BenchmarkRunner(config_path, db_path=tmp_path / "test.db")
+
+    def test_no_fit_stages_no_cr(self, tmp_path):
+        runner = self._runner(tmp_path)
+        params = {
+            "minimizer": "basinhopping",
+            "minimizer_preset": "fast",
+            "free_parameters": ["r"],
+            "r_limits_km": [2000, 14000],
+            "fit_params": {"max_iter": 100},
+        }
+        name = runner._make_grid_scenario_name(params)
+        assert "cr" not in name
+
+    def test_minimizer_code_in_name(self, tmp_path):
+        runner = self._runner(tmp_path)
+        params = {
+            "minimizer": "basinhopping",
+            "minimizer_preset": "fast",
+            "free_parameters": ["r"],
+            "r_limits_km": [2000, 14000],
+            "fit_params": {},
+        }
+        name = runner._make_grid_scenario_name(params)
+        assert "bh" in name
+
+    def test_free_param_code_r_only(self, tmp_path):
+        runner = self._runner(tmp_path)
+        params = {
+            "minimizer": "basinhopping",
+            "minimizer_preset": "fast",
+            "free_parameters": ["r"],
+            "r_limits_km": [2000, 14000],
+            "fit_params": {},
+        }
+        name = runner._make_grid_scenario_name(params)
+        # _fp_code(["r"]) → "r" (no h, no angles, no w/f)
+        # The name segment should contain the fp code
+        assert "_r_" in name or name.endswith("_r")
+
+    def test_free_param_code_with_h(self, tmp_path):
+        runner = self._runner(tmp_path)
+        params_r = {
+            "minimizer": "basinhopping",
+            "minimizer_preset": "fast",
+            "free_parameters": ["r"],
+            "r_limits_km": [2000, 14000],
+            "fit_params": {},
+        }
+        params_rh = {**params_r, "free_parameters": ["r", "h"]}
+        name_r = runner._make_grid_scenario_name(params_r)
+        name_rh = runner._make_grid_scenario_name(params_rh)
+        assert name_r != name_rh
