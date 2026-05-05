@@ -88,6 +88,8 @@ docs/generated/
 *.hdf5
 *.db
 *.json
+!planet_ruler/benchmarks/annotations/**
+!planet_ruler/benchmarks/images/**/*.crop.json
 
 # Temporary files
 *.tmp

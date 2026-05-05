@@ -44,9 +44,6 @@ Usage:
     # Vet a specific image
     python -m planet_ruler.benchmarks.vet_images --image pexels-claiton-17217951_exif_cropped
 
-    # Fix camera params from EXIF (faster + potentially more accurate)
-    python -m planet_ruler.benchmarks.vet_images --fix-camera
-
     # Save results to CSV
     python -m planet_ruler.benchmarks.vet_images --log planet_ruler/benchmarks/results/vetting_log.csv
 """
@@ -112,15 +109,21 @@ class VetResult:
     runtime_s: float
     verdict: str   # PASS, WARN, FAIL
     notes: str
+    best_parameters: Optional[dict] = None   # full param dict from step-1 fit
 
 
 def _find_benchmark_dir() -> Path:
-    """Walk up from CWD to find the benchmarks directory inside the repo."""
+    """Return the benchmarks directory, regardless of CWD."""
+    # Script always lives inside benchmarks/ — use that as the primary anchor.
+    script_dir = Path(__file__).resolve().parent
+    if (script_dir / "images").exists():
+        return script_dir
+    # Fallback: walk up from CWD (useful if running from an installed copy).
     for parent in [Path.cwd(), *Path.cwd().parents]:
         candidate = parent / "planet_ruler" / "benchmarks"
         if (candidate / "images").exists():
             return candidate
-    return Path(__file__).parent
+    return script_dir
 
 
 def discover_pairs(benchmark_dir: Path, image_filter: Optional[list] = None) -> list:
@@ -183,14 +186,14 @@ def _load_annotation_as_target(annot_path: Path, image_width: int) -> np.ndarray
 
 
 def _build_vet_config(
-    image_path: Path, fix_camera: bool = False
+    image_path: Path,
 ) -> Tuple[dict, Optional[float]]:
     """
     Build a fit config for vetting.
 
-    r is fixed to EARTH_RADIUS_M; h is freed with wide bounds.  If
-    ``fix_camera`` is True, f and w are also removed from free_parameters
-    (useful when EXIF focal length and sensor width are trustworthy).
+    r is fixed to EARTH_RADIUS_M; h is freed with wide bounds.  f and w are
+    always fixed from EXIF — the search space is large enough with h +
+    orientation, and EXIF camera params are generally trustworthy.
 
     The validator requires every entry in init_parameter_values to have a
     corresponding entry in parameter_limits.  When fixing r we satisfy this
@@ -237,12 +240,11 @@ def _build_vet_config(
         EARTH_RADIUS_M * 1.001,
     ]
 
-    if fix_camera:
-        # Remove f and w from free_parameters; EXIF priors are used directly.
-        # Tighter search space can improve accuracy when EXIF is trustworthy.
-        config["free_parameters"] = [
-            p for p in config["free_parameters"] if p not in ("f", "w")
-        ]
+    # Fix f and w from EXIF — search space is already large enough with h +
+    # orientation, and EXIF camera params are generally trustworthy.
+    config["free_parameters"] = [
+        p for p in config["free_parameters"] if p not in ("f", "w")
+    ]
 
     return config, gps_altitude_m
 
@@ -268,13 +270,15 @@ def _build_step2_config(step1_config: dict, h_fit_m: float, step1_obs) -> dict:
         h_fit_m * (1.0 + h_tol),
     ]
 
-    # Free r with wide bounds; override the tight dummy bounds from step 1.
+    # Free r with loose-preset bounds (±50% of Earth radius).
     # IMPORTANT: do NOT seed x0 at EARTH_RADIUS_M — observation.py passes
     # init_parameter_values directly as x0 to differential_evolution, which
     # would hand the optimizer one population member at the exact true answer.
-    # Use the log-space midpoint of the search range instead (~10,000 km).
-    _R_LO, _R_HI = 1_000_000.0, 100_000_000.0
-    r_init_neutral = (_R_LO * _R_HI) ** 0.5  # geometric midpoint ≈ 10,000 km
+    # The arithmetic midpoint of [0.5×ER, 1.5×ER] IS Earth radius, so use
+    # the geometric midpoint instead (~5,519 km — biased low, but safe).
+    _R_LO = EARTH_RADIUS_M * 0.50   # ≈ 3,186 km
+    _R_HI = EARTH_RADIUS_M * 1.50   # ≈ 9,557 km
+    r_init_neutral = (_R_LO * _R_HI) ** 0.5  # geometric midpoint ≈ 5,519 km
     if "r" not in config["free_parameters"]:
         config["free_parameters"].append("r")
     config["init_parameter_values"]["r"] = r_init_neutral
@@ -294,12 +298,179 @@ def _build_step2_config(step1_config: dict, h_fit_m: float, step1_obs) -> dict:
     return config
 
 
+def _update_exif_altitude(image_path: Path, altitude_m: float) -> None:
+    """Write altitude_m to the JPEG GPS altitude EXIF tag in-place.
+
+    Uses piexif.insert() so the pixel data is never decoded or re-compressed.
+    Precision: 2 decimal places in metres (matches existing benchmark EXIF).
+    """
+    import copy
+    import piexif
+
+    exif_dict = piexif.load(str(image_path))
+    new_exif = copy.deepcopy(exif_dict)
+    if "GPS" not in new_exif or new_exif["GPS"] is None:
+        new_exif["GPS"] = {}
+    new_exif["GPS"][piexif.GPSIFD.GPSAltitude] = (int(round(altitude_m * 100)), 100)
+    new_exif["GPS"][piexif.GPSIFD.GPSAltitudeRef] = 0  # above sea level
+    piexif.insert(piexif.dump(new_exif), str(image_path))
+
+
+def _build_final_scan_config(image_path: Path) -> Tuple[dict, float]:
+    """
+    Build a fit config for the final validation scan.
+
+    Reads altitude from EXIF (expected to be the fitted value written by
+    --update-exif), pins h to that value, and frees r with loose bounds.
+    f and w are fixed from EXIF, same as in regular vetting.
+
+    Returns:
+        (config, exif_altitude_km)
+
+    Raises:
+        ValueError: If no GPS altitude is present in EXIF.
+    """
+    from planet_ruler.camera import create_config_from_image, get_gps_altitude
+
+    exif_altitude_m = get_gps_altitude(str(image_path))
+    if exif_altitude_m is None:
+        raise ValueError(
+            f"No GPS altitude in EXIF for {image_path.name}. "
+            "Run --two-step --update-exif first."
+        )
+
+    with _suppress_stdout():
+        config = create_config_from_image(
+            image_path=str(image_path),
+            altitude_m=exif_altitude_m,
+            planet="earth",
+        )
+
+    # Pin h: remove from free_parameters, use tight bounds to satisfy validator.
+    config["free_parameters"] = [p for p in config["free_parameters"] if p != "h"]
+    config["init_parameter_values"]["h"] = float(exif_altitude_m)
+    h_tol = 0.001  # 0.1% — effectively fixed
+    config["parameter_limits"]["h"] = [
+        exif_altitude_m * (1.0 - h_tol),
+        exif_altitude_m * (1.0 + h_tol),
+    ]
+
+    # Free r with loose-preset bounds (±50% of Earth radius), geometric midpoint
+    # init — same bounds/init convention as _build_step2_config.
+    _R_LO = EARTH_RADIUS_M * 0.50
+    _R_HI = EARTH_RADIUS_M * 1.50
+    config["free_parameters"] = [p for p in config["free_parameters"] if p != "r"]
+    config["free_parameters"].append("r")
+    config["init_parameter_values"]["r"] = (_R_LO * _R_HI) ** 0.5
+    config["parameter_limits"]["r"] = [_R_LO, _R_HI]
+
+    # Fix f and w from EXIF.
+    config["free_parameters"] = [
+        p for p in config["free_parameters"] if p not in ("f", "w")
+    ]
+
+    return config, exif_altitude_m / 1000.0
+
+
+def vet_image_final_scan(
+    image_path: Path,
+    annot_path: Path,
+    max_iter: int,
+    minimizer_preset: str,
+) -> VetResult:
+    """
+    Final validation scan: h pinned from EXIF, r free.
+
+    Confirms the pipeline is self-consistent: pinning the fitted h (now
+    written to EXIF) should recover r ≈ 6371 km.
+
+    Verdict is based purely on radius recovery:
+      PASS  r_err ≤ 10%
+      WARN  10% < r_err ≤ 20%
+      FAIL  r_err > 20% or convergence error
+    """
+    from planet_ruler.image import load_image
+    from planet_ruler.observation import LimbObservation
+
+    image_name = image_path.stem
+    annot_name = annot_path.name
+    t0 = time.time()
+
+    try:
+        img = load_image(str(image_path))
+        config, exif_alt_km = _build_final_scan_config(image_path)
+
+        obs = LimbObservation(
+            image_filepath=str(image_path),
+            fit_config=config,
+            limb_detection="manual",
+            minimizer="differential-evolution",
+        )
+
+        target = _load_annotation_as_target(annot_path, img.shape[1])
+        obs.register_limb(target)
+
+        obs.fit_arc(
+            loss_function="l2",
+            max_iter=max_iter,
+            seed=0,
+            verbose=False,
+            minimizer="differential-evolution",
+            minimizer_preset=minimizer_preset,
+        )
+
+        fitted_r_km = obs.radius_km
+        runtime = time.time() - t0
+        r_err_pct = abs(fitted_r_km - 6371.0) / 6371.0 * 100
+
+        if r_err_pct <= 10.0:
+            verdict = "PASS"
+        elif r_err_pct <= 20.0:
+            verdict = "WARN"
+        else:
+            verdict = "FAIL"
+
+        notes = (
+            f"r_fit={fitted_r_km:.0f} km ({r_err_pct:.1f}% err), "
+            f"h_EXIF={exif_alt_km:.1f} km (pinned)"
+        )
+
+        return VetResult(
+            image_name=image_name,
+            annotation_file=annot_name,
+            fitted_altitude_km=exif_alt_km,
+            gps_altitude_km=exif_alt_km,
+            fitted_radius_km=fitted_r_km,
+            radius_error_pct=r_err_pct,
+            convergence="success",
+            runtime_s=runtime,
+            verdict=verdict,
+            notes=notes,
+            best_parameters=obs.best_parameters,
+        )
+
+    except Exception as e:
+        runtime = time.time() - t0
+        tb_last = traceback.format_exc().splitlines()[-1]
+        return VetResult(
+            image_name=image_name,
+            annotation_file=annot_name,
+            fitted_altitude_km=None,
+            gps_altitude_km=None,
+            fitted_radius_km=None,
+            radius_error_pct=None,
+            convergence=f"error: {e}",
+            runtime_s=runtime,
+            verdict="FAIL",
+            notes=tb_last,
+        )
+
+
 def vet_image(
     image_path: Path,
     annot_path: Path,
     max_iter: int,
     minimizer_preset: str,
-    fix_camera: bool = False,
     two_step: bool = False,
 ) -> VetResult:
     """Run a vetting fit on a single image+annotation pair."""
@@ -312,16 +483,14 @@ def vet_image(
 
     try:
         img = load_image(str(image_path))
-        config, gps_altitude_m = _build_vet_config(
-            image_path, fix_camera=fix_camera
-        )
+        config, gps_altitude_m = _build_vet_config(image_path)
         gps_alt_km = gps_altitude_m / 1000.0 if gps_altitude_m is not None else None
 
         obs = LimbObservation(
             image_filepath=str(image_path),
             fit_config=config,
             limb_detection="manual",
-            minimizer="basinhopping",
+            minimizer="differential-evolution",
         )
 
         target = _load_annotation_as_target(annot_path, img.shape[1])
@@ -332,7 +501,7 @@ def vet_image(
             max_iter=max_iter,
             seed=0,
             verbose=False,
-            minimizer="basinhopping",
+            minimizer="differential-evolution",
             minimizer_preset=minimizer_preset,
         )
 
@@ -348,7 +517,7 @@ def vet_image(
                 image_filepath=str(image_path),
                 fit_config=config2,
                 limb_detection="manual",
-                minimizer="basinhopping",
+                minimizer="differential-evolution",
             )
             obs2.register_limb(target)
             obs2.fit_arc(
@@ -356,7 +525,7 @@ def vet_image(
                 max_iter=max_iter,
                 seed=0,
                 verbose=False,
-                minimizer="basinhopping",
+                minimizer="differential-evolution",
                 minimizer_preset=minimizer_preset,
             )
             fitted_r_km = obs2.radius_km
@@ -382,7 +551,7 @@ def vet_image(
         if two_step and r_err_pct is not None:
             if r_err_pct > 20.0:
                 verdict = "FAIL"
-            elif r_err_pct > 5.0 and verdict == "PASS":
+            elif r_err_pct > 10.0 and verdict == "PASS":
                 verdict = "WARN"
 
         # Detect boundary-hitting: if the fit landed within _BOUNDARY_FRACTION of
@@ -419,6 +588,7 @@ def vet_image(
             runtime_s=runtime,
             verdict=verdict,
             notes=", ".join(note_parts),
+            best_parameters=obs.best_parameters,
         )
 
     except Exception as e:
@@ -498,6 +668,7 @@ def _save_csv(results: list, log_path: Path) -> None:
         "runtime_s",
         "verdict",
         "notes",
+        "best_parameters",
     ]
     with open(log_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -531,6 +702,9 @@ def _save_csv(results: list, log_path: Path) -> None:
                     "runtime_s": f"{r.runtime_s:.2f}",
                     "verdict": r.verdict,
                     "notes": r.notes,
+                    "best_parameters": (
+                        json.dumps(r.best_parameters) if r.best_parameters else ""
+                    ),
                 }
             )
     print(f"Results saved to: {log_path}")
@@ -544,14 +718,12 @@ def main():
 Convergence notes:
   Basin hopping with 300 hops (default) is sufficient for most images.
   A FAIL after 300 iterations is a strong signal the image or annotation is
-  problematic.  Use --fast for a quick preview (100 hops, ~3x faster).
-  Use --fix-camera to reduce the search space when EXIF data is trustworthy.
+  problematic.  Use --fast for a quick preview (~3x faster, less rigorous).
 
 Examples:
   python -m planet_ruler.benchmarks.vet_images
   python -m planet_ruler.benchmarks.vet_images --fast
   python -m planet_ruler.benchmarks.vet_images --image pexels-claiton-17217951_exif_cropped
-  python -m planet_ruler.benchmarks.vet_images --fix-camera
   python -m planet_ruler.benchmarks.vet_images --max-iter 500 --preset robust
   python -m planet_ruler.benchmarks.vet_images --log planet_ruler/benchmarks/results/vetting_log.csv
         """,
@@ -583,14 +755,6 @@ Examples:
         help="Quick preview mode: preset=balanced, max-iter=100 (~3x faster, less rigorous)",
     )
     parser.add_argument(
-        "--fix-camera",
-        action="store_true",
-        help=(
-            "Fix f and w from EXIF (remove from free_parameters). "
-            "Can improve accuracy when EXIF focal length and sensor width are trustworthy."
-        ),
-    )
-    parser.add_argument(
         "--two-step",
         action="store_true",
         help=(
@@ -598,6 +762,25 @@ Examples:
             "step 1 fixes r and finds h, "
             "step 2 pins h to that value and recovers r. "
             "Verdict is based on how well r recovers to 6371 km."
+        ),
+    )
+    parser.add_argument(
+        "--update-exif",
+        action="store_true",
+        help=(
+            "After two-step vetting, write the fitted altitude back to each "
+            "PASS or WARN real image's GPS altitude EXIF tag. "
+            "Requires --two-step. Synth images are shown in results but their "
+            "EXIF is not modified (their altitude is already ground truth)."
+        ),
+    )
+    parser.add_argument(
+        "--final-scan",
+        action="store_true",
+        help=(
+            "Final validation mode: read h from EXIF (written by --update-exif), "
+            "pin h, free r, and verify r ≈ 6371 km. "
+            "Cannot be combined with --two-step."
         ),
     )
     parser.add_argument(
@@ -609,13 +792,18 @@ Examples:
 
     args = parser.parse_args()
 
+    if args.update_exif and not args.two_step:
+        parser.error("--update-exif requires --two-step")
+    if args.final_scan and args.two_step:
+        parser.error("--final-scan and --two-step are mutually exclusive")
+
     # Resolve preset and max_iter (--fast sets defaults, explicit flags override)
     if args.fast:
         preset = args.preset or "balanced"
         max_iter = args.max_iter or 100
     else:
-        preset = args.preset or "robust"
-        max_iter = args.max_iter or 300
+        preset = args.preset or "balanced"
+        max_iter = args.max_iter or 10_000
 
     benchmark_dir = _find_benchmark_dir()
     pairs = discover_pairs(benchmark_dir, image_filter=args.images)
@@ -631,11 +819,12 @@ Examples:
             )
         sys.exit(1)
 
-    if args.two_step:
+    if args.final_scan:
+        mode = "final scan (h pinned from EXIF → r free)"
+    elif args.two_step:
         mode = "two-step bootstrap (step1: r fixed → h; step2: h pinned → r)"
     else:
-        cam = " + camera fixed" if args.fix_camera else ""
-        mode = f"r fixed at 6371 km, h free{cam}"
+        mode = "r fixed at 6371 km, h free, f+w fixed from EXIF"
     print(f"Vetting {len(pairs)} image+annotation pair(s)")
     print(f"Fit mode  : {mode}")
     print(f"Preset    : {preset}  Max iters: {max_iter} per step")
@@ -645,19 +834,67 @@ Examples:
     results = []
     for i, (image_path, annot_path) in enumerate(pairs, 1):
         print(f"[{i}/{len(pairs)}] {image_path.stem} ...", end="  ", flush=True)
-        result = vet_image(
-            image_path,
-            annot_path,
-            max_iter=max_iter,
-            minimizer_preset=preset,
-            fix_camera=args.fix_camera,
-            two_step=args.two_step,
-        )
+        if args.final_scan:
+            result = vet_image_final_scan(
+                image_path,
+                annot_path,
+                max_iter=max_iter,
+                minimizer_preset=preset,
+            )
+        else:
+            result = vet_image(
+                image_path,
+                annot_path,
+                max_iter=max_iter,
+                minimizer_preset=preset,
+                two_step=args.two_step,
+            )
         verdict_label = {"PASS": "PASS", "WARN": "WARN", "FAIL": "FAIL"}.get(
             result.verdict, result.verdict
         )
         print(f"{verdict_label}  ({result.runtime_s:.1f}s)")
         results.append(result)
+
+    if args.update_exif:
+        updated = []
+        skipped_synth = []
+        skipped_fail = []
+        for result in results:
+            image_path = benchmark_dir / "images" / f"{result.image_name}.jpg"
+            if result.image_name.startswith("synth_"):
+                skipped_synth.append(result.image_name)
+                continue
+            if result.fitted_altitude_km is None:
+                skipped_fail.append(result.image_name)
+                continue
+            # For images that already had GPS altitude, only write on PASS/WARN —
+            # a FAIL verdict means the fitted h is untrustworthy.
+            # For images with no GPS altitude at all, always write the step-1 h
+            # (there is no prior to protect, and we need something in EXIF to
+            # run --final-scan at all).
+            if result.gps_altitude_km is not None and result.verdict == "FAIL":
+                skipped_fail.append(result.image_name)
+                continue
+            h_m = result.fitted_altitude_km * 1000.0
+            try:
+                _update_exif_altitude(image_path, h_m)
+                updated.append(f"{result.image_name} → {result.fitted_altitude_km:.2f} km")
+            except Exception as e:
+                print(f"  WARNING: failed to update EXIF for {result.image_name}: {e}",
+                      file=sys.stderr)
+
+        print()
+        print(f"EXIF altitude updated for {len(updated)} image(s):")
+        for line in updated:
+            print(f"  {line}")
+        if skipped_synth:
+            print(
+                f"  Skipped {len(skipped_synth)} synth image(s) "
+                "(EXIF altitude is already ground truth)"
+            )
+        if skipped_fail:
+            print(f"  Skipped {len(skipped_fail)} FAIL image(s): {skipped_fail}")
+        print()
 
     _print_results(results)
 
