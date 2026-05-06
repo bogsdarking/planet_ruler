@@ -467,20 +467,12 @@ class TkLimbAnnotator:
         stretched_height = max(1, int(zoomed_height * self.vertical_stretch))
 
         # Resize image (zoom, then stretch)
-        try:
-            # Try new PIL.Image.Resampling.LANCZOS first
-            zoomed = self.original_image.resize(
-                (zoomed_width, zoomed_height), Image.Resampling.LANCZOS
-            )
-            stretched = zoomed.resize(
-                (zoomed_width, stretched_height), Image.Resampling.LANCZOS
-            )
-        except AttributeError:
-            # Fall back to older PIL.Image.LANCZOS for compatibility
-            zoomed = self.original_image.resize(
-                (zoomed_width, zoomed_height), Image.LANCZOS
-            )
-            stretched = zoomed.resize((zoomed_width, stretched_height), Image.LANCZOS)
+        zoomed = self.original_image.resize(
+            (zoomed_width, zoomed_height), Image.Resampling.LANCZOS
+        )
+        stretched = zoomed.resize(
+            (zoomed_width, stretched_height), Image.Resampling.LANCZOS
+        )
 
         # Convert to PhotoImage
         self.photo = ImageTk.PhotoImage(stretched)

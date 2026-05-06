@@ -934,58 +934,6 @@ class TestPILVersionCompatibility:
                 assert mock_image.resize.call_count == 1
                 assert mock_resized.resize.call_count == 1
 
-    def test_pil_resampling_old_version_fallback(self):
-        """Test fallback to old PIL constants when new ones don't exist"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ):
-            mock_image = Mock()
-            mock_image.size = (800, 600)
-
-            # Mock resize to raise AttributeError on first call (new style)
-            # then succeed on second call (old style)
-            call_count = 0
-
-            def side_effect(*args, **kwargs):
-                nonlocal call_count
-                call_count += 1
-                if call_count == 1:
-                    # First call - new style, should fail
-                    raise AttributeError(
-                        "'module' object has no attribute 'Resampling'"
-                    )
-                else:
-                    # Second call - old style, should work
-                    mock_resized = Mock()
-                    mock_resized.resize.return_value = mock_resized
-                    return mock_resized
-
-            mock_image.resize.side_effect = side_effect
-            mock_image_open.return_value = mock_image
-
-            annotator = TkLimbAnnotator("test_image.png")
-            annotator.zoom_level = 0.5
-            annotator.vertical_stretch = 2.0
-
-            # Add mock canvas and labels
-            annotator.canvas = Mock()
-            annotator.zoom_label = Mock()
-            annotator.stretch_label = Mock()
-            annotator.status_label = Mock()  # Add missing status_label
-
-            # Mock ImageTk.PhotoImage and update_status method
-            with patch("PIL.ImageTk.PhotoImage"), patch("tkinter.Canvas"), patch.object(
-                annotator, "update_status"
-            ):
-                # This should not raise an exception and should fall back to old constants
-                annotator.update_stretched_image()
-
-                # Verify resize was attempted with both new and old styles
-                assert mock_image.resize.call_count >= 1
 
 
 class TestScrollZoomHandling:
