@@ -407,11 +407,20 @@ def extract_exif(image_path: str) -> Dict:
         image = Image.open(image_path)
         exif_data = {}
 
-        if hasattr(image, "_getexif") and image._getexif() is not None:
-            exif = image._getexif()
+        exif = image.getexif()
+        if exif:
             for tag_id, value in exif.items():
                 tag = TAGS.get(tag_id, tag_id)
                 exif_data[tag] = value
+            # Decode EXIF sub-IFD (FocalLength, FNumber, ISO, etc.)
+            exif_ifd = exif.get_ifd(34665)
+            for tag_id, value in exif_ifd.items():
+                tag = TAGS.get(tag_id, tag_id)
+                exif_data[tag] = value
+            # Decode GPS sub-IFD
+            gps_ifd = exif.get_ifd(34853)
+            if gps_ifd:
+                exif_data["GPSInfo"] = dict(gps_ifd)
 
         return exif_data
     except Exception as e:

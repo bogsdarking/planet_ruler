@@ -882,21 +882,21 @@ class TestExifExtractionCoverage:
     @patch.object(camera_module, "Image")
     def test_extract_exif_with_valid_data(self, mock_image):
         """Test extract_exif when EXIF data is properly extracted."""
-        # Create a mock image with _getexif that returns data
         mock_img = MagicMock()
-        mock_img._getexif = Mock(
-            return_value={
-                271: "Apple",  # Make tag
-                272: "iPhone 13",  # Model tag
-                37386: (4.2, 1),  # FocalLength tag
-            }
-        )
+        mock_exif = MagicMock()
+        mock_exif.__bool__ = Mock(return_value=True)
+        mock_exif.items.return_value = {
+            271: "Apple",
+            272: "iPhone 13",
+            37386: (4.2, 1),
+        }.items()
+        mock_exif.get_ifd.return_value = {}
+        mock_img.getexif.return_value = mock_exif
 
         mock_image.open.return_value = mock_img
 
         result = camera_module.extract_exif("test.jpg")
 
-        # Verify the EXIF data was extracted and tags were converted
         assert "Make" in result
         assert "Model" in result
         assert "FocalLength" in result
@@ -904,31 +904,35 @@ class TestExifExtractionCoverage:
         assert result["Model"] == "iPhone 13"
 
     @patch.object(camera_module, "Image")
-    def test_extract_exif_with_no_getexif_attribute(self, mock_image):
-        """Test extract_exif when image has no _getexif attribute."""
+    def test_extract_exif_with_empty_exif(self, mock_image):
+        """Test extract_exif when image has no EXIF data."""
         mock_img = MagicMock()
-        # Delete the _getexif attribute to test the hasattr check
-        del mock_img._getexif
+        mock_exif = MagicMock()
+        mock_exif.__bool__ = Mock(return_value=False)
+        mock_img.getexif.return_value = mock_exif
 
         mock_image.open.return_value = mock_img
 
         result = camera_module.extract_exif("test.jpg")
 
-        # Should return empty dict when no _getexif
         assert result == {}
 
     @patch.object(camera_module, "Image")
-    def test_extract_exif_with_getexif_none(self, mock_image):
-        """Test extract_exif when _getexif() returns None."""
+    def test_extract_exif_with_no_gps(self, mock_image):
+        """Test extract_exif when EXIF data exists but has no GPS sub-IFD."""
         mock_img = MagicMock()
-        mock_img._getexif = Mock(return_value=None)
+        mock_exif = MagicMock()
+        mock_exif.__bool__ = Mock(return_value=True)
+        mock_exif.items.return_value = {271: "Apple"}.items()
+        mock_exif.get_ifd.return_value = {}
+        mock_img.getexif.return_value = mock_exif
 
         mock_image.open.return_value = mock_img
 
         result = camera_module.extract_exif("test.jpg")
 
-        # Should return empty dict when _getexif() is None
-        assert result == {}
+        assert "Make" in result
+        assert "GPSInfo" not in result
 
 
 class TestFocalLength35mmCoverage:

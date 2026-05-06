@@ -302,14 +302,9 @@ class TkImageCropper:
         zoomed_height = max(1, int(self.height * self.zoom_level))
 
         # Resize image
-        try:
-            resized = self.original_image.resize(
-                (zoomed_width, zoomed_height), Image.Resampling.LANCZOS
-            )
-        except AttributeError:
-            resized = self.original_image.resize(
-                (zoomed_width, zoomed_height), Image.LANCZOS
-            )
+        resized = self.original_image.resize(
+            (zoomed_width, zoomed_height), Image.Resampling.LANCZOS
+        )
 
         # Convert to PhotoImage
         self.photo = ImageTk.PhotoImage(resized)
