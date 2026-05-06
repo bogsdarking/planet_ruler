@@ -1108,6 +1108,7 @@ def sample_param_from_bounds(
         seed: Optional seed for reproducibility
     """
     import random
+
     if ref is None:
         ref = 0.5 * (lo + hi)
     new_lo = ref - (ref - lo) * perturbation_factor
@@ -1233,10 +1234,10 @@ def check_planet_ruler_crop_metadata(image_path: str) -> Optional[Dict]:
 # loosens GPS bounds relative to tight/balanced.
 _LIMITS_PRESETS: Dict[str, Dict[str, float]] = {
     "tight": {
-        "r": 0.05,        # ±5%  around planet init radius
-        "f": 0.02,        # ±2%  EXIF focal length is usually very accurate
-        "w": 0.03,        # ±3%  sensor width from known device database
-        "h_gps": 0.05,    # ±5%  GPS at cruise ≈ ±50–100 m
+        "r": 0.05,  # ±5%  around planet init radius
+        "f": 0.02,  # ±2%  EXIF focal length is usually very accurate
+        "w": 0.03,  # ±3%  sensor width from known device database
+        "h_gps": 0.05,  # ±5%  GPS at cruise ≈ ±50–100 m
         "h_manual": 0.10,  # ±10% manually entered, assumed reasonably known
     },
     "balanced": {
@@ -1405,7 +1406,11 @@ def create_config_from_image(
         init_values["w"] = sensor_m
 
         # Use data-driven limits if available (from camera type statistics)
-        if camera_params["sensor_width_min"] and camera_params["sensor_width_max"] and not crop_metadata:
+        if (
+            camera_params["sensor_width_min"]
+            and camera_params["sensor_width_max"]
+            and not crop_metadata
+        ):
             param_limits["w"] = [
                 camera_params["sensor_width_min"] / 1000,
                 camera_params["sensor_width_max"] / 1000,

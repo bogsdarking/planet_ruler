@@ -318,7 +318,9 @@ class TestSampleParamFromBounds:
         lo, hi = 0.0, 100.0
         # perturbation_factor=0.5 → sample from [25, 75]
         for seed in range(20):
-            result = sample_param_from_bounds(lo, hi, perturbation_factor=0.5, seed=seed)
+            result = sample_param_from_bounds(
+                lo, hi, perturbation_factor=0.5, seed=seed
+            )
             assert 25.0 <= result <= 75.0
 
     def test_perturbation_factor_zero_gives_midpoint(self):
@@ -554,9 +556,7 @@ class TestCreateConfigFromImage:
         mock_radius.return_value = 6371000
 
         # Let GPS mock supply altitude so the GPS path is exercised
-        config = create_config_from_image(
-            "dummy.jpg", limits_preset="balanced"
-        )
+        config = create_config_from_image("dummy.jpg", limits_preset="balanced")
 
         # r bounds scale with preset around planet init radius (±20% balanced)
         r_init = config["init_parameter_values"]["r"]
@@ -576,9 +576,7 @@ class TestCreateConfigFromImage:
     @patch.object(camera_module, "extract_camera_parameters")
     @patch.object(camera_module, "get_gps_altitude")
     @patch.object(camera_module, "get_initial_radius")
-    def test_param_tolerance_deprecated(
-        self, mock_radius, mock_gps, mock_params
-    ):
+    def test_param_tolerance_deprecated(self, mock_radius, mock_gps, mock_params):
         """param_tolerance raises DeprecationWarning; balanced is used."""
         mock_params.return_value = {
             "focal_length_mm": 6.1,
@@ -596,6 +594,7 @@ class TestCreateConfigFromImage:
         mock_radius.return_value = 6371000
 
         import warnings
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             config = create_config_from_image(
@@ -853,9 +852,7 @@ class TestConfigGeneration:
                     del sys.modules["planet_ruler.geometry"]
 
                 try:
-                    config = create_config_from_image(
-                        "dummy.jpg", altitude_m=1000
-                    )
+                    config = create_config_from_image("dummy.jpg", altitude_m=1000)
                     from numpy import isclose
 
                     assert isclose(

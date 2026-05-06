@@ -110,13 +110,12 @@ def generate_synthetic_case(
 
     if camera not in SYNTHETIC_CAMERAS:
         raise ValueError(
-            f"Unknown camera '{camera}'. "
-            f"Choose from: {list(SYNTHETIC_CAMERAS)}"
+            f"Unknown camera '{camera}'. " f"Choose from: {list(SYNTHETIC_CAMERAS)}"
         )
 
     make, model, f_mm, w_mm = SYNTHETIC_CAMERAS[camera]
-    f_m = f_mm * 1e-3   # meters
-    w_m = w_mm * 1e-3   # meters
+    f_m = f_mm * 1e-3  # meters
+    w_m = w_mm * 1e-3  # meters
 
     theta_x = limb_camera_angle(r, h) + theta_x_offset
 
@@ -361,11 +360,11 @@ def generate_canonical_dataset(output_dir: Path, r: float = 6371000.0) -> list:
     annot_dir = Path(output_dir) / "annotations"
 
     cases = [
-        (5_000,  0.0),   # low alt, no noise
-        (10_000, 0.0),   # mid alt, no noise
-        (10_000, 1.0),   # mid alt, 1px annotation noise (typical real-image level)
-        (10_000, 2.0),   # mid alt, 2px annotation noise (conservative upper bound)
-        (15_000, 0.0),   # high alt, no noise
+        (5_000, 0.0),  # low alt, no noise
+        (10_000, 0.0),  # mid alt, no noise
+        (10_000, 1.0),  # mid alt, 1px annotation noise (typical real-image level)
+        (10_000, 2.0),  # mid alt, 2px annotation noise (conservative upper bound)
+        (15_000, 0.0),  # high alt, no noise
     ]
 
     results = []
@@ -408,6 +407,7 @@ def generate_canonical_dataset(output_dir: Path, r: float = 6371000.0) -> list:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Generate synthetic Planet Ruler benchmark data."
@@ -416,9 +416,7 @@ def _parse_args() -> argparse.Namespace:
 
     # --- single case ---
     single = sub.add_parser("single", help="Generate one synthetic case.")
-    single.add_argument(
-        "--r", type=float, default=6371000.0, help="Planet radius (m)"
-    )
+    single.add_argument("--r", type=float, default=6371000.0, help="Planet radius (m)")
     single.add_argument("--h", type=float, required=True, help="Altitude (m)")
     single.add_argument(
         "--camera",
@@ -431,17 +429,24 @@ def _parse_args() -> argparse.Namespace:
     single.add_argument("--seed", type=int, default=0)
     single.add_argument("--output-dir", type=Path, default=None)
     single.add_argument("--name", type=str, default=None)
-    single.add_argument("--theta-x-offset", type=float, default=0.0,
-                        help="Extra tilt beyond natural horizon angle (degrees)")
-    single.add_argument("--theta-y", type=float, default=0.0,
-                        help="Roll around optical axis (degrees)")
-    single.add_argument("--theta-z", type=float, default=180.0,
-                        help="Azimuth rotation (degrees, default 180)")
+    single.add_argument(
+        "--theta-x-offset",
+        type=float,
+        default=0.0,
+        help="Extra tilt beyond natural horizon angle (degrees)",
+    )
+    single.add_argument(
+        "--theta-y", type=float, default=0.0, help="Roll around optical axis (degrees)"
+    )
+    single.add_argument(
+        "--theta-z",
+        type=float,
+        default=180.0,
+        help="Azimuth rotation (degrees, default 180)",
+    )
 
     # --- canonical dataset ---
-    canon = sub.add_parser(
-        "canonical", help="Generate the full canonical dataset."
-    )
+    canon = sub.add_parser("canonical", help="Generate the full canonical dataset.")
     canon.add_argument(
         "--output-dir",
         type=Path,

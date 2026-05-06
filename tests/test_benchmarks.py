@@ -120,14 +120,36 @@ def _row(
     minimizer_config="basinhopping",
 ):
     return (
-        scenario, image, "2025-01-01T00:00:00", None,
-        "manual", "{}", "[]", "{}", "{}", json.dumps(minimizer_config),
+        scenario,
+        image,
+        "2025-01-01T00:00:00",
+        None,
+        "manual",
+        "{}",
+        "[]",
+        "{}",
+        "{}",
+        json.dumps(minimizer_config),
         minimizer_preset,
-        800, 600, 10000.0, "Earth", 6371000.0, 10000.0,
-        "{}", 6371000.0, status, 100,
-        0.0, relative_error, 1,
-        total_time, 0.1, 0.1, total_time - 0.2,
-        None, None,
+        800,
+        600,
+        10000.0,
+        "Earth",
+        6371000.0,
+        10000.0,
+        "{}",
+        6371000.0,
+        status,
+        100,
+        0.0,
+        relative_error,
+        1,
+        total_time,
+        0.1,
+        0.1,
+        total_time - 0.2,
+        None,
+        None,
     )
 
 
@@ -248,9 +270,7 @@ class TestScorePareto:
     def test_max_direction_flipped(self):
         analyzer, db_path = _make_analyzer_with_data([])
         df = pd.DataFrame({"reliability": [0.9, 0.1]})
-        scores = analyzer.score_pareto(
-            df, [("reliability", "max", 1.0)]
-        )
+        scores = analyzer.score_pareto(df, [("reliability", "max", 1.0)])
         db_path.unlink()
         # Higher reliability = lower score (better)
         assert scores.iloc[0] < scores.iloc[1]
@@ -378,8 +398,7 @@ class TestRunnerMinimiserPreset:
 
         conn = sqlite3.connect(db_path)
         row = conn.execute(
-            "SELECT minimizer_preset FROM benchmark_results"
-            " WHERE scenario_name=?",
+            "SELECT minimizer_preset FROM benchmark_results" " WHERE scenario_name=?",
             ("test_preset_stored",),
         ).fetchone()
         conn.close()
@@ -443,6 +462,7 @@ class TestVetImageBasinhopping:
         """f and w are always fixed; vet_image accepts no fix_camera arg."""
         from planet_ruler.benchmarks.vet_images import vet_image
         import inspect
+
         assert "fix_camera" not in inspect.signature(vet_image).parameters
         result = vet_image(
             SYNTH_IMAGE,
@@ -842,7 +862,9 @@ class TestAnalyzerExportCsv:
 # ---------------------------------------------------------------------------
 
 
-def _write_annot_json(tmp_path, points, fmt="points", image_width=200, image_height=150):
+def _write_annot_json(
+    tmp_path, points, fmt="points", image_width=200, image_height=150
+):
     """Write a minimal annotation JSON file and return its path."""
     path = tmp_path / "annot_limb_points.json"
     if fmt == "points":
@@ -902,14 +924,18 @@ class TestVetImagesLoadAnnotation:
     def test_points_flat_format_works(self, tmp_path):
         from planet_ruler.benchmarks.vet_images import _load_annotation_as_target
 
-        path = _write_annot_json(tmp_path, [[30.0, 150.0]], fmt="points", image_width=200)
+        path = _write_annot_json(
+            tmp_path, [[30.0, 150.0]], fmt="points", image_width=200
+        )
         result = _load_annotation_as_target(path, image_width=200)
         assert result[30] == pytest.approx(150.0)
 
     def test_limb_points_nested_format_works(self, tmp_path):
         from planet_ruler.benchmarks.vet_images import _load_annotation_as_target
 
-        path = _write_annot_json(tmp_path, [[80.0, 180.0]], fmt="limb_points", image_width=200)
+        path = _write_annot_json(
+            tmp_path, [[80.0, 180.0]], fmt="limb_points", image_width=200
+        )
         result = _load_annotation_as_target(path, image_width=200)
         assert result[80] == pytest.approx(180.0)
 
@@ -960,20 +986,27 @@ class TestVetImagesBuildStep2Config:
         from planet_ruler.benchmarks.vet_images import _build_step2_config
 
         import copy
-        config2 = _build_step2_config(copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs())
+
+        config2 = _build_step2_config(
+            copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs()
+        )
         assert "h" not in config2["free_parameters"]
 
     def test_r_added_to_free_parameters(self):
         from planet_ruler.benchmarks.vet_images import _build_step2_config
 
         import copy
-        config2 = _build_step2_config(copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs())
+
+        config2 = _build_step2_config(
+            copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs()
+        )
         assert "r" in config2["free_parameters"]
 
     def test_h_pinned_to_provided_value(self):
         from planet_ruler.benchmarks.vet_images import _build_step2_config
 
         import copy
+
         h_fit = 11_234.5
         config2 = _build_step2_config(copy.deepcopy(_STEP1_CONFIG), h_fit, _FakeObs())
         assert config2["init_parameter_values"]["h"] == pytest.approx(h_fit)
@@ -982,7 +1015,10 @@ class TestVetImagesBuildStep2Config:
         from planet_ruler.benchmarks.vet_images import _build_step2_config
 
         import copy
-        config2 = _build_step2_config(copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs())
+
+        config2 = _build_step2_config(
+            copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs()
+        )
         r_lo, r_hi = config2["parameter_limits"]["r"]
         # ±50% of Earth radius
         assert r_lo == pytest.approx(6_371_000 * 0.50, rel=0.01)
@@ -992,6 +1028,7 @@ class TestVetImagesBuildStep2Config:
         from planet_ruler.benchmarks.vet_images import _build_step2_config
 
         import copy
+
         original = copy.deepcopy(_STEP1_CONFIG)
         _build_step2_config(copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs())
         assert "h" in original["free_parameters"]
@@ -1000,7 +1037,10 @@ class TestVetImagesBuildStep2Config:
         from planet_ruler.benchmarks.vet_images import _build_step2_config
 
         import copy
-        config2 = _build_step2_config(copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs())
+
+        config2 = _build_step2_config(
+            copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs()
+        )
         # theta_x=0.1 is within [-0.5, 0.5], so it should be warm-started
         assert config2["init_parameter_values"]["theta_x"] == pytest.approx(0.1)
 
@@ -1109,8 +1149,7 @@ class TestVetImagesPrintResults:
 
 @pytest.mark.skipif(
     not (
-        Path(__file__).parent.parent
-        / "planet_ruler/benchmarks/configs/smoke_test.yaml"
+        Path(__file__).parent.parent / "planet_ruler/benchmarks/configs/smoke_test.yaml"
     ).exists(),
     reason="smoke_test.yaml not found",
 )

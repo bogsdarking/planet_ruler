@@ -606,11 +606,21 @@ def estimate_radius_via_sagitta(
     """
     nan_r = float("nan")
     base = dict(
-        r=nan_r, r_low=nan_r, r_high=nan_r, r_sigma=nan_r,
-        K=nan_r, K_sigma=nan_r, K_sigma_jack=nan_r,
-        n_points=0, residual_rms=nan_r, arc_angle_deg=nan_r,
-        x_apex=nan_r, y_apex=nan_r, theta_x_est=nan_r,
-        status="", warnings=[],
+        r=nan_r,
+        r_low=nan_r,
+        r_high=nan_r,
+        r_sigma=nan_r,
+        K=nan_r,
+        K_sigma=nan_r,
+        K_sigma_jack=nan_r,
+        n_points=0,
+        residual_rms=nan_r,
+        arc_angle_deg=nan_r,
+        x_apex=nan_r,
+        y_apex=nan_r,
+        theta_x_est=nan_r,
+        status="",
+        warnings=[],
     )
 
     # --- Extract valid points ---
@@ -640,7 +650,11 @@ def estimate_radius_via_sagitta(
             b_q = (d_hi * h_lo**2 - d_lo * h_hi**2) / denom
             if abs(a_q) > 0:
                 x_interp = xs[ix_apex] - b_q / (2.0 * a_q)
-                x_apex = float(x_interp) if xs[ix_apex - 1] <= x_interp <= xs[ix_apex + 1] else xs[ix_apex]
+                x_apex = (
+                    float(x_interp)
+                    if xs[ix_apex - 1] <= x_interp <= xs[ix_apex + 1]
+                    else xs[ix_apex]
+                )
             else:
                 x_apex = xs[ix_apex]
         else:
@@ -651,9 +665,9 @@ def estimate_radius_via_sagitta(
     base["y_apex"] = float(y_apex)
 
     # Centred coordinates
-    u = xs - x_apex          # horizontal offset from apex
-    s = ys - y_apex           # sagitta from apex (≥ 0)
-    A = np.sqrt(f_px**2 + u**2) - f_px   # exact hyperbola basis at theta_x=0
+    u = xs - x_apex  # horizontal offset from apex
+    s = ys - y_apex  # sagitta from apex (≥ 0)
+    A = np.sqrt(f_px**2 + u**2) - f_px  # exact hyperbola basis at theta_x=0
 
     if np.max(A) < 1e-6:
         base["status"] = "flat_arc"
@@ -683,7 +697,7 @@ def estimate_radius_via_sagitta(
         base["status"] = "flat_arc"
         return base
     c_sigma = sigma_s / np.sqrt(A_var)
-    K_sigma_ols = K_est**2 * c_sigma   # propagation: d(1/c)/dc = -K^2
+    K_sigma_ols = K_est**2 * c_sigma  # propagation: d(1/c)/dc = -K^2
 
     # --- Arc angle ---
     phi_lo = np.arctan(u.min() / f_px)
@@ -759,8 +773,12 @@ def estimate_radius_via_sagitta(
 
     base.update(
         dict(
-            r=r, r_low=r_low, r_high=r_high, r_sigma=r_sigma,
-            K=float(K_est), K_sigma=float(K_sigma),
+            r=r,
+            r_low=r_low,
+            r_high=r_high,
+            r_sigma=r_sigma,
+            K=float(K_est),
+            K_sigma=float(K_sigma),
             K_sigma_jack=float(K_sigma_jack) if np.isfinite(K_sigma_jack) else nan_r,
             theta_x_est=float(theta_x_est) if np.isfinite(theta_x_est) else nan_r,
             status="ok",
@@ -921,11 +939,7 @@ class SagittaFitter(BaseFitter):
         r_low = float(_r_from_K(K_low, self.h))
         r_high = float(_r_from_K(K_high, self.h))
 
-        extra_fp = [
-            p
-            for p in self.free_parameters
-            if p not in ("r", "theta_x")
-        ]
+        extra_fp = [p for p in self.free_parameters if p not in ("r", "theta_x")]
         if extra_fp:
             warn.append(
                 f"SagittaFitter does not fit: {extra_fp}. "

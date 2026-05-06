@@ -630,7 +630,9 @@ class TestTkLimbAnnotatorExtended:
         "tkinter.filedialog.asksaveasfilename",
         return_value="/path/to/test_image_limb_points.json",
     )
-    def test_save_points_success(self, mock_dialog, mock_info, mock_json_dump, mock_open):
+    def test_save_points_success(
+        self, mock_dialog, mock_info, mock_json_dump, mock_open
+    ):
         """Test successful point saving"""
         with patch("tkinter.Tk"), patch(
             "PIL.Image.open"
@@ -933,7 +935,6 @@ class TestPILVersionCompatibility:
                 # Should be called twice: once for zoom, once for stretch
                 assert mock_image.resize.call_count == 1
                 assert mock_resized.resize.call_count == 1
-
 
 
 class TestScrollZoomHandling:

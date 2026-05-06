@@ -1317,19 +1317,19 @@ if __name__ == "__main__":
 def load_limb_points_from_json(json_path, return_metadata=False):
     """
     Load limb points from JSON and convert to sparse target array.
-    
+
     Args:
         json_path (str): Path to JSON file saved by TkLimbAnnotator
         return_metadata (bool): If True, return (target, metadata) tuple
-        
+
     Returns:
         np.ndarray: Sparse target array with limb y-coordinates
         tuple: (target, metadata) if return_metadata=True
-        
+
     Example:
         >>> # Simple usage - just get the target array
         >>> target = load_limb_points_from_json("image_limb_points.json")
-        >>> 
+        >>>
         >>> # Use with LimbObservation
         >>> from planet_ruler.observation import LimbObservation
         >>> obs = LimbObservation("image.jpg", "config.yaml")
@@ -1339,7 +1339,7 @@ def load_limb_points_from_json(json_path, return_metadata=False):
         >>>
         >>> # Get metadata too (for validation)
         >>> target, metadata = load_limb_points_from_json(
-        ...     "image_limb_points.json", 
+        ...     "image_limb_points.json",
         ...     return_metadata=True
         ... )
         >>> print(f"Loaded {metadata['n_points']} points from {metadata['image_path']}")
@@ -1351,23 +1351,23 @@ def load_limb_points_from_json(json_path, return_metadata=False):
         raise FileNotFoundError(f"JSON file not found: {json_path}")
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON file: {e}")
-    
+
     # Validate required fields
     required_fields = ["points", "image_size"]
     missing = [f for f in required_fields if f not in data]
     if missing:
         raise ValueError(f"JSON file missing required fields: {missing}")
-    
+
     points = data["points"]
     width = data["image_size"][0]
-    
+
     # Convert to sparse target array
     target = np.full(width, np.nan)
     for x, y in points:
         x_idx = int(round(x))
         if 0 <= x_idx < width:
             target[x_idx] = y
-    
+
     if return_metadata:
         return target, data
     return target

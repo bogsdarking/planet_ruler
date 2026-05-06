@@ -487,10 +487,14 @@ class TestLimbObservation:
             mock_lf = Mock()
             mock_fit_result = {
                 "best_parameters": {
-                    "r": 6500000.0, "h": 15000.0,
-                    "n_pix_x": image_data.shape[1], "n_pix_y": image_data.shape[0],
-                    "x0": image_data.shape[1] // 2, "y0": image_data.shape[0] // 2,
-                    "f": 0.024, "w": 0.036,
+                    "r": 6500000.0,
+                    "h": 15000.0,
+                    "n_pix_x": image_data.shape[1],
+                    "n_pix_y": image_data.shape[0],
+                    "x0": image_data.shape[1] // 2,
+                    "y0": image_data.shape[0] // 2,
+                    "f": 0.024,
+                    "w": 0.036,
                 },
                 "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
                 "updated_init": {"r": 6500000.0, "h": 15000.0},
@@ -1217,10 +1221,14 @@ class TestObservationMultiResolution:
     def _mock_lf_result(self, npix_x=3000, npix_y=2500):
         return {
             "best_parameters": {
-                "r": 6500000.0, "h": 15000.0,
-                "n_pix_x": npix_x, "n_pix_y": npix_y,
-                "x0": npix_x // 2, "y0": npix_y // 2,
-                "f": 0.024, "w": 0.036,
+                "r": 6500000.0,
+                "h": 15000.0,
+                "n_pix_x": npix_x,
+                "n_pix_y": npix_y,
+                "x0": npix_x // 2,
+                "y0": npix_y // 2,
+                "f": 0.024,
+                "w": 0.036,
             },
             "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
             "updated_init": {"r": 6500000.0, "h": 15000.0},
@@ -1444,9 +1452,12 @@ class TestObservationMinimizers:
             mock_lf = Mock()
             mock_lf.fit.return_value = {
                 "best_parameters": {
-                    "r": 6500000.0, "h": 15000.0,
-                    "n_pix_x": image_data.shape[1], "n_pix_y": image_data.shape[0],
-                    "x0": image_data.shape[1] // 2, "y0": image_data.shape[0] // 2,
+                    "r": 6500000.0,
+                    "h": 15000.0,
+                    "n_pix_x": image_data.shape[1],
+                    "n_pix_y": image_data.shape[0],
+                    "x0": image_data.shape[1] // 2,
+                    "y0": image_data.shape[0] // 2,
                 },
                 "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
                 "updated_init": {"r": 6500000.0, "h": 15000.0},
@@ -1507,9 +1518,12 @@ class TestObservationMinimizers:
             mock_lf = Mock()
             mock_lf.fit.return_value = {
                 "best_parameters": {
-                    "r": 6500000.0, "h": 15000.0,
-                    "n_pix_x": image_data.shape[1], "n_pix_y": image_data.shape[0],
-                    "x0": image_data.shape[1] // 2, "y0": image_data.shape[0] // 2,
+                    "r": 6500000.0,
+                    "h": 15000.0,
+                    "n_pix_x": image_data.shape[1],
+                    "n_pix_y": image_data.shape[0],
+                    "x0": image_data.shape[1] // 2,
+                    "y0": image_data.shape[0] // 2,
                 },
                 "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
                 "updated_init": {"r": 6500000.0, "h": 15000.0},
@@ -1597,9 +1611,12 @@ class TestObservationMinimizers:
             mock_lf = Mock()
             mock_lf.fit.return_value = {
                 "best_parameters": {
-                    "r": 6500000.0, "h": 15000.0,
-                    "n_pix_x": image_data.shape[1], "n_pix_y": image_data.shape[0],
-                    "x0": image_data.shape[1] // 2, "y0": image_data.shape[0] // 2,
+                    "r": 6500000.0,
+                    "h": 15000.0,
+                    "n_pix_x": image_data.shape[1],
+                    "n_pix_y": image_data.shape[0],
+                    "x0": image_data.shape[1] // 2,
+                    "y0": image_data.shape[0] // 2,
                 },
                 "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
                 "updated_init": {"r": 6500000.0, "h": 15000.0},
@@ -1628,8 +1645,14 @@ class TestObservationMinimizers:
             assert call_kwargs["minimizer_kwargs"]["custom_param"] == "test"
 
             expected_preset = MINIMIZER_PRESETS["differential-evolution"]["balanced"]
-            assert call_kwargs["minimizer_kwargs"]["strategy"] == expected_preset["strategy"]
-            assert call_kwargs["minimizer_kwargs"]["recombination"] == expected_preset["recombination"]
+            assert (
+                call_kwargs["minimizer_kwargs"]["strategy"]
+                == expected_preset["strategy"]
+            )
+            assert (
+                call_kwargs["minimizer_kwargs"]["recombination"]
+                == expected_preset["recombination"]
+            )
 
             os.unlink(tmp_file.name)
 
@@ -1676,8 +1699,12 @@ class TestObservationImageSmoothing:
             mock_lf = Mock()
             mock_lf.fit.return_value = {
                 "best_parameters": {
-                    "r": 6500000.0, "h": 15000.0,
-                    "n_pix_x": 500, "n_pix_y": 400, "x0": 250, "y0": 200,
+                    "r": 6500000.0,
+                    "h": 15000.0,
+                    "n_pix_x": 500,
+                    "n_pix_y": 400,
+                    "x0": 250,
+                    "y0": 200,
                 },
                 "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
                 "updated_init": {"r": 6500000.0, "h": 15000.0},
@@ -1727,9 +1754,12 @@ class TestObservationImageSmoothing:
             mock_lf = Mock()
             mock_lf.fit.return_value = {
                 "best_parameters": {
-                    "r": 6500000.0, "h": 15000.0,
-                    "n_pix_x": image_data.shape[1], "n_pix_y": image_data.shape[0],
-                    "x0": image_data.shape[1] // 2, "y0": image_data.shape[0] // 2,
+                    "r": 6500000.0,
+                    "h": 15000.0,
+                    "n_pix_x": image_data.shape[1],
+                    "n_pix_y": image_data.shape[0],
+                    "x0": image_data.shape[1] // 2,
+                    "y0": image_data.shape[0] // 2,
                 },
                 "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
                 "updated_init": {"r": 6500000.0, "h": 15000.0},
@@ -1789,7 +1819,8 @@ class TestObservationDashboard:
             mock_lf = Mock()
             mock_lf.fit.return_value = {
                 "best_parameters": {
-                    "r": 6500000.0, "h": 15000.0,
+                    "r": 6500000.0,
+                    "h": 15000.0,
                     "n_pix_x": image_data.shape[1],
                     "n_pix_y": image_data.shape[0],
                     "x0": image_data.shape[1] // 2,
@@ -1854,8 +1885,12 @@ class TestObservationDashboard:
             mock_lf = Mock()
             mock_lf.fit.return_value = {
                 "best_parameters": {
-                    "r": 6500000.0, "h": 15000.0,
-                    "n_pix_x": 1500, "n_pix_y": 1200, "x0": 750, "y0": 600,
+                    "r": 6500000.0,
+                    "h": 15000.0,
+                    "n_pix_x": 1500,
+                    "n_pix_y": 1200,
+                    "x0": 750,
+                    "y0": 600,
                 },
                 "fit_results": Mock(x=np.array([6500000.0, 15000.0])),
                 "updated_init": {"r": 6500000.0, "h": 15000.0},
@@ -2318,16 +2353,34 @@ class TestObservationMiscellaneous:
 # Helpers shared by TestFitSagitta
 # ---------------------------------------------------------------------------
 
+
 def _synthetic_limb_for_obs(
-    r=6_371_000, h=10_000, f=0.026, w=0.0173,
-    W=4000, H=3000, n_points=12, noise_std=0.0, seed=42,
+    r=6_371_000,
+    h=10_000,
+    f=0.026,
+    w=0.0173,
+    W=4000,
+    H=3000,
+    n_points=12,
+    noise_std=0.0,
+    seed=42,
 ):
     """Centered synthetic limb array with apex at W//2."""
     from planet_ruler.geometry import limb_arc, limb_camera_angle
+
     theta_x = limb_camera_angle(r, h)
     y_arc = limb_arc(
-        r=r, n_pix_x=W, n_pix_y=H, h=h, f=f, w=w,
-        x0=W // 2, y0=H // 2, theta_x=theta_x, theta_y=0, theta_z=0,
+        r=r,
+        n_pix_x=W,
+        n_pix_y=H,
+        h=h,
+        f=f,
+        w=w,
+        x0=W // 2,
+        y0=H // 2,
+        theta_x=theta_x,
+        theta_y=0,
+        theta_z=0,
     )
     rng = np.random.default_rng(seed)
     margin = W // 10
@@ -2352,8 +2405,12 @@ def _mock_obs_for_sagitta(
     stub.free_parameters = ["r", "h"]
     stub.stage_results = []
     stub.best_parameters = None
-    stub._apply_updated_limits = lambda lims: LimbObservation._apply_updated_limits(stub, lims)
-    stub._apply_updated_init = lambda inits: LimbObservation._apply_updated_init(stub, inits)
+    stub._apply_updated_limits = lambda lims: LimbObservation._apply_updated_limits(
+        stub, lims
+    )
+    stub._apply_updated_init = lambda inits: LimbObservation._apply_updated_init(
+        stub, inits
+    )
     return stub
 
 

@@ -53,7 +53,9 @@ class TestGenerateNoisyVariants:
                 assert perturbed[1] == pytest.approx(orig[1])
 
     def test_nonzero_noise_perturbs_values(self):
-        result = generate_noisy_variants(POINTS_5, n_variants=1, noise_sigma=5.0, seed=42)
+        result = generate_noisy_variants(
+            POINTS_5, n_variants=1, noise_sigma=5.0, seed=42
+        )
         variant = result[0]
         any_differ = any(
             abs(v[0] - p[0]) > 1e-9 or abs(v[1] - p[1]) > 1e-9

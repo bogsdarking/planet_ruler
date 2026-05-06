@@ -57,9 +57,7 @@ def temp_db(tmp_path):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-def test_performance_smoke_runtime(
-    smoke_config_path, smoke_thresholds, temp_db
-):
+def test_performance_smoke_runtime(smoke_config_path, smoke_thresholds, temp_db):
     """
     Test that all smoke test scenarios complete within time threshold.
 
@@ -86,9 +84,7 @@ def test_performance_smoke_runtime(
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-def test_performance_smoke_accuracy(
-    smoke_config_path, smoke_thresholds, temp_db
-):
+def test_performance_smoke_accuracy(smoke_config_path, smoke_thresholds, temp_db):
     """
     Test that all smoke test scenarios achieve acceptable accuracy.
 
@@ -117,9 +113,7 @@ def test_performance_smoke_accuracy(
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-def test_performance_smoke_convergence(
-    smoke_config_path, smoke_thresholds, temp_db
-):
+def test_performance_smoke_convergence(smoke_config_path, smoke_thresholds, temp_db):
     """
     Test that smoke test scenarios converge reliably.
 

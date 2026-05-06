@@ -70,6 +70,7 @@ def _suppress_stdout():
     with contextlib.redirect_stdout(io.StringIO()):
         yield
 
+
 # Altitude range thresholds (meters).
 #
 # These also define the optimizer search bounds [_WARN_MIN_M, _WARN_MAX_M].
@@ -83,14 +84,14 @@ def _suppress_stdout():
 #
 # Commercial airliner ceiling: ~12,800 m (~42,000 ft).  Keep _PASS_MAX_M a bit
 # above to allow for GPS/EXIF rounding and genuine high-cruise altitudes.
-_PASS_MIN_M = 3_000.0    # 3 km  — low aircraft / regional jets
-_PASS_MAX_M = 14_000.0   # 14 km — just above commercial airliner ceiling
-_WARN_MIN_M = 1_500.0    # 1.5 km — very low (possible small aircraft)
-_WARN_MAX_M = 18_000.0   # 18 km — high-altitude edge (SR-71, research planes)
+_PASS_MIN_M = 3_000.0  # 3 km  — low aircraft / regional jets
+_PASS_MAX_M = 14_000.0  # 14 km — just above commercial airliner ceiling
+_WARN_MIN_M = 1_500.0  # 1.5 km — very low (possible small aircraft)
+_WARN_MAX_M = 18_000.0  # 18 km — high-altitude edge (SR-71, research planes)
 
 # If the fitted altitude lands within this fraction of the search boundary,
 # flag it as a boundary result — the true minimum may be outside the range.
-_BOUNDARY_FRACTION = 0.03   # 3 % of search range ≈ 495 m for [1.5, 18] km
+_BOUNDARY_FRACTION = 0.03  # 3 % of search range ≈ 495 m for [1.5, 18] km
 
 _DEFAULT_ALTITUDE_M = 10_000.0  # Fallback initial altitude for images missing GPS
 
@@ -107,9 +108,9 @@ class VetResult:
     radius_error_pct: Optional[float]
     convergence: str
     runtime_s: float
-    verdict: str   # PASS, WARN, FAIL
+    verdict: str  # PASS, WARN, FAIL
     notes: str
-    best_parameters: Optional[dict] = None   # full param dict from step-1 fit
+    best_parameters: Optional[dict] = None  # full param dict from step-1 fit
 
 
 def _find_benchmark_dir() -> Path:
@@ -276,8 +277,8 @@ def _build_step2_config(step1_config: dict, h_fit_m: float, step1_obs) -> dict:
     # would hand the optimizer one population member at the exact true answer.
     # The arithmetic midpoint of [0.5×ER, 1.5×ER] IS Earth radius, so use
     # the geometric midpoint instead (~5,519 km — biased low, but safe).
-    _R_LO = EARTH_RADIUS_M * 0.50   # ≈ 3,186 km
-    _R_HI = EARTH_RADIUS_M * 1.50   # ≈ 9,557 km
+    _R_LO = EARTH_RADIUS_M * 0.50  # ≈ 3,186 km
+    _R_HI = EARTH_RADIUS_M * 1.50  # ≈ 9,557 km
     r_init_neutral = (_R_LO * _R_HI) ** 0.5  # geometric midpoint ≈ 5,519 km
     if "r" not in config["free_parameters"]:
         config["free_parameters"].append("r")
@@ -559,8 +560,7 @@ def vet_image(
         search_range = _WARN_MAX_M - _WARN_MIN_M
         boundary_tol = _BOUNDARY_FRACTION * search_range
         at_boundary = (
-            h_m < _WARN_MIN_M + boundary_tol
-            or h_m > _WARN_MAX_M - boundary_tol
+            h_m < _WARN_MIN_M + boundary_tol or h_m > _WARN_MAX_M - boundary_tol
         )
 
         # Build notes string
@@ -621,7 +621,11 @@ def _print_results(results: list) -> None:
     print("-" * 110)
 
     for r in results:
-        h_fit = f"{r.fitted_altitude_km:.1f}" if r.fitted_altitude_km is not None else "ERROR"
+        h_fit = (
+            f"{r.fitted_altitude_km:.1f}"
+            if r.fitted_altitude_km is not None
+            else "ERROR"
+        )
         h_gps = f"{r.gps_altitude_km:.1f}" if r.gps_altitude_km is not None else "N/A"
         verdict_str = {"PASS": "✓ PASS", "WARN": "~ WARN", "FAIL": "✗ FAIL"}.get(
             r.verdict, r.verdict
@@ -636,7 +640,9 @@ def _print_results(results: list) -> None:
     n_pass = sum(1 for r in results if r.verdict == "PASS")
     n_warn = sum(1 for r in results if r.verdict == "WARN")
     n_fail = sum(1 for r in results if r.verdict == "FAIL")
-    print(f"Summary: {n_pass} PASS  {n_warn} WARN  {n_fail} FAIL  ({len(results)} total)")
+    print(
+        f"Summary: {n_pass} PASS  {n_warn} WARN  {n_fail} FAIL  ({len(results)} total)"
+    )
     print()
 
     usable = n_pass + n_warn
@@ -878,10 +884,14 @@ Examples:
             h_m = result.fitted_altitude_km * 1000.0
             try:
                 _update_exif_altitude(image_path, h_m)
-                updated.append(f"{result.image_name} → {result.fitted_altitude_km:.2f} km")
+                updated.append(
+                    f"{result.image_name} → {result.fitted_altitude_km:.2f} km"
+                )
             except Exception as e:
-                print(f"  WARNING: failed to update EXIF for {result.image_name}: {e}",
-                      file=sys.stderr)
+                print(
+                    f"  WARNING: failed to update EXIF for {result.image_name}: {e}",
+                    file=sys.stderr,
+                )
 
         print()
         print(f"EXIF altitude updated for {len(updated)} image(s):")
