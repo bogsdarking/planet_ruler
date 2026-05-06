@@ -38,15 +38,11 @@ Step 1: Basic Gradient-Field Measurement
        fit_config="config/earth_iss_1.yaml"
    )
    
-   # Gradient-field detection will do nothing (it isn't needed!)
-   obs.detect_limb(detection_method="gradient-field")
-   
-   # Fitting is where the magic happens instead
-   obs.fit_limb(
-       loss_function="gradient_field", # Need to specify this!
+   # No detect_limb() call needed — fit_gradient works directly on the image
+   obs.fit_gradient(
        minimizer='dual-annealing',
        resolution_stages='auto',  # Multi-resolution optimization
-       maxiter=3000
+       max_iter=3000
    )
    
    # Calculate uncertainty
@@ -66,16 +62,15 @@ The gradient-field method has several configurable parameters:
 
 .. code-block:: python
 
-   # Configure gradient-field detection
-    obs.fit_limb(
-        minimizer = "dual-annealing",
-        loss_function="gradient_field",
-        image_smoothing=2.0,
-        kernel_smoothing=8.0,
-        directional_smoothing=50,
-        directional_decay_rate=0.10, # Directional smoothing fall-off.
-        prefer_direction="up" # A trick that can help if you know that the horizon is darker along the top (up) or the bottom (down)
-    )
+   # Configure gradient-field fit
+   obs.fit_gradient(
+       minimizer="dual-annealing",
+       image_smoothing=2.0,
+       kernel_smoothing=8.0,
+       directional_smoothing=50,
+       directional_decay_rate=0.10,  # Directional smoothing fall-off.
+       prefer_direction="up",  # Hint: horizon is darker on top than bottom
+   )
 
 **Parameter Effects:**
 
@@ -107,27 +102,24 @@ Gradient-field detection benefits greatly from multi-resolution optimization:
 .. code-block:: python
 
    # Automatic multi-resolution (recommended)
-   obs.fit_limb(
+   obs.fit_gradient(
        minimizer="dual-annealing",
-       loss_function="gradient_field",
        resolution_stages='auto',  # Automatically generates stages
-       maxiter=1000
+       max_iter=1000
    )
-   
+
    # Manual multi-resolution configuration
-   obs.fit_limb(
+   obs.fit_gradient(
        minimizer="dual-annealing",
-       loss_function="gradient_field",
        resolution_stages=[4, 2, 1],  # Downsample factors: 4x → 2x → 1x
-       maxiter=1000
+       max_iter=1000
    )
-   
+
    # Single resolution (faster but may miss global optimum)
-   obs.fit_limb(
+   obs.fit_gradient(
        minimizer="dual-annealing",
-       loss_function="gradient_field",
        resolution_stages=None,  # No multi-resolution
-       maxiter=1000
+       max_iter=1000
    )
 
 **Multi-Resolution Benefits:**
@@ -145,31 +137,32 @@ Different minimizers have different characteristics:
 .. code-block:: python
 
    # Differential evolution: Best for complex problems
-   obs.fit_limb(
+   obs.fit_gradient(
        minimizer='differential-evolution',
+       minimizer_preset='robust',     # "fast", "balanced", "robust", "super_robust"
        resolution_stages='auto',
-       popsize=15,
-       maxiter=1000,
+       max_iter=1000,
        seed=42
    )
    # Pros: Most robust, provides population for uncertainty
    # Cons: Slowest
-   
+
    # Dual annealing: Good balance
-   obs.fit_limb(
+   obs.fit_gradient(
        minimizer='dual-annealing',
+       minimizer_preset='balanced',
        resolution_stages='auto',
-       maxiter=1000,
+       max_iter=1000,
        seed=42
    )
    # Pros: Fast, good global optimization
    # Cons: No population (use Hessian for uncertainty)
-   
+
    # Basinhopping: Fastest
-   obs.fit_limb(
+   obs.fit_gradient(
        minimizer='basinhopping',
+       minimizer_preset='fast',
        resolution_stages='auto',
-       niter=100,
        seed=42
    )
    # Pros: Fastest optimization
@@ -253,12 +246,12 @@ The gradient-field method is ideal for batch processing:
                "config/earth_iss_1.yaml"
            )
            
-           # Automated detection
-           obs.fit_limb(
+           # Automated fit directly to image gradients
+           obs.fit_gradient(
                minimizer='dual-annealing',
-               loss_function="gradient_field",
+               minimizer_preset='balanced',
                resolution_stages='auto',
-               maxiter=500  # Reduce for speed
+               max_iter=500  # Reduce for speed
            )
            
            # Calculate uncertainty

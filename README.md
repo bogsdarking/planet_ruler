@@ -18,7 +18,7 @@
 ```python
 import planet_ruler as pr
 obs = pr.LimbObservation("horizon_photo.jpg", "config/camera.yaml")
-obs.detect_limb().fit_limb()  # Planet radius: 6,234 km
+obs.detect_limb().fit_arc()  # Planet radius: 6,234 km
 ```
 
 <div align="center">
@@ -116,10 +116,10 @@ obs.detect_limb(detection_method='manual')          # Interactive GUI (default)
 # obs.detect_limb(detection_method='gradient-field')  # Gradient flow analysis
 # obs.detect_limb(detection_method='segmentation')    # AI-powered (requires PyTorch)
 
-# OR skip detection and use gradient-field optimization directly:
-# obs.fit_limb(loss_function='gradient_field')  # Direct gradient optimization
+# OR skip detection and fit directly to image gradients:
+# obs.fit_gradient(resolution_stages='auto')  # Gradient-field optimization
 
-obs.fit_limb()     # Multi-resolution parameter optimization
+obs.fit_arc()      # Fit to detected limb points
 obs.plot()         # Visualize results
 
 # Access results with uncertainty
@@ -218,15 +218,18 @@ This means horizon-based radius measurement is fundamentally sound across the en
 - Supports phones, DSLRs, mirrorless, point-and-shoot
 - No manual camera configuration needed
 
-**Flexible Detection Methods**
+**Flexible Detection & Fitting Methods**
 - **Manual**: Interactive GUI with precision controls (default)
 - **Gradient-field**: Automated detection via directional blur and flux analysis
+- **Sagitta**: Fast radius estimate from horizon arc-height (new in 2.0)
+- **Staged fitting**: Chain methods (e.g. sagitta → arc) for speed + accuracy
 - **AI Segmentation**: Deep learning-powered (optional)
 
 **Advanced Camera Models**
 - Camera parameter optimization
-- Multiple camera configurations supported
-- Flexible parameter fitting framework
+- Multi-camera phone support (wide/main/tele inferred from EXIF)
+- Interactive cropping tool (`TkImageCropper`) with auto-scaled parameters
+- Flexible parameter limit presets (`tight` / `balanced` / `loose`)
 
 **Multi-Planetary Support**
 - Earth, Saturn, Pluto examples included
@@ -337,7 +340,7 @@ config = create_config_from_image("my_photo.jpg", altitude_m=10668)
 
 # Step 2: Measure the planet
 obs = pr.LimbObservation("my_photo.jpg", config)
-obs.detect_limb().fit_limb()
+obs.detect_limb().fit_arc()
 
 print(f"Your planet's radius: {obs.best_parameters['r']/1000:.0f} km")
 ```
@@ -363,7 +366,7 @@ config = create_config_from_image("your_photo.jpg", altitude_m=10668, planet="ea
 # Use the auto-generated config
 obs = pr.LimbObservation("your_photo.jpg", config)
 obs.detect_limb()
-obs.fit_limb()
+obs.fit_arc()
 
 print(f"Detected camera: {config['camera_info']['camera_model']}")
 print(f"Fitted radius: {obs.best_parameters['r']/1000:.0f} km")
@@ -384,11 +387,11 @@ obs.detect_limb(detection_method='manual')  # Interactive GUI detection
 # obs.detect_limb(detection_method='gradient-break')  # Simple gradient detection
 # obs.detect_limb(detection_method='gradient-field')  # Gradient flow analysis
 
-# OR use gradient-field optimization (skips traditional detection):
-# obs.fit_limb(loss_function='gradient_field')  # Direct gradient optimization
+# OR skip detection and fit directly to image gradients:
+# obs.fit_gradient(resolution_stages='auto')
 
 obs.detect_limb()
-obs.fit_limb()
+obs.fit_arc()
 
 print(f"Fitted radius: {obs.best_parameters['r']/1000:.0f} km")
 ```
@@ -436,7 +439,7 @@ print(f"Detected: {config['camera_info']['camera_model']}")
 # Measure the planet
 obs = pr.LimbObservation("airplane_window_photo.jpg", config)
 obs.detect_limb()
-obs.fit_limb()
+obs.fit_arc()
 obs.plot()
 
 print(f"Earth radius: {obs.best_parameters['r']/1000:.0f} km")
@@ -465,7 +468,7 @@ obs = pr.LimbObservation(
 )
 
 # Full analysis pipeline
-obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
+obs.fit_gradient(resolution_stages='auto')
 obs.plot()                                 # Visualize results
 
 # Results
@@ -482,7 +485,7 @@ obs = pr.LimbObservation(
 )
 
 # Two-step analysis
-obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
+obs.fit_gradient(resolution_stages='auto')
 
 # Rich visualization
 from planet_ruler.plot import plot_3d_solution
@@ -502,19 +505,21 @@ plot_3d_solution(**obs.best_parameters)  # 3D planetary geometry view
 ### Quick References
 ```python
 # Core classes and functions
-pr.LimbObservation(image_path, fit_config)                       # Main analysis class
-pr.geometry.horizon_distance(altitude, radius)                   # Theoretical calculations  
-pr.fit.optimize_parameters(obs, method='differential_evolution') # Optimization
-pr.uncertainty.calculate_parameter_uncertainty(obs, 'r')         # Uncertainty estimation
-pr.plot.show_analysis(obs, style='comprehensive')                # Visualization
+pr.LimbObservation(image_path, fit_config)                  # Main analysis class
+pr.geometry.horizon_distance(altitude, radius)              # Theoretical calculations
+pr.uncertainty.calculate_parameter_uncertainty(obs, 'r')   # Uncertainty estimation
 
-# Key methods
-obs.detect_limb(detection_method='manual')          # Interactive detection (default)
-obs.fit_limb(resolution_stages='auto')    # Multi-resolution optimization
-obs.plot()                                # Show results with uncertainty
+# Fitting methods (choose one, or chain via fit_limb stages)
+obs.fit_arc()                              # Fit arc to detected limb points (default)
+obs.fit_gradient(resolution_stages='auto') # Fit directly to image gradients
+obs.fit_sagitta()                          # Fast sagitta-based radius estimate
 
-# Advanced gradient-field optimization:
-# obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
+# Multi-stage chained fit (sagitta → arc is a reliable combo)
+obs.fit_limb(stages=[{"method": "sagitta"}, {"method": "arc"}])
+
+# Other key methods
+obs.detect_limb(detection_method='manual')  # Interactive horizon detection
+obs.plot()                                  # Show results with uncertainty
 ```
 
 ## Use Cases & Applications

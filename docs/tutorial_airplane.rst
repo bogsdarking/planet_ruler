@@ -74,19 +74,6 @@ Photography Tips
    * Let auto-exposure handle brightness
 
 
-.. Part 2: Cropping Your Photo (Optional)
-.. ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. Sometimes obstructions are unavoidable. If you end up with a photo that contains a window frame,
-.. airplane wing, or other object that either obscures the horizon directly or could confuse the fit, 
-.. cropping is a great option. To get started, simply run the 'crop' method
-
-.. .. code-block:: python
-
-..    import planet_ruler as pr
-..    photo_path = "airplane_horizon.jpg"
-
-
 Part 3: Finding Your Altitude
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -190,16 +177,18 @@ Planet Ruler's auto-config feature extracts camera parameters from your photo's 
    config = create_config_from_image(
        image_path=photo_path,
        altitude_m=altitude_meters,
-       planet="earth"
+       planet="earth",
+       limits_preset="balanced",  # "tight", "balanced" (default), or "loose"
    )
    
    # See what was detected
    print("Auto-detected camera:")
-   camera = config["camera"]
-   print(f"  {camera.get('make', 'Unknown')} {camera.get('model', 'Unknown')}")
-   print(f"  Focal length: {camera['focal_length_mm']:.1f} mm")
-   print(f"  Sensor width: {camera['sensor_width_mm']:.1f} mm")
-   print(f"  Field of view: {config['observation']['field_of_view_deg']:.1f}°")
+   camera_info = config["camera_info"]
+   print(f"  Model: {camera_info.get('camera_model', 'Unknown')}")
+   f_mm = config["init_parameter_values"]["f"] * 1000
+   w_mm = config["init_parameter_values"]["w"] * 1000
+   print(f"  Focal length: {f_mm:.1f} mm")
+   print(f"  Sensor width: {w_mm:.1f} mm")
 
    # Create observation
    obs = pr.LimbObservation(photo_path, config)
@@ -292,12 +281,12 @@ Now fit the planetary radius to match your detected horizon:
 
    # Fit Earth's radius
    print("\nFitting planetary parameters...")
-   obs.fit_limb(
+   obs.fit_arc(
        minimizer='differential-evolution',
-       maxiter=1000,
+       max_iter=1000,
        seed=42
    )
-   
+
    print("✓ Fit completed!")
 
 Results and Uncertainty
@@ -435,7 +424,7 @@ Want better results? Try these techniques:
        obs = pr.LimbObservation(photo, config)
        obs.detect_limb(detection_method="manual")
        obs.smooth_limb()
-       obs.fit_limb(maxiter=1000)
+       obs.fit_arc(max_iter=1000)
        
        radius_result = calculate_parameter_uncertainty(
            obs, "r", scale_factor=1000, method='auto'
@@ -466,13 +455,10 @@ For more consistent results across multiple photos:
 
 .. code-block:: python
 
-   # Gradient-field detection (no manual clicking)
-   obs.detect_limb(detection_method="gradient-field")
-   obs.smooth_limb()
-   obs.fit_limb(
-       loss_function='gradient_field',
+   # Gradient-field optimization (no manual clicking, no detect_limb needed)
+   obs.fit_gradient(
        resolution_stages='auto',
-       maxiter=800
+       max_iter=800
    )
 
 Part 6: Educational Extensions
@@ -587,11 +573,13 @@ Override with manual field-of-view:
 
 .. code-block:: python
 
+   # Use "loose" preset to give the optimizer more room when metadata is uncertain
    config = create_config_from_image(
        photo_path,
        altitude_m=10668,
        planet="earth",
-       override_fov_deg=75  # Typical smartphone FOV
+       limits_preset="loose",       # Wide search bounds
+       param_tolerances={"f": 0.5}  # Extra slack on focal length
    )
 
 **"My photo has the aircraft wing in it"**

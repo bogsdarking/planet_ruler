@@ -37,50 +37,60 @@ Method Overview
 Comparison Table
 ~~~~~~~~~~~~~~~~
 
-.. list-table:: Detection Method Comparison
+.. list-table:: Detection & Fitting Method Comparison
    :header-rows: 1
-   :widths: 20 25 25 30
+   :widths: 20 20 20 20 20
 
    * - Feature
      - Manual Annotation
      - Gradient-Field
      - ML Segmentation
+     - Sagitta
    * - **Setup Time**
      - Instant (built-in)
      - Instant (built-in)
      - 5-10 min (first time model download)
+     - Instant (built-in)
    * - **Processing Time**
      - 30-120 sec (user-dependent)
      - 15-60 sec (automated)
      - 30-300 sec (model inference)
+     - <5 sec
    * - **Dependencies**
      - None (tkinter only)
      - None (scipy only)
      - PyTorch + SAM (~2GB)
+     - None
    * - **Memory Usage**
      - <100 MB
      - <200 MB
      - 2-4 GB
+     - <100 MB
    * - **Accuracy**
      - Highest (user-controlled)
      - Good (clear horizons)
      - Variable (depends on scene)
+     - Lower (best as first stage)
    * - **Robustness**
      - Works everywhere
      - Needs clear edges
      - Handles complexity
+     - Needs detected limb
    * - **Reproducibility**
      - Low (user variation)
+     - High (deterministic)
      - High (deterministic)
      - High (deterministic)
    * - **Batch Processing**
      - Not practical
      - Excellent
      - Good (if GPU available)
-   * - **Educational Focus**
-     - Hands-on data
-     - Mathematics/Physics
-     - Machine Learning
+     - Excellent (as stage 1)
+   * - **Best Used As**
+     - Standalone or stage 2
+     - Standalone
+     - Standalone
+     - Stage 1 warm-start
 
 Method 1: Manual Annotation
 ---------------------------
@@ -142,7 +152,7 @@ Example Usage
    obs.detect_limb(detection_method="manual")
    
    # Fit annotated points
-   obs.fit_limb(maxiter=1000)
+   obs.fit_arc(max_iter=1000)
 
 .. tip::
    **Best practices for clicking:**
@@ -259,24 +269,24 @@ Example Usage
    obs = pr.LimbObservation("image.jpg", "config.yaml")
    
    # Gradient-field optimization (no detection step!)
-   obs.fit_limb(
-       loss_function='gradient_field',
+   obs.fit_gradient(
        resolution_stages='auto',      # Multi-resolution: 0.25 → 0.5 → 1.0
-       image_smoothing=2.0,            # Remove high-freq artifacts
-       gradient_smoothing=8.0,         # Smooth gradient field
+       image_smoothing=2.0,           # Remove high-freq artifacts
+       kernel_smoothing=8.0,          # Smooth gradient field
        minimizer='dual-annealing',
-       maxiter=1000
+       minimizer_preset='balanced',
+       max_iter=1000
    )
-   
+
    # Note: No detect_limb() call needed!
 
 .. tip::
    **Tuning parameters:**
-   
+
    * Increase ``image_smoothing`` (2.0 → 4.0) for noisy images
-   * Increase ``gradient_smoothing`` (8.0 → 16.0) for hazy horizons
+   * Increase ``kernel_smoothing`` (8.0 → 16.0) for hazy horizons
    * Use ``prefer_direction="up"`` if above the horizon is darker than below
-   * More resolution stages (e.g., [8,4,2,1]) or "differential-evolution" for difficult cases
+   * More resolution stages (e.g., [8,4,2,1]) or ``minimizer_preset='robust'`` for difficult cases
 
 Visual Examples
 ~~~~~~~~~~~~~~~
@@ -448,12 +458,12 @@ Example Usage
    
    # ML segmentation
    obs.detect_limb(detection_method="segmentation")
-   
+
    # Always inspect the result!
    obs.plot()
-   
+
    # If detection looks good, proceed
-   obs.fit_limb(maxiter=1000)
+   obs.fit_arc(max_iter=1000)
 
 .. warning::
    **Always visually inspect** ML segmentation results before fitting! The model can occasionally misidentify features as the horizon. If the detection looks wrong, use interactive mode or manual annotation instead.
@@ -472,6 +482,71 @@ Installation
    # For GPU support (faster, requires CUDA)
    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 
+Method 4: Sagitta (Arc-Height) Estimation
+-----------------------------------------
+
+**Best for:** Quick radius estimates, warm-starting a subsequent arc fit
+
+How It Works
+~~~~~~~~~~~~
+
+The sagitta method estimates the planetary radius directly from the vertical
+"sag" of the horizon arc — the pixel distance between the highest and lowest
+points of the detected limb.  It runs a fast 2-D optimizer over curvature
+and tilt and does not need differential evolution, making it much faster than
+a full arc fit.
+
+Because it updates the parameter bounds automatically, it is especially useful
+as a **first stage** that narrows the search space for a subsequent
+``fit_arc`` or ``fit_gradient`` call.
+
+**Strengths:**
+
+| ✅ **Very fast** — seconds rather than minutes
+| ✅ **No minimizer hyperparameters** — works out of the box
+| ✅ **Warm-starts downstream stages** — automatically tightens bounds
+
+**Limitations:**
+
+| ❌ **Requires a detected limb** — needs ``detect_limb()`` first
+| ❌ **Less precise than arc fit** — use as a first stage, not final answer
+
+When to Use
+~~~~~~~~~~~
+
+Use the sagitta method when:
+
+* You want a fast sanity-check radius before committing to a full fit
+* You want to warm-start a slower arc or gradient-field optimization
+* You are processing many images and speed is critical
+
+Example Usage
+~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   import planet_ruler as pr
+
+   obs = pr.LimbObservation("image.jpg", "config.yaml")
+   obs.detect_limb(detection_method="manual")
+
+   # Stand-alone sagitta estimate (fast)
+   obs.fit_sagitta()
+   print(f"Quick radius estimate: {obs.best_parameters['r']/1000:.0f} km")
+
+   # Or chain sagitta → arc for speed + accuracy (recommended combo)
+   obs.fit_limb(stages=[
+       {"method": "sagitta"},
+       {"method": "arc", "minimizer": "differential-evolution",
+        "minimizer_preset": "balanced"},
+   ])
+   print(f"Final radius: {obs.best_parameters['r']/1000:.0f} km")
+
+.. tip::
+   The sagitta → arc chain is the recommended default workflow for manual
+   annotation in 2.0.  Sagitta quickly finds a good starting radius and
+   tightens the parameter bounds; the arc fitter then refines it precisely.
+
 Combining Methods
 -----------------
 
@@ -485,40 +560,41 @@ For critical measurements, use multiple methods and compare:
    import planet_ruler as pr
    from planet_ruler.uncertainty import calculate_parameter_uncertainty
    
-   methods = {
-       'manual': {'detection_method': 'manual'},
-       'gradient': {'loss_function': 'gradient_field', 'resolution_stages': 'auto'},
-       'ml': {'detection_method': 'segmentation'}
-   }
-   
    results = {}
-   
-   for name, kwargs in methods.items():
-       print(f"\nTrying {name} method...")
-       obs = pr.LimbObservation("image.jpg", "config.yaml")
-       
-       if 'detection_method' in kwargs:
-           obs.detect_limb(**kwargs)
-           obs.smooth_limb()
-           obs.fit_limb(maxiter=1000)
-       else:
-           obs.fit_limb(maxiter=1000, **kwargs)
-       
+
+   # Manual annotation → arc fit
+   print("\nTrying manual method...")
+   obs = pr.LimbObservation("image.jpg", "config.yaml")
+   obs.detect_limb(detection_method='manual')
+   obs.fit_arc()
+   results['manual'] = obs
+
+   # Gradient-field: no detection step needed
+   print("\nTrying gradient method...")
+   obs = pr.LimbObservation("image.jpg", "config.yaml")
+   obs.fit_gradient(resolution_stages='auto')
+   results['gradient'] = obs
+
+   # ML segmentation → arc fit
+   print("\nTrying ML segmentation method...")
+   obs = pr.LimbObservation("image.jpg", "config.yaml")
+   obs.detect_limb(detection_method='segmentation')
+   obs.fit_arc()
+   results['ml'] = obs
+
+   # Compare results
+   print("\nMethod comparison:")
+   radii = {}
+   for name, obs in results.items():
        radius_result = calculate_parameter_uncertainty(
            obs, "r", scale_factor=1000, method='auto'
        )
-       
-       results[name] = radius_result['value']
-       print(f"  Radius: {radius_result['value']:.1f} km")
-   
-   # Compare results
-   print("\nMethod comparison:")
-   for name, radius in results.items():
-       print(f"  {name}: {radius:.1f} km")
-   
+       radii[name] = radius_result['value']
+       print(f"  {name}: {radius_result['value']:.1f} km")
+
    # Check consistency
    import numpy as np
-   values = list(results.values())
+   values = list(radii.values())
    print(f"\nSpread: {np.max(values) - np.min(values):.1f} km")
    print(f"Mean: {np.mean(values):.1f} km")
    print(f"Std: {np.std(values):.1f} km")
@@ -578,7 +654,15 @@ Summary
 * You're willing to visually inspect results
 * You have time for model download (first time)
 
-**When in doubt:** Start with manual annotation. It always works and teaches you what a good horizon detection looks like. Then try other methods for comparison.
+**Use Sagitta as Stage 1 when:**
+
+* You want a fast warm-start before a slower arc fit
+* You need a quick sanity-check radius estimate
+* You are batch processing and want to reduce full-fit time
+
+**When in doubt:** Start with manual annotation followed by a sagitta → arc staged
+fit (``obs.fit_limb(stages=[{"method": "sagitta"}, {"method": "arc"}])``).
+This is the recommended default workflow in 2.0.
 
 Next Steps
 ----------
