@@ -102,9 +102,7 @@ class BenchmarkResult:
     uncertainty_radius: float
 
     # Fit results (actual fitted parameters)
-    best_parameters: Dict[
-        str, float
-    ]  # Actual fitted values {r, h, f, theta_x, ...}
+    best_parameters: Dict[str, float]  # Actual fitted values {r, h, f, theta_x, ...}
     convergence_status: str
     iterations: Optional[int]
 
@@ -141,7 +139,15 @@ def _run_batch_worker(task: tuple) -> List["BenchmarkResult"]:
     going through __init__ (which would re-expand the full config).
     Writes results to DB directly so the main process stays lean.
     """
-    benchmark_dir, db_path, scenario, image_name, git_commit, completed_keys, skip_completed = task
+    (
+        benchmark_dir,
+        db_path,
+        scenario,
+        image_name,
+        git_commit,
+        completed_keys,
+        skip_completed,
+    ) = task
 
     runner = object.__new__(BenchmarkRunner)
     runner.benchmark_dir = Path(benchmark_dir)
@@ -150,7 +156,8 @@ def _run_batch_worker(task: tuple) -> List["BenchmarkResult"]:
 
     try:
         batch = runner._run_with_augmentation(
-            scenario, image_name,
+            scenario,
+            image_name,
             completed_keys=completed_keys,
             skip_completed=skip_completed,
         )
@@ -279,7 +286,9 @@ class BenchmarkRunner:
             return [base]
         n_variants = int(aug.get("n_variants", aug.get("n_noisy_variants", 0)))
         sigma = float(aug.get("noise_sigma", 4.0))
-        return [base] + [f"{base}__n{sigma:g}px_aug{i + 1:02d}" for i in range(n_variants)]
+        return [base] + [
+            f"{base}__n{sigma:g}px_aug{i + 1:02d}" for i in range(n_variants)
+        ]
 
     def _init_database(self):
         """Initialize SQLite database with results table."""
@@ -355,14 +364,11 @@ class BenchmarkRunner:
 
         # Migration: add fit_stages column to existing databases
         try:
-            cursor.execute(
-                "ALTER TABLE benchmark_results ADD COLUMN fit_stages TEXT"
-            )
+            cursor.execute("ALTER TABLE benchmark_results ADD COLUMN fit_stages TEXT")
         except sqlite3.OperationalError:
             pass  # column already exists
         cursor.execute(
-            "UPDATE benchmark_results"
-            " SET fit_stages = ? WHERE fit_stages IS NULL",
+            "UPDATE benchmark_results" " SET fit_stages = ? WHERE fit_stages IS NULL",
             ('[{"method":"arc"}]',),
         )
 
@@ -452,9 +458,7 @@ class BenchmarkRunner:
         sag_suffix = ""
         if fit_stages:
             sag = [s for s in fit_stages if s.get("method") == "sagitta"]
-            has_opt = any(
-                s.get("method") in ("arc", "gradient") for s in fit_stages
-            )
+            has_opt = any(s.get("method") in ("arc", "gradient") for s in fit_stages)
             if not has_opt:
                 fp = self._fp_code(params.get("free_parameters", ["r"]))
                 n_s = float(sag[-1].get("n_sigma", 2.0)) if sag else 2.0
@@ -462,9 +466,7 @@ class BenchmarkRunner:
                 return f"g_sag_only_{fp}_s{int(n_s * 10):02d}_{sc}"
             if sag:
                 params = dict(params)
-                params["constrain_radius_n_sigma"] = float(
-                    sag[-1].get("n_sigma", 2.0)
-                )
+                params["constrain_radius_n_sigma"] = float(sag[-1].get("n_sigma", 2.0))
                 sag_suffix = f"_{self._sag_code(sag[-1])}"
 
         if params.get("constrain_radius_only"):
@@ -620,9 +622,7 @@ class BenchmarkRunner:
         for scenario in expanded_scenarios:
             scenario_images = scenario.get("images", [])
             if images is not None:
-                scenario_images = [
-                    img for img in scenario_images if img in images
-                ]
+                scenario_images = [img for img in scenario_images if img in images]
             for image_name in scenario_images:
                 expected = self._expected_names(scenario)
                 if skip_completed and all(
@@ -633,9 +633,7 @@ class BenchmarkRunner:
                 pending.append((scenario, image_name))
 
         if n_skipped:
-            print(
-                f"Skipping {n_skipped} already-complete (scenario, image) pairs."
-            )
+            print(f"Skipping {n_skipped} already-complete (scenario, image) pairs.")
         print(f"Running {len(pending)} pending batches.")
 
         results: List[BenchmarkResult] = []
@@ -645,7 +643,8 @@ class BenchmarkRunner:
         if not parallel or len(pending) == 0:
             for scenario, image_name in pending:
                 batch = self._run_with_augmentation(
-                    scenario, image_name,
+                    scenario,
+                    image_name,
                     completed_keys=frozen_keys,
                     skip_completed=skip_completed,
                 )
@@ -710,10 +709,7 @@ class BenchmarkRunner:
         augmentation = scenario.get("augmentation")
         base_name = scenario["name"]
 
-        if (
-            not augmentation
-            or scenario.get("detection_method", "manual") != "manual"
-        ):
+        if not augmentation or scenario.get("detection_method", "manual") != "manual":
             if skip_completed and (base_name, image_name) in completed_keys:
                 return []
             print(f"Running: {base_name} on {image_name}")
@@ -724,9 +720,7 @@ class BenchmarkRunner:
         )
 
         n_variants = int(
-            augmentation.get(
-                "n_variants", augmentation.get("n_noisy_variants", 0)
-            )
+            augmentation.get("n_variants", augmentation.get("n_noisy_variants", 0))
         )
         noise_sigma = float(augmentation.get("noise_sigma", 4.0))
         seed = int(augmentation.get("seed", 0))
@@ -889,12 +883,15 @@ class BenchmarkRunner:
             perturbation_factors=json.dumps(
                 scenario.get("perturbation_factor", 1.0)
                 if isinstance(scenario.get("perturbation_factor"), dict)
-                else {"r": float(scenario.get("perturbation_factor", 1.0)),
-                      "h": float(scenario.get("perturbation_factor", 1.0))}
+                else {
+                    "r": float(scenario.get("perturbation_factor", 1.0)),
+                    "h": float(scenario.get("perturbation_factor", 1.0)),
+                }
             ),
             r_limits_configured=(
                 json.dumps(list(scenario["r_limits_km"]))
-                if scenario.get("r_limits_km") is not None else None
+                if scenario.get("r_limits_km") is not None
+                else None
             ),
             image_width=0,
             image_height=0,
@@ -939,9 +936,7 @@ class BenchmarkRunner:
             limb_detection = scenario.get("detection_method", "manual")
 
             # Get minimizer (default to differential-evolution)
-            minimizer_method = scenario.get(
-                "minimizer", "differential-evolution"
-            )
+            minimizer_method = scenario.get("minimizer", "differential-evolution")
             minimizer_preset = scenario.get("minimizer_preset")
             minimizer_kwargs = scenario.get("minimizer_kwargs")
 
@@ -973,9 +968,7 @@ class BenchmarkRunner:
                             "'pexels-claiton-17217951_exif.json'"
                         )
 
-                    annot_path = (
-                        self.benchmark_dir / "annotations" / annotation_file
-                    )
+                    annot_path = self.benchmark_dir / "annotations" / annotation_file
                     if not annot_path.exists():
                         raise FileNotFoundError(
                             f"Annotation file not found: {annot_path}\n"
@@ -997,10 +990,7 @@ class BenchmarkRunner:
                     if ann_params:
                         free = set(obs.free_parameters or [])
                         for param, value in ann_params.items():
-                            if (
-                                param not in free
-                                and param in obs.init_parameter_values
-                            ):
+                            if param not in free and param in obs.init_parameter_values:
                                 obs.init_parameter_values[param] = float(value)
                                 orig = getattr(
                                     obs,
@@ -1016,9 +1006,7 @@ class BenchmarkRunner:
                     elif "points" in annotation_data:
                         points = annotation_data["points"]
                     else:
-                        raise ValueError(
-                            f"Invalid annotation format in {annot_path}"
-                        )
+                        raise ValueError(f"Invalid annotation format in {annot_path}")
 
                     # Convert points to sparse target array
                     limb_target = np.full(img_array.shape[1], np.nan)
@@ -1062,12 +1050,8 @@ class BenchmarkRunner:
                 result.fitted_radius = obs.best_parameters.get("r")
 
                 if obs.fit_results is not None:
-                    result.iterations = getattr(
-                        obs.fit_results, "nit", None
-                    )
-                    if result.iterations is None and hasattr(
-                        obs.fit_results, "nfev"
-                    ):
+                    result.iterations = getattr(obs.fit_results, "nit", None)
+                    if result.iterations is None and hasattr(obs.fit_results, "nfev"):
                         result.iterations = obs.fit_results.nfev
                 else:
                     result.iterations = 0
@@ -1084,9 +1068,7 @@ class BenchmarkRunner:
                 result.absolute_error = abs(
                     result.fitted_radius - result.expected_radius
                 )
-                result.relative_error = (
-                    result.absolute_error / result.expected_radius
-                )
+                result.relative_error = result.absolute_error / result.expected_radius
                 result.within_uncertainty = (
                     result.absolute_error <= result.uncertainty_radius
                 )
@@ -1223,9 +1205,7 @@ class BenchmarkRunner:
         repo_root = (
             self.benchmark_dir.parent.parent
         )  # planet_ruler/benchmarks -> planet_ruler -> repo_root
-        test_path = (
-            repo_root / "tests" / "images" / "airplane" / f"{image_name}.jpg"
-        )
+        test_path = repo_root / "tests" / "images" / "airplane" / f"{image_name}.jpg"
         if test_path.exists():
             return test_path
 
@@ -1240,9 +1220,7 @@ class BenchmarkRunner:
         data = asdict(result)
         data["fit_params"] = json.dumps(data["fit_params"])
         data["free_parameters"] = json.dumps(data["free_parameters"])
-        data["init_parameter_values"] = json.dumps(
-            data["init_parameter_values"]
-        )
+        data["init_parameter_values"] = json.dumps(data["init_parameter_values"])
         data["parameter_limits"] = json.dumps(data["parameter_limits"])
         data["best_parameters"] = json.dumps(data["best_parameters"])
         data["minimizer_config"] = json.dumps(data["minimizer_config"])

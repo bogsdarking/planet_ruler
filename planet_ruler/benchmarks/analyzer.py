@@ -192,9 +192,14 @@ class BenchmarkAnalyzer:
 
         # Expose minimizer method from minimizer_config JSON column
         df["minimizer"] = df["minimizer_config"].apply(
-            lambda x: x if isinstance(x, str) else (
-                x.get("method") or x.get("minimizer")
-                if isinstance(x, dict) else None
+            lambda x: (
+                x
+                if isinstance(x, str)
+                else (
+                    x.get("method") or x.get("minimizer")
+                    if isinstance(x, dict)
+                    else None
+                )
             )
         )
 

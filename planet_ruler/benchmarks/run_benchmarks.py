@@ -52,9 +52,7 @@ Examples:
         """,
     )
 
-    parser.add_argument(
-        "config", type=Path, help="Path to YAML configuration file"
-    )
+    parser.add_argument("config", type=Path, help="Path to YAML configuration file")
 
     parser.add_argument(
         "--scenario",
@@ -102,9 +100,7 @@ Examples:
         help="Path to output database (default: benchmarks/results/benchmark_results.db)",
     )
 
-    parser.add_argument(
-        "--quiet", action="store_true", help="Suppress progress output"
-    )
+    parser.add_argument("--quiet", action="store_true", help="Suppress progress output")
 
     args = parser.parse_args()
 
@@ -166,9 +162,7 @@ Examples:
         print("=" * 70)
         print(f"Total runs: {len(results)}")
 
-        successful = sum(
-            1 for r in results if r.convergence_status == "success"
-        )
+        successful = sum(1 for r in results if r.convergence_status == "success")
         print(f"Successful: {successful} ({successful/len(results)*100:.1f}%)")
 
         if successful > 0:
@@ -194,9 +188,7 @@ Examples:
         print(f"Results stored in: {runner.db_path}")
         print()
         print("Next steps:")
-        print(
-            "  - Analyze results: jupyter notebook benchmarks/visualize.ipynb"
-        )
+        print("  - Analyze results: jupyter notebook benchmarks/visualize.ipynb")
         print(
             "  - Export CSV: python -c 'from benchmarks.analyzer import BenchmarkAnalyzer; "
             'BenchmarkAnalyzer().export_csv("results.csv")\''

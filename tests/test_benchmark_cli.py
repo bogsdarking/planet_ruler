@@ -24,8 +24,7 @@ import pytest
 from planet_ruler.benchmarks.run_benchmarks import main as run_main
 
 SMOKE_CONFIG = (
-    Path(__file__).parent.parent
-    / "planet_ruler/benchmarks/configs/smoke_test.yaml"
+    Path(__file__).parent.parent / "planet_ruler/benchmarks/configs/smoke_test.yaml"
 )
 
 _HAS_SMOKE = SMOKE_CONFIG.exists()
@@ -107,9 +106,7 @@ class TestRunBenchmarksMain:
     @pytest.mark.skipif(not _HAS_SMOKE, reason="smoke_test.yaml not found")
     def test_summary_printed_with_results(self, monkeypatch, tmp_path, capsys):
         db = tmp_path / "test.db"
-        monkeypatch.setattr(
-            sys, "argv", ["rb", str(SMOKE_CONFIG), "--db", str(db)]
-        )
+        monkeypatch.setattr(sys, "argv", ["rb", str(SMOKE_CONFIG), "--db", str(db)])
         mock_runner = MagicMock()
         mock_runner.db_path = db
         mock_runner.git_commit = "abc123"
@@ -128,7 +125,8 @@ class TestRunBenchmarksMain:
         db = tmp_path / "test.db"
         db.write_text("placeholder")  # must exist for overwrite branch
         monkeypatch.setattr(
-            sys, "argv",
+            sys,
+            "argv",
             ["rb", str(SMOKE_CONFIG), "--db", str(db), "--overwrite", "--quiet"],
         )
         mock_runner = MagicMock()
@@ -145,9 +143,7 @@ class TestRunBenchmarksMain:
     @pytest.mark.skipif(not _HAS_SMOKE, reason="smoke_test.yaml not found")
     def test_run_error_exits(self, monkeypatch, tmp_path):
         db = tmp_path / "test.db"
-        monkeypatch.setattr(
-            sys, "argv", ["rb", str(SMOKE_CONFIG), "--db", str(db)]
-        )
+        monkeypatch.setattr(sys, "argv", ["rb", str(SMOKE_CONFIG), "--db", str(db)])
         mock_runner = MagicMock()
         mock_runner.db_path = db
         mock_runner.git_commit = "abc123"
@@ -164,9 +160,19 @@ class TestRunBenchmarksMain:
     def test_scenario_filter_passed_to_runner(self, monkeypatch, tmp_path):
         db = tmp_path / "test.db"
         monkeypatch.setattr(
-            sys, "argv",
-            ["rb", str(SMOKE_CONFIG), "--db", str(db),
-             "--scenario", "s1", "--scenario", "s2", "--quiet"],
+            sys,
+            "argv",
+            [
+                "rb",
+                str(SMOKE_CONFIG),
+                "--db",
+                str(db),
+                "--scenario",
+                "s1",
+                "--scenario",
+                "s2",
+                "--quiet",
+            ],
         )
         mock_runner = MagicMock()
         mock_runner.db_path = db
@@ -184,7 +190,8 @@ class TestRunBenchmarksMain:
     def test_workers_implies_parallel(self, monkeypatch, tmp_path):
         db = tmp_path / "test.db"
         monkeypatch.setattr(
-            sys, "argv",
+            sys,
+            "argv",
             ["rb", str(SMOKE_CONFIG), "--db", str(db), "--workers", "2", "--quiet"],
         )
         mock_runner = MagicMock()
@@ -203,7 +210,8 @@ class TestRunBenchmarksMain:
     def test_no_skip_passed_to_runner(self, monkeypatch, tmp_path):
         db = tmp_path / "test.db"
         monkeypatch.setattr(
-            sys, "argv",
+            sys,
+            "argv",
             ["rb", str(SMOKE_CONFIG), "--db", str(db), "--no-skip", "--quiet"],
         )
         mock_runner = MagicMock()
@@ -221,9 +229,7 @@ class TestRunBenchmarksMain:
     @pytest.mark.skipif(not _HAS_SMOKE, reason="smoke_test.yaml not found")
     def test_verbose_shows_config_path(self, monkeypatch, tmp_path, capsys):
         db = tmp_path / "test.db"
-        monkeypatch.setattr(
-            sys, "argv", ["rb", str(SMOKE_CONFIG), "--db", str(db)]
-        )
+        monkeypatch.setattr(sys, "argv", ["rb", str(SMOKE_CONFIG), "--db", str(db)])
         mock_runner = MagicMock()
         mock_runner.db_path = db
         mock_runner.git_commit = None
@@ -329,14 +335,18 @@ class TestAnalyzeBenchmarksPlotting:
     """Smoke tests for plotting functions — just verify they run without error."""
 
     def test_plot_performance_vs_accuracy(self):
-        from planet_ruler.benchmarks.analyze_benchmarks import plot_performance_vs_accuracy
+        from planet_ruler.benchmarks.analyze_benchmarks import (
+            plot_performance_vs_accuracy,
+        )
 
         df = _results_df()
         with patch("planet_ruler.benchmarks.analyze_benchmarks.plt.show"):
             plot_performance_vs_accuracy(df)
 
     def test_plot_performance_vs_accuracy_saves_file(self, tmp_path):
-        from planet_ruler.benchmarks.analyze_benchmarks import plot_performance_vs_accuracy
+        from planet_ruler.benchmarks.analyze_benchmarks import (
+            plot_performance_vs_accuracy,
+        )
 
         df = _results_df()
         with patch("planet_ruler.benchmarks.analyze_benchmarks.plt.show"):
@@ -396,7 +406,9 @@ class TestAnalyzeBenchmarksMain:
 
         monkeypatch.setattr(sys, "argv", ["analyze", "--db", str(tmp_path / "fake.db")])
         mock_az = MagicMock()
-        mock_az.get_results.return_value = _results_df().iloc[0:0]  # empty, keeps columns
+        mock_az.get_results.return_value = _results_df().iloc[
+            0:0
+        ]  # empty, keeps columns
         with patch(
             "planet_ruler.benchmarks.analyze_benchmarks.BenchmarkAnalyzer",
             return_value=mock_az,
@@ -422,8 +434,15 @@ class TestAnalyzeBenchmarksMain:
 
         csv_out = tmp_path / "out.csv"
         monkeypatch.setattr(
-            sys, "argv",
-            ["analyze", "--db", str(tmp_path / "fake.db"), "--export-csv", str(csv_out)],
+            sys,
+            "argv",
+            [
+                "analyze",
+                "--db",
+                str(tmp_path / "fake.db"),
+                "--export-csv",
+                str(csv_out),
+            ],
         )
         mock_az = self._mock_analyzer()
         with patch(

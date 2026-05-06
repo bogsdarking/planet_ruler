@@ -89,7 +89,12 @@ class TestBuildName:
 class TestGenerateSyntheticCaseNoIO:
     def test_returns_dict_with_expected_keys(self):
         result = generate_synthetic_case(**SMALL_PARAMS)
-        assert set(result.keys()) == {"image_path", "annotation_path", "params", "points"}
+        assert set(result.keys()) == {
+            "image_path",
+            "annotation_path",
+            "params",
+            "points",
+        }
 
     def test_paths_none_without_output_dir(self):
         result = generate_synthetic_case(**SMALL_PARAMS)
@@ -121,8 +126,12 @@ class TestGenerateSyntheticCaseNoIO:
         assert result["params"]["h"] == 10000
 
     def test_noisy_variant_differs_from_clean(self):
-        clean = generate_synthetic_case(**{**SMALL_PARAMS, "noise_sigma": 0.0, "seed": 0})
-        noisy = generate_synthetic_case(**{**SMALL_PARAMS, "noise_sigma": 5.0, "seed": 0})
+        clean = generate_synthetic_case(
+            **{**SMALL_PARAMS, "noise_sigma": 0.0, "seed": 0}
+        )
+        noisy = generate_synthetic_case(
+            **{**SMALL_PARAMS, "noise_sigma": 5.0, "seed": 0}
+        )
         # At least one y-value should differ due to added noise
         clean_ys = [pt[1] for pt in clean["points"]]
         noisy_ys = [pt[1] for pt in noisy["points"]]
@@ -173,7 +182,9 @@ class TestGenerateSyntheticCaseWithIO:
             assert key in data
 
     def test_annotation_points_match_returned_points(self, tmp_path):
-        result = generate_synthetic_case(**SMALL_PARAMS, output_dir=tmp_path, name="test_pts")
+        result = generate_synthetic_case(
+            **SMALL_PARAMS, output_dir=tmp_path, name="test_pts"
+        )
         with open(tmp_path / "test_pts_limb_points.json") as f:
             data = json.load(f)
         assert data["points"] == result["points"]
@@ -215,7 +226,11 @@ class TestWriteAnnotation:
     def test_params_included_when_provided(self, tmp_path):
         path = tmp_path / "out.json"
         _write_annotation(
-            path, tmp_path / "img.jpg", 400, 300, [[10.0, 200.0]],
+            path,
+            tmp_path / "img.jpg",
+            400,
+            300,
+            [[10.0, 200.0]],
             params={"r": 6371000},
         )
         with open(path) as f:
@@ -234,5 +249,7 @@ class TestWriteAnnotation:
 
     def test_returns_path(self, tmp_path):
         path = tmp_path / "out.json"
-        result = _write_annotation(path, tmp_path / "img.jpg", 400, 300, [[10.0, 200.0]])
+        result = _write_annotation(
+            path, tmp_path / "img.jpg", 400, 300, [[10.0, 200.0]]
+        )
         assert result == path

@@ -40,7 +40,12 @@ from planet_ruler.image import (
 )
 from planet_ruler.annotate import TkLimbAnnotator
 from planet_ruler.validation import validate_limb_config
-from planet_ruler.fit import LimbFitter, SagittaFitter, unpack_parameters, _validate_fit_results
+from planet_ruler.fit import (
+    LimbFitter,
+    SagittaFitter,
+    unpack_parameters,
+    _validate_fit_results,
+)
 from planet_ruler.geometry import limb_arc, focal_length, detector_size
 from planet_ruler.dashboard import FitDashboard
 
@@ -135,10 +140,15 @@ MINIMIZER_PRESETS = {
         },
     },
     "basinhopping": {
-        "fast":        {"niter": 100,  "T": 1.5, "stepsize": 0.5, "local_maxiter": 50},
-        "balanced":    {"niter": 200,  "T": 2.0, "stepsize": 0.5, "local_maxiter": 100},
-        "robust":      {"niter": 500,  "T": 3.0, "stepsize": 0.7, "local_maxiter": 200},
-        "super_robust":{"niter": 2000, "T": 5.0, "stepsize": 1.5, "local_maxiter": 500},
+        "fast": {"niter": 100, "T": 1.5, "stepsize": 0.5, "local_maxiter": 50},
+        "balanced": {"niter": 200, "T": 2.0, "stepsize": 0.5, "local_maxiter": 100},
+        "robust": {"niter": 500, "T": 3.0, "stepsize": 0.7, "local_maxiter": 200},
+        "super_robust": {
+            "niter": 2000,
+            "T": 5.0,
+            "stepsize": 1.5,
+            "local_maxiter": 500,
+        },
         "scipy-default": {
             # Exact scipy basinhopping defaults
             "niter": 100,
@@ -147,10 +157,10 @@ MINIMIZER_PRESETS = {
         },
     },
     "scipy-minimize": {
-        "fast":        {"method": "L-BFGS-B", "n_restarts": 5,   "ftol": 1e-6},
-        "balanced":    {"method": "L-BFGS-B", "n_restarts": 20,  "ftol": 1e-8},
-        "robust":      {"method": "Powell",   "n_restarts": 50,  "ftol": 1e-10},
-        "super_robust":{"method": "Powell",   "n_restarts": 200, "ftol": 1e-12},
+        "fast": {"method": "L-BFGS-B", "n_restarts": 5, "ftol": 1e-6},
+        "balanced": {"method": "L-BFGS-B", "n_restarts": 20, "ftol": 1e-8},
+        "robust": {"method": "Powell", "n_restarts": 50, "ftol": 1e-10},
+        "super_robust": {"method": "Powell", "n_restarts": 200, "ftol": 1e-12},
         "scipy-default": {
             # Exact scipy minimize defaults (L-BFGS-B, single run)
             "method": "L-BFGS-B",
@@ -158,9 +168,9 @@ MINIMIZER_PRESETS = {
         },
     },
     "shgo": {
-        "fast":    {"n": 50,  "iters": 1},
-        "balanced":{"n": 100, "iters": 2},
-        "robust":  {"n": 200, "iters": 3},
+        "fast": {"n": 50, "iters": 1},
+        "balanced": {"n": 100, "iters": 2},
+        "robust": {"n": 200, "iters": 3},
         "scipy-default": {
             # Exact scipy shgo defaults
             "n": 100,
@@ -174,22 +184,29 @@ MINIMIZER_PRESETS = {
 METHOD_MINIMIZER_PRESETS: dict = {
     "manual": {
         "basinhopping": {
-            "fast":        {"niter": 100,  "T": 1.5, "stepsize": 0.5, "local_maxiter": 50},
-            "balanced":    {"niter": 200,  "T": 2.0, "stepsize": 0.5, "local_maxiter": 100},
-            "robust":      {"niter": 500,  "T": 3.0, "stepsize": 0.7, "local_maxiter": 200},
-            "super_robust":{"niter": 2000, "T": 5.0, "stepsize": 1.5, "local_maxiter": 500},
+            "fast": {"niter": 100, "T": 1.5, "stepsize": 0.5, "local_maxiter": 50},
+            "balanced": {"niter": 200, "T": 2.0, "stepsize": 0.5, "local_maxiter": 100},
+            "robust": {"niter": 500, "T": 3.0, "stepsize": 0.7, "local_maxiter": 200},
+            "super_robust": {
+                "niter": 2000,
+                "T": 5.0,
+                "stepsize": 1.5,
+                "local_maxiter": 500,
+            },
         },
         "scipy-minimize": {
-            "fast":        {"method": "L-BFGS-B", "n_restarts": 5,   "ftol": 1e-6},
-            "balanced":    {"method": "L-BFGS-B", "n_restarts": 20,  "ftol": 1e-8},
-            "robust":      {"method": "L-BFGS-B", "n_restarts": 50,  "ftol": 1e-10},
-            "super_robust":{"method": "Powell",   "n_restarts": 200, "ftol": 1e-12},
+            "fast": {"method": "L-BFGS-B", "n_restarts": 5, "ftol": 1e-6},
+            "balanced": {"method": "L-BFGS-B", "n_restarts": 20, "ftol": 1e-8},
+            "robust": {"method": "L-BFGS-B", "n_restarts": 50, "ftol": 1e-10},
+            "super_robust": {"method": "Powell", "n_restarts": 200, "ftol": 1e-12},
         },
     },
 }
 
 
-def _resolve_preset_kwargs(minimizer: str, preset: str, detection_method: Optional[str] = None) -> dict:
+def _resolve_preset_kwargs(
+    minimizer: str, preset: str, detection_method: Optional[str] = None
+) -> dict:
     """Return preset kwargs, preferring method-specific overrides when available."""
     if detection_method:
         method_entry = METHOD_MINIMIZER_PRESETS.get(detection_method, {})
@@ -466,7 +483,13 @@ class LimbObservation(PlanetObservation):
             f"Must be one of: {valid_limb_methods}"
         )
 
-        valid_minimizers = ["differential-evolution", "dual-annealing", "basinhopping", "scipy-minimize", "shgo"]
+        valid_minimizers = [
+            "differential-evolution",
+            "dual-annealing",
+            "basinhopping",
+            "scipy-minimize",
+            "shgo",
+        ]
         assert minimizer in valid_minimizers, (
             f"Invalid minimizer '{minimizer}'. " f"Must be one of: {valid_minimizers}"
         )
