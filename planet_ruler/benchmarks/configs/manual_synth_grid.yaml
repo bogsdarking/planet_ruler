@@ -1,0 +1,318 @@
+# Planet Ruler – Manual Annotation Minimizer Grid
+#
+# Follows the minimizer scan (minimizer_scan.ipynb) which established:
+#   - Basin hopping (BH) is the clear winner for manual annotation: fastest
+#     convergence, best reliability, simplest to port to lean environments.
+#   - L-BFGS-B multi-start is competitive and more portable (no BH outer loop).
+#   - DE is included as a reference baseline; DA is shelved for manual fitting.
+#
+# Axes (free-h scenarios):
+#   minimizer × preset:
+#     basinhopping           × {fast, balanced, robust, super_robust} = 4
+#     scipy-minimize         × {fast, balanced, robust, super_robust} = 4   (L-BFGS-B/Powell)
+#     differential-evolution × {fast, balanced, robust}               = 3
+#                                                                      ─
+#                                                                      11
+#   free_parameters    – 4 sets (angles always free; vary f/w, h always free)
+#   r_limits_km        – 5 tightness levels (±5% … rocky-planet)
+#   h_limits_pct       – 4 levels (±2 / 10 / 20 / 30% of GPS h)
+#
+# Fixed-h scenarios (h fixed at GPS altitude, separate sub-grid):
+#   Same minimizer × preset × free_parameters (h removed) × r_limits
+#
+# Total: 2 images × (11×4×5×4 free-h  +  11×4×5 fixed-h) base
+#      = 2 × (880 + 220) = 2 200 base rows × 6 aug rows = 15 400 total
+
+grid:
+  images:
+    - synth_iphone_13_h10km_clean
+    - synth_iphone_14_pro_h10km_clean
+
+  annotation_file_pattern: "{image}_limb_points.json"
+
+  fixed:
+    detection_method: manual
+    planet_name: Earth
+    expected_radius: 6371000
+    uncertainty_radius: 10000
+    perturb_params: [r, h]
+    perturbation_factor:
+      r: 1.0    # full uniform stress-test of r bounds
+      h: 0.15   # small perturbation — GPS altitude is a meaningful prior
+    init_parameter_values_override: {theta_z: 3.14159}
+    parameter_limits_override: {theta_z: [-3.1416, 3.1416]}
+    augmentation:
+      n_variants: 5
+      noise_sigma: 2.0
+      seed: 0
+
+  # Reusable anchors -------------------------------------------------------
+  _free_params: &FREE_PARAMS
+    - [r, h, theta_x, theta_y, theta_z]
+    - [r, h, theta_x, theta_y, theta_z, w]
+    - [r, h, theta_x, theta_y, theta_z, f]
+    - [r, h, theta_x, theta_y, theta_z, w, f]
+
+  _free_params_fixed_h: &FREE_PARAMS_FIXED_H
+    - [r, theta_x, theta_y, theta_z]
+    - [r, theta_x, theta_y, theta_z, w]
+    - [r, theta_x, theta_y, theta_z, f]
+    - [r, theta_x, theta_y, theta_z, w, f]
+
+  _r_limits: &R_LIMITS
+    - [6053, 6690]    # ±5%  of Earth r — strong prior
+    - [5734, 7009]    # ±10%
+    - [5097, 7645]    # ±20%
+    - [3186, 9557]    # ±50%
+    - [2000, 14000]   # rocky-planet range — maximum freedom
+
+  _h_limits: &H_LIMITS
+    - 0.02            # ±2% of GPS h — tight GPS prior
+    - 0.10            # ±10%
+    - 0.20            # ±20%
+    - 0.30            # ±30%
+
+  param_grid:
+
+    # ── Basin Hopping — scan winner ──────────────────────────────────────────
+    # Presets resolve via METHOD_MINIMIZER_PRESETS["manual"]["basinhopping"].
+    - minimizer: basinhopping
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      free_parameters: *FREE_PARAMS
+      r_limits_km: *R_LIMITS
+      h_limits_pct: *H_LIMITS
+
+    # ── L-BFGS-B multi-start — portable alternative ──────────────────────────
+    # fast=5 restarts, balanced=20, robust=50.
+    # max_iter caps each local run; total budget scales with n_restarts.
+    - minimizer: scipy-minimize
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_params:
+        max_iter: 500
+      free_parameters: *FREE_PARAMS
+      r_limits_km: *R_LIMITS
+      h_limits_pct: *H_LIMITS
+
+    # ── Differential Evolution — reference baseline ───────────────────────────
+    - minimizer: differential-evolution
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+      fit_params:
+        max_iter: 10000
+      free_parameters: *FREE_PARAMS
+      r_limits_km: *R_LIMITS
+      h_limits_pct: *H_LIMITS
+
+    # ── Fixed-h sub-grid (h at GPS altitude, not free) ───────────────────────
+    # perturb_params overrides the fixed section — only r is perturbed.
+    - minimizer: basinhopping
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      free_parameters: *FREE_PARAMS_FIXED_H
+      r_limits_km: *R_LIMITS
+      perturb_params: [r]
+
+    - minimizer: scipy-minimize
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_params:
+        max_iter: 500
+      free_parameters: *FREE_PARAMS_FIXED_H
+      r_limits_km: *R_LIMITS
+      perturb_params: [r]
+
+    - minimizer: differential-evolution
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+      fit_params:
+        max_iter: 10000
+      free_parameters: *FREE_PARAMS_FIXED_H
+      r_limits_km: *R_LIMITS
+      perturb_params: [r]
+
+    # ── sagitta warm-start sub-grid ──────────────────────────────────────────
+    # sagitta estimates r and tightens bounds; arc optimizer refines.
+    # n_sigma controls bound width: 1σ=tight, 3σ=moderate, 5σ=conservative.
+    # bias_correct=true corrects the OLS seed for dip-angle tilt bias.
+    # uncertainty=both uses quadrature sum of OLS + jackknife for bound width.
+    # Comparison runs (bc=false, u=ols/jackknife) fix n_sigma=3.0 to isolate each effect.
+
+    # basinhopping — n_sigma sweep (recommended bias_correct=true, uncertainty=both)
+    - minimizer: basinhopping
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_stages: [{method: sagitta, n_sigma: 1.0, bias_correct: true, uncertainty: both}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    - minimizer: basinhopping
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_stages: [{method: sagitta, n_sigma: 3.0, bias_correct: true, uncertainty: both}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    - minimizer: basinhopping
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_stages: [{method: sagitta, n_sigma: 5.0, bias_correct: true, uncertainty: both}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    # basinhopping — bias_correct comparison (n_sigma=3.0)
+    - minimizer: basinhopping
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_stages: [{method: sagitta, n_sigma: 3.0, bias_correct: false, uncertainty: both}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    # basinhopping — uncertainty comparison (n_sigma=3.0, bias_correct=true)
+    - minimizer: basinhopping
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_stages: [{method: sagitta, n_sigma: 3.0, bias_correct: true, uncertainty: ols}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    - minimizer: basinhopping
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_stages: [{method: sagitta, n_sigma: 3.0, bias_correct: true, uncertainty: jackknife}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    # scipy-minimize — n_sigma sweep (recommended defaults)
+    - minimizer: scipy-minimize
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_params:
+        max_iter: 500
+      fit_stages: [{method: sagitta, n_sigma: 1.0, bias_correct: true, uncertainty: both}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    - minimizer: scipy-minimize
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_params:
+        max_iter: 500
+      fit_stages: [{method: sagitta, n_sigma: 3.0, bias_correct: true, uncertainty: both}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    - minimizer: scipy-minimize
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_params:
+        max_iter: 500
+      fit_stages: [{method: sagitta, n_sigma: 5.0, bias_correct: true, uncertainty: both}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    # differential-evolution — n_sigma sweep (recommended defaults)
+    - minimizer: differential-evolution
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+      fit_params:
+        max_iter: 10000
+      fit_stages: [{method: sagitta, n_sigma: 1.0, bias_correct: true, uncertainty: both}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    - minimizer: differential-evolution
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+      fit_params:
+        max_iter: 10000
+      fit_stages: [{method: sagitta, n_sigma: 3.0, bias_correct: true, uncertainty: both}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    - minimizer: differential-evolution
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+      fit_params:
+        max_iter: 10000
+      fit_stages: [{method: sagitta, n_sigma: 5.0, bias_correct: true, uncertainty: both}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    # ── sagitta-only: geometric estimate with no optimizer ───────────────────
+    # Evaluation uses only the r point estimate; n_sigma and uncertainty have no
+    # effect on accuracy metrics.  bias_correct comparison reveals tilt-bias impact.
+    - fit_stages: [{method: sagitta, n_sigma: 2.0, bias_correct: true, uncertainty: both}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+
+    - fit_stages: [{method: sagitta, n_sigma: 2.0, bias_correct: false, uncertainty: both}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+
+thresholds:
+  max_time: 3600.0
+  max_relative_error: 0.10
+  min_success_rate: 0.50

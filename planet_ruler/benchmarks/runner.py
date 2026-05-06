@@ -129,6 +129,9 @@ class BenchmarkResult:
     # Fit stages (JSON list of stage dicts, e.g. '[{"method":"arc"}]')
     fit_stages: Optional[str] = None
 
+    # Gaussian noise (px) added to annotation; 0.0 for base, None for unknown
+    annotation_noise_sigma: Optional[float] = None
+
 
 def _run_batch_worker(task: tuple) -> List["BenchmarkResult"]:
     """
@@ -138,7 +141,7 @@ def _run_batch_worker(task: tuple) -> List["BenchmarkResult"]:
     going through __init__ (which would re-expand the full config).
     Writes results to DB directly so the main process stays lean.
     """
-    benchmark_dir, db_path, scenario, image_name, git_commit = task
+    benchmark_dir, db_path, scenario, image_name, git_commit, completed_keys, skip_completed = task
 
     runner = object.__new__(BenchmarkRunner)
     runner.benchmark_dir = Path(benchmark_dir)
@@ -146,7 +149,11 @@ def _run_batch_worker(task: tuple) -> List["BenchmarkResult"]:
     runner.git_commit = git_commit
 
     try:
-        batch = runner._run_with_augmentation(scenario, image_name)
+        batch = runner._run_with_augmentation(
+            scenario, image_name,
+            completed_keys=completed_keys,
+            skip_completed=skip_completed,
+        )
         for result in batch:
             runner._store_result(result)
         return batch
@@ -271,7 +278,8 @@ class BenchmarkRunner:
         if not aug or scenario.get("detection_method", "manual") != "manual":
             return [base]
         n_variants = int(aug.get("n_variants", aug.get("n_noisy_variants", 0)))
-        return [base] + [f"{base}__aug{i + 1:02d}" for i in range(n_variants)]
+        sigma = float(aug.get("noise_sigma", 4.0))
+        return [base] + [f"{base}__n{sigma:g}px_aug{i + 1:02d}" for i in range(n_variants)]
 
     def _init_database(self):
         """Initialize SQLite database with results table."""
@@ -323,7 +331,8 @@ class BenchmarkRunner:
                 timing_details TEXT,
 
                 error_message TEXT,
-                fit_stages TEXT
+                fit_stages TEXT,
+                annotation_noise_sigma REAL
             )
         """
         )
@@ -355,6 +364,26 @@ class BenchmarkRunner:
             "UPDATE benchmark_results"
             " SET fit_stages = ? WHERE fit_stages IS NULL",
             ('[{"method":"arc"}]',),
+        )
+
+        # Migration: add annotation_noise_sigma column
+        try:
+            cursor.execute(
+                "ALTER TABLE benchmark_results"
+                " ADD COLUMN annotation_noise_sigma REAL"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        # Backfill annotation_noise_sigma for rows written before the column existed.
+        # (One-time rename of __augNN → __n4px_augNN is done separately via SQL.)
+        cursor.execute(
+            "UPDATE benchmark_results SET annotation_noise_sigma = 4.0"
+            " WHERE annotation_noise_sigma IS NULL"
+            "   AND scenario_name LIKE '%__n4px_aug%'"
+        )
+        cursor.execute(
+            "UPDATE benchmark_results SET annotation_noise_sigma = 0.0"
+            " WHERE annotation_noise_sigma IS NULL"
         )
         conn.commit()
         conn.close()
@@ -611,9 +640,15 @@ class BenchmarkRunner:
 
         results: List[BenchmarkResult] = []
 
+        frozen_keys = frozenset(completed_keys)
+
         if not parallel or len(pending) == 0:
             for scenario, image_name in pending:
-                batch = self._run_with_augmentation(scenario, image_name)
+                batch = self._run_with_augmentation(
+                    scenario, image_name,
+                    completed_keys=frozen_keys,
+                    skip_completed=skip_completed,
+                )
                 for result in batch:
                     results.append(result)
                     self._store_result(result)
@@ -627,6 +662,8 @@ class BenchmarkRunner:
                     scenario,
                     image_name,
                     self.git_commit,
+                    frozen_keys,
+                    skip_completed,
                 )
                 for scenario, image_name in pending
             ]
@@ -646,14 +683,18 @@ class BenchmarkRunner:
         return results
 
     def _run_with_augmentation(
-        self, scenario: Dict[str, Any], image_name: str
+        self,
+        scenario: Dict[str, Any],
+        image_name: str,
+        completed_keys: frozenset = frozenset(),
+        skip_completed: bool = False,
     ) -> List[BenchmarkResult]:
         """
         Run a scenario on one image, including augmented annotation variants.
 
-        If the scenario contains an ``augmentation`` key, the base annotation is
-        run first, then each noisy variant is run and stored with a suffixed
-        scenario name (e.g. ``my_scenario__aug01``).
+        Base and aug variants are checked independently against completed_keys,
+        so a partial re-run only executes missing variants without re-running
+        the base case.
 
         Augmentation config (all optional)::
 
@@ -663,16 +704,19 @@ class BenchmarkRunner:
               seed: 0               # RNG seed (default 0)
 
         Returns:
-            List containing the base result and any augmentation results.
+            List of BenchmarkResult for every variant that was actually run
+            (already-completed variants are omitted).
         """
         augmentation = scenario.get("augmentation")
+        base_name = scenario["name"]
 
         if (
             not augmentation
             or scenario.get("detection_method", "manual") != "manual"
         ):
-            name = scenario["name"]
-            print(f"Running: {name} on {image_name}")
+            if skip_completed and (base_name, image_name) in completed_keys:
+                return []
+            print(f"Running: {base_name} on {image_name}")
             return [self._run_single(scenario, image_name)]
 
         from planet_ruler.benchmarks.augment_annotations import (
@@ -687,52 +731,70 @@ class BenchmarkRunner:
         noise_sigma = float(augmentation.get("noise_sigma", 4.0))
         seed = int(augmentation.get("seed", 0))
 
-        # Run base case first (no override — loads annotation from file as usual)
-        base_name = scenario["name"]
-        print(f"Running: {base_name} on {image_name} (base)")
-        base_result = self._run_single(scenario, image_name)
-        batch = [base_result]
-
-        if n_variants <= 0 or base_result.convergence_status == "error":
-            return batch
-
-        # Re-load the annotation points so we can generate variants
+        # Load annotation early — needed for aug point generation and image_width
+        # regardless of whether the base case is skipped.
         annotation_file = scenario.get("annotation_file")
-        if not annotation_file:
-            return batch
+        points = None
+        image_width = None
+        if annotation_file and n_variants > 0:
+            annot_path = self.benchmark_dir / "annotations" / annotation_file
+            try:
+                with open(annot_path) as f:
+                    annotation_data = json.load(f)
+                if "limb_points" in annotation_data:
+                    points = annotation_data["limb_points"]["points"]
+                else:
+                    points = annotation_data["points"]
+                img_size = annotation_data.get("image_size")
+                if img_size:
+                    image_width = img_size[0]
+            except Exception:
+                pass
 
-        annot_path = self.benchmark_dir / "annotations" / annotation_file
-        try:
-            with open(annot_path) as f:
-                annotation_data = json.load(f)
-            if "limb_points" in annotation_data:
-                points = annotation_data["limb_points"]["points"]
-            else:
-                points = annotation_data["points"]
-        except Exception:
+        batch = []
+
+        # ── Base case ─────────────────────────────────────────────────────────
+        base_done = skip_completed and (base_name, image_name) in completed_keys
+        if base_done:
+            print(f"Skipping (done): {base_name} on {image_name}")
+        else:
+            print(f"Running: {base_name} on {image_name} (base)")
+            base_result = self._run_single(
+                scenario, image_name, annotation_noise_sigma=0.0
+            )
+            batch.append(base_result)
+            if base_result.convergence_status == "error":
+                return batch
+            if image_width is None:
+                image_width = base_result.image_width
+
+        if n_variants <= 0 or points is None or image_width is None:
             return batch
 
         variants = generate_noisy_variants(
             points, n_variants=n_variants, noise_sigma=noise_sigma, seed=seed
         )
 
-        image_width = base_result.image_width
-
+        # ── Aug variants ──────────────────────────────────────────────────────
         for i, var_points in enumerate(variants):
-            # Build sparse limb_target from variant points
+            aug_name = f"{base_name}__n{noise_sigma:g}px_aug{i + 1:02d}"
+            if skip_completed and (aug_name, image_name) in completed_keys:
+                print(f"Skipping (done): {aug_name} on {image_name}")
+                continue
+
             limb_target = np.full(image_width, np.nan)
             for x, y in var_points:
                 x_idx = int(round(x))
                 if 0 <= x_idx < image_width:
                     limb_target[x_idx] = y
 
-            aug_name = f"{base_name}__aug{i + 1:02d}"
             print(f"Running: {aug_name} on {image_name}")
             result = self._run_single(
                 scenario,
                 image_name,
                 limb_target_override=limb_target,
                 scenario_name_override=aug_name,
+                annotation_noise_sigma=noise_sigma,
             )
             batch.append(result)
 
@@ -794,6 +856,7 @@ class BenchmarkRunner:
         image_name: str,
         limb_target_override: Optional[np.ndarray] = None,
         scenario_name_override: Optional[str] = None,
+        annotation_noise_sigma: Optional[float] = None,
     ) -> BenchmarkResult:
         """
         Run a single benchmark scenario on one image.
@@ -852,6 +915,7 @@ class BenchmarkRunner:
             optimization_time=0.0,
             timing_details=None,
             error_message=None,
+            annotation_noise_sigma=annotation_noise_sigma,
         )
 
         try:

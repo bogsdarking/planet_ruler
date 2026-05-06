@@ -363,7 +363,8 @@ def generate_canonical_dataset(output_dir: Path, r: float = 6371000.0) -> list:
     cases = [
         (5_000,  0.0),   # low alt, no noise
         (10_000, 0.0),   # mid alt, no noise
-        (10_000, 4.0),   # mid alt, realistic annotation noise
+        (10_000, 1.0),   # mid alt, 1px annotation noise (typical real-image level)
+        (10_000, 2.0),   # mid alt, 2px annotation noise (conservative upper bound)
         (15_000, 0.0),   # high alt, no noise
     ]
 
