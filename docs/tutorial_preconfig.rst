@@ -83,28 +83,30 @@ Now we optimize the planetary radius to match the observed horizon curvature:
 .. code-block:: python
 
    # Perform the fit
-   observation.fit_limb(
+   observation.fit_arc(
        minimizer="differential-evolution",
        seed=42  # For reproducible results
    )
-   
+
    print("Fit completed successfully!")
    print(f"Fitted parameters: {observation.best_parameters}")
 
 **Monitoring Progress with Dashboard:**
 
-For long optimizations, enable the live progress dashboard:
+For long optimizations, enable the live progress dashboard via ``fit_limb``
+with an explicit stages list:
 
 .. code-block:: python
 
    # Enable dashboard for real-time monitoring
    observation.fit_limb(
-       minimizer="differential-evolution",
+       stages=[{"method": "arc", "minimizer": "differential-evolution"}],
        dashboard=True  # Shows live progress
    )
-   
+
    # Configure dashboard display
    observation.fit_limb(
+       stages=[{"method": "arc"}],
        dashboard=True,
        dashboard_kwargs={
            'width': 80,         # Wider display
@@ -119,6 +121,19 @@ The dashboard shows:
 - Convergence status
 - Warnings and optimization hints
 - Adaptive refresh rate (fast during descent, slow at convergence)
+
+.. tip::
+   **Faster convergence with staged fitting**: chain a quick sagitta estimate
+   into the arc fit to narrow the search space automatically:
+
+   .. code-block:: python
+
+      observation.fit_limb(
+          stages=[
+              {"method": "sagitta"},
+              {"method": "arc", "minimizer": "differential-evolution"},
+          ]
+      )
 
 Step 5: Calculate Uncertainty
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
