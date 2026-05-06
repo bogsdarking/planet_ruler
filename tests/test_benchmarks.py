@@ -439,16 +439,16 @@ class TestVetImageBasinhopping:
         assert result.fitted_altitude_km is not None
         assert result.convergence == "success"
 
-    def test_vet_image_fix_camera(self):
-        """--fix-camera removes f/w from search space without error."""
+    def test_vet_image_camera_always_fixed(self):
+        """f and w are always fixed; vet_image accepts no fix_camera arg."""
         from planet_ruler.benchmarks.vet_images import vet_image
-
+        import inspect
+        assert "fix_camera" not in inspect.signature(vet_image).parameters
         result = vet_image(
             SYNTH_IMAGE,
             SYNTH_ANNOTATION,
             max_iter=10,
             minimizer_preset="fast",
-            fix_camera=True,
         )
         assert result.fitted_altitude_km is not None
 
@@ -983,7 +983,10 @@ class TestVetImagesBuildStep2Config:
 
         import copy
         config2 = _build_step2_config(copy.deepcopy(_STEP1_CONFIG), 10_000.0, _FakeObs())
-        assert config2["parameter_limits"]["r"][1] > 1e7
+        r_lo, r_hi = config2["parameter_limits"]["r"]
+        # ±50% of Earth radius
+        assert r_lo == pytest.approx(6_371_000 * 0.50, rel=0.01)
+        assert r_hi == pytest.approx(6_371_000 * 1.50, rel=0.01)
 
     def test_step1_config_not_mutated(self):
         from planet_ruler.benchmarks.vet_images import _build_step2_config
