@@ -20,13 +20,13 @@
 # Fixed-h scenarios (h fixed at GPS altitude, separate sub-grid):
 #   Same minimizer × preset × free_parameters (h removed) × r_limits
 #
-# Total: 2 images × (11×4×5×4 free-h  +  11×4×5 fixed-h) base
+# Total: 2 images (iphone_13 + sm-s906e) × (11×4×5×4 free-h  +  11×4×5 fixed-h) base
 #      = 2 × (880 + 220) = 2 200 base rows × 6 aug rows = 15 400 total
 
 grid:
   images:
     - synth_iphone_13_h10km_clean
-    - synth_iphone_14_pro_h10km_clean
+    - synth_sm-s906e_h10km_clean
 
   annotation_file_pattern: "{image}_limb_points.json"
 
