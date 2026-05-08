@@ -624,7 +624,6 @@ class TestLimbDetectionBenchmarks:
     """Benchmark tests for different limb detection methods."""
 
     @pytest.fixture
-    @pytest.mark.real_data
     def test_observation_for_detection(self):
         """Create a test observation for limb detection benchmarks using real Pluto image."""
         # Use real Pluto image and configuration for realistic benchmark
@@ -636,6 +635,7 @@ class TestLimbDetectionBenchmarks:
         return obs
 
     @pytest.mark.slow
+    @pytest.mark.real_data
     def test_gradient_field_detection_benchmark(
         self, benchmark, test_observation_for_detection
     ):
@@ -671,6 +671,7 @@ class TestLimbDetectionBenchmarks:
         # (using fewer iterations than a real analysis would)
 
     @pytest.mark.slow
+    @pytest.mark.real_data
     def test_manual_limb_detection_benchmark(
         self, benchmark, test_observation_for_detection
     ):
