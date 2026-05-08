@@ -38,14 +38,14 @@ from planet_ruler.camera import check_planet_ruler_crop_metadata
 @pytest.fixture
 def mock_gui():
     """Mock only GUI dependencies, not entire methods."""
-    with patch("planet_ruler.crop.tk.Tk") as mock_root, patch(
-        "planet_ruler.crop.tk.Frame"
-    ), patch("planet_ruler.crop.tk.Label"), patch("planet_ruler.crop.tk.Button"), patch(
-        "planet_ruler.crop.tk.Canvas"
-    ), patch(
-        "planet_ruler.crop.tk.Scrollbar"
-    ), patch(
-        "planet_ruler.crop.ImageTk.PhotoImage"
+    with (
+        patch("planet_ruler.crop.tk.Tk") as mock_root,
+        patch("planet_ruler.crop.tk.Frame"),
+        patch("planet_ruler.crop.tk.Label"),
+        patch("planet_ruler.crop.tk.Button"),
+        patch("planet_ruler.crop.tk.Canvas"),
+        patch("planet_ruler.crop.tk.Scrollbar"),
+        patch("planet_ruler.crop.ImageTk.PhotoImage"),
     ):
         # Make root return a mock
         mock_root.return_value = MagicMock()
@@ -733,14 +733,14 @@ def test_large_image_handling(tmp_path, mock_gui):
 @pytest.fixture
 def mock_gui():
     """Mock GUI dependencies."""
-    with patch("planet_ruler.crop.tk.Tk") as mock_root, patch(
-        "planet_ruler.crop.tk.Frame"
-    ), patch("planet_ruler.crop.tk.Label"), patch("planet_ruler.crop.tk.Button"), patch(
-        "planet_ruler.crop.tk.Canvas"
-    ), patch(
-        "planet_ruler.crop.tk.Scrollbar"
-    ), patch(
-        "planet_ruler.crop.ImageTk.PhotoImage"
+    with (
+        patch("planet_ruler.crop.tk.Tk") as mock_root,
+        patch("planet_ruler.crop.tk.Frame"),
+        patch("planet_ruler.crop.tk.Label"),
+        patch("planet_ruler.crop.tk.Button"),
+        patch("planet_ruler.crop.tk.Canvas"),
+        patch("planet_ruler.crop.tk.Scrollbar"),
+        patch("planet_ruler.crop.ImageTk.PhotoImage"),
     ):
         mock_root.return_value = MagicMock()
         yield

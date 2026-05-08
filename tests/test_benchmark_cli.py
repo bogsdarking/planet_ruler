@@ -421,10 +421,13 @@ class TestAnalyzeBenchmarksMain:
 
         monkeypatch.setattr(sys, "argv", ["analyze", "--db", str(tmp_path / "fake.db")])
         mock_az = self._mock_analyzer()
-        with patch(
-            "planet_ruler.benchmarks.analyze_benchmarks.BenchmarkAnalyzer",
-            return_value=mock_az,
-        ), patch("planet_ruler.benchmarks.analyze_benchmarks.plt.show"):
+        with (
+            patch(
+                "planet_ruler.benchmarks.analyze_benchmarks.BenchmarkAnalyzer",
+                return_value=mock_az,
+            ),
+            patch("planet_ruler.benchmarks.analyze_benchmarks.plt.show"),
+        ):
             analyze_main()
         out = capsys.readouterr().out
         assert "SUMMARY" in out
@@ -445,9 +448,12 @@ class TestAnalyzeBenchmarksMain:
             ],
         )
         mock_az = self._mock_analyzer()
-        with patch(
-            "planet_ruler.benchmarks.analyze_benchmarks.BenchmarkAnalyzer",
-            return_value=mock_az,
-        ), patch("planet_ruler.benchmarks.analyze_benchmarks.plt.show"):
+        with (
+            patch(
+                "planet_ruler.benchmarks.analyze_benchmarks.BenchmarkAnalyzer",
+                return_value=mock_az,
+            ),
+            patch("planet_ruler.benchmarks.analyze_benchmarks.plt.show"),
+        ):
             analyze_main()
         mock_az.export_csv.assert_called_once_with(csv_out)
