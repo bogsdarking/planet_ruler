@@ -18,6 +18,9 @@ mypy>=1.0.0
 pytest-profiling
 memory-profiler
 
+# EXIF manipulation (used in benchmark synthetic data generation)
+piexif>=1.1.0
+
 # Test data and utilities
 numpy>=1.20.0
 matplotlib>=3.5.0  # For visualizing test results if needed
