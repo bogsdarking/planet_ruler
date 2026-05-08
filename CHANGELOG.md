@@ -29,6 +29,7 @@ list of methods that chain into one another. For example one could run `[{"metho
 - Parameter limits are now set initially via preset combinations of tolerance, rather than as a flat fraction.
 - Minimizer presets now lead to different optimized parameters depending on which detection method is being employed.
 - User can now control where manual annotations are saved.
+- Python versions below 3.10 are no longer supported.
 
 ### Fixed
 
