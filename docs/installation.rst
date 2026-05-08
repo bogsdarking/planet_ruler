@@ -4,11 +4,11 @@ Installation
 System Requirements
 -------------------
 
-Planet Ruler requires Python 3.8 or higher and supports the following platforms:
+Planet Ruler requires Python 3.10 or higher and supports the following platforms:
 
-* **Linux**: Ubuntu 18.04+, CentOS 7+, other modern distributions
-* **macOS**: 10.15+ (Catalina and newer)  
-* **Windows**: 10+ with Python 3.8+
+* **Linux**: Ubuntu 20.04+, CentOS 8+, other modern distributions
+* **macOS**: 11.0+ (Big Sur and newer)
+* **Windows**: 10+ with Python 3.10+
 
 Python Dependencies
 -------------------
@@ -26,7 +26,7 @@ Core dependencies include:
 
 Optional dependencies for advanced features:
 
-* **Segment Anything** ≥1.0 (Python 3.8+): AI-powered automatic segmentation (alternative to manual annotation)
+* **Segment Anything** ≥1.0: AI-powered automatic segmentation (alternative to manual annotation)
 * **PyTorch** ≥1.11.0: Required for Segment Anything
 * **Seaborn** ≥0.11.0: Statistical plotting
 * **IPython** ≥7.16.0: Interactive computing (for notebooks)
@@ -92,7 +92,7 @@ We recommend using a virtual environment:
 
 .. code-block:: bash
 
-   conda create -n planet-ruler python=3.9
+   conda create -n planet-ruler python=3.10
    conda activate planet-ruler
    python -m pip install planet_ruler
 

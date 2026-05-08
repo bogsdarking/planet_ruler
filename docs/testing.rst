@@ -272,7 +272,7 @@ GitHub Actions Workflow
 
 Planet Ruler uses GitHub Actions for automated testing across:
 
-* **Python versions**: 3.8, 3.9, 3.10, 3.11
+* **Python versions**: 3.10, 3.11, 3.12
 * **Operating systems**: Ubuntu, macOS, Windows  
 * **Dependencies**: Core and optional (PyTorch, Segment Anything)
 
