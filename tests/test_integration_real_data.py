@@ -359,7 +359,7 @@ class TestRealDemoDataIntegration:
         image[:150, :, :] = 40  # Space
         image[150:, :, :] = 200  # Planet
 
-        with patch("planet_ruler.image.load_image", return_value=image):
+        with patch("planet_ruler.observation.load_image", return_value=image):
             # Create temporary config file
             config_path = "temp_earth_config.yaml"
             with open(config_path, "w") as f:
