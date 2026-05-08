@@ -530,7 +530,7 @@ When reporting bugs or requesting features:
    
    **Environment**
    - OS: [e.g. Ubuntu 20.04]
-   - Python: [e.g. 3.9.7]
+   - Python: [e.g. 3.10.14]
    - Planet Ruler: [e.g. 1.0.0]
 
 Discussion Etiquette

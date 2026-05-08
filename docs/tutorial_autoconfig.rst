@@ -3,7 +3,7 @@ The fastest way to get started using your own images with Planet Ruler by using 
 Prerequisites
 ~~~~~~~~~~~~~
 
-* Python 3.8+ with Planet Ruler installed
+* Python 3.10+ with Planet Ruler installed
 * A horizon photograph with EXIF data (from phone, DSLR, mirrorless camera)
 * Known or estimated altitude when photo was taken
 

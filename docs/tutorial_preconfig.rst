@@ -3,7 +3,7 @@ This tutorial shows how to calculate Earth's radius using a horizon photograph w
 Prerequisites
 ~~~~~~~~~~~~~
 
-* Python 3.8+ with Planet Ruler installed (no additional dependencies needed)
+* Python 3.10+ with Planet Ruler installed (no additional dependencies needed)
 * A horizon photograph (we'll use the demo Earth image)
 * Basic knowledge of the observation altitude
 

@@ -20,7 +20,7 @@ When to Use Gradient-Field
 Prerequisites
 ~~~~~~~~~~~~~
 
-* Python 3.8+ with Planet Ruler installed
+* Python 3.10+ with Planet Ruler installed
 * Clear horizon photograph
 * Camera configuration file or auto-config
 
