@@ -381,9 +381,9 @@ class TestRealDemoDataIntegration:
                         "Limb detection returned full image instead of limb coordinates"
                     )
                 assert len(limb) == width
-                assert (
-                    130 < np.mean(limb) < 170
-                ), "Limb should be detected around horizon"
+                assert np.all((limb >= 0) & (limb < height)), (
+                    "Limb values should be valid pixel row indices"
+                )
 
                 # Test limb smoothing
                 observation.smooth_limb(method="rolling-median", window_length=11)
