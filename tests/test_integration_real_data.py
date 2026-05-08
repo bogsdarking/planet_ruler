@@ -354,53 +354,45 @@ class TestRealDemoDataIntegration:
         params = earth_iss_config["init_parameter_values"]
 
         # Create synthetic observation setup
-        with patch("PIL.Image.open") as mock_image_open:
-            # Create synthetic image
-            height, width = 300, 500
-            image = np.zeros((height, width, 3), dtype="uint8")
-            image[:150, :, :] = 40  # Space
-            image[150:, :, :] = 200  # Planet
+        height, width = 300, 500
+        image = np.zeros((height, width, 3), dtype="uint8")
+        image[:150, :, :] = 40  # Space
+        image[150:, :, :] = 200  # Planet
 
-            # Mock PIL Image object
-            mock_img = Mock()
-            mock_image_open.return_value = mock_img
+        with patch("planet_ruler.image.load_image", return_value=image):
+            # Create temporary config file
+            config_path = "temp_earth_config.yaml"
+            with open(config_path, "w") as f:
+                yaml.dump(earth_iss_config, f)
 
-            with patch("numpy.array", return_value=image):
-                # Create temporary config file
-                config_path = "temp_earth_config.yaml"
-                with open(config_path, "w") as f:
-                    yaml.dump(earth_iss_config, f)
+            try:
+                observation = obs.LimbObservation(
+                    image_filepath="fake_earth.jpg",
+                    fit_config=config_path,
+                    limb_detection="gradient-break",
+                )
 
-                try:
-                    observation = obs.LimbObservation(
-                        image_filepath="fake_earth.jpg",
-                        fit_config=config_path,
-                        limb_detection="gradient-break",
+                # Test limb detection
+                observation.detect_limb()
+                limb = observation.features["limb"]
+                # limb should be 1D array with width entries
+                if len(limb.shape) > 1:
+                    pytest.skip(
+                        "Limb detection returned full image instead of limb coordinates"
                     )
+                assert len(limb) == width
+                assert (
+                    130 < np.mean(limb) < 170
+                ), "Limb should be detected around horizon"
 
-                    # Test limb detection
-                    observation.detect_limb()
-                    limb = observation.features["limb"]
-                    # limb should be 1D array with width entries
-                    if len(limb.shape) > 1:
-                        # If it's the full image, skip this test
-                        pytest.skip(
-                            "Limb detection returned full image instead of limb coordinates"
-                        )
-                    assert len(limb) == width
-                    assert (
-                        130 < np.mean(limb) < 170
-                    ), "Limb should be detected around horizon"
+                # Test limb smoothing
+                observation.smooth_limb(method="rolling-median", window_length=11)
+                assert "limb" in observation.features
+                assert len(observation.features["limb"]) == width
 
-                    # Test limb smoothing
-                    observation.smooth_limb(method="rolling-median", window_length=11)
-                    assert "limb" in observation.features
-                    assert len(observation.features["limb"]) == width
-
-                finally:
-                    # Clean up temporary file
-                    if os.path.exists(config_path):
-                        os.remove(config_path)
+            finally:
+                if os.path.exists(config_path):
+                    os.remove(config_path)
 
     @pytest.mark.integration
     def test_demo_parameter_loading_integration(self):
