@@ -41,12 +41,11 @@ class TestTkLimbAnnotatorCore:
         # Test the core logic without GUI components
 
         # Mock the GUI parts
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
 
             mock_image = Mock()
@@ -70,12 +69,11 @@ class TestTkLimbAnnotatorCore:
 
     def test_target_generation_with_sufficient_points(self):
         """Test target array generation with sufficient points"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
 
             mock_image = Mock()
@@ -97,12 +95,11 @@ class TestTkLimbAnnotatorCore:
 
     def test_target_generation_with_insufficient_points(self):
         """Test target array generation with insufficient points"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
 
             mock_image = Mock()
@@ -122,12 +119,11 @@ class TestTkLimbAnnotatorCore:
     @patch("tkinter.messagebox.showwarning")
     def test_generate_target_insufficient_points_warning(self, mock_warning):
         """Test generate_target shows warning with insufficient points"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
 
             mock_image = Mock()
@@ -149,12 +145,11 @@ class TestTkLimbAnnotatorCore:
     @patch("tkinter.messagebox.showinfo")
     def test_generate_target_success(self, mock_info, mock_np_save):
         """Test successful target generation"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
 
             mock_image = Mock()
@@ -255,7 +250,9 @@ class TestManualLimbDetectionIntegration:
 
             # Verify annotator was created and used correctly
             mock_annotator_class.assert_called_once_with(
-                image_path=tmp_file.name, initial_stretch=1.0
+                image_path=tmp_file.name,
+                image=obs.image,
+                initial_stretch=1.0,
             )
             mock_annotator.run.assert_called_once()
             mock_annotator.get_target.assert_called_once()
@@ -339,8 +336,8 @@ class TestManualLimbDetectionIntegration:
             mock_annotator.run = Mock()
             mock_annotator_class.return_value = mock_annotator
 
-            # Mock fit_limb to avoid complex setup
-            with patch.object(obs, "fit_limb", return_value=obs):
+            # Mock fit_arc to avoid complex setup
+            with patch.object(obs, "fit_arc", return_value=obs):
                 # Use analyze method (should call detect_limb internally)
                 result = obs.analyze()
 
@@ -370,14 +367,12 @@ class TestTkLimbAnnotatorExtended:
 
     def test_init_with_custom_parameters(self):
         """Test initialization with custom stretch and zoom"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ), patch.object(
-            TkLimbAnnotator, "update_stretched_image"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
+            patch.object(TkLimbAnnotator, "update_stretched_image"),
         ):
             mock_image = Mock()
             mock_image.size = (1024, 768)
@@ -400,14 +395,12 @@ class TestTkLimbAnnotatorExtended:
 
     def test_zoom_level_clamping(self):
         """Test zoom level is properly clamped to valid range"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ), patch.object(
-            TkLimbAnnotator, "update_stretched_image"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
+            patch.object(TkLimbAnnotator, "update_stretched_image"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -427,14 +420,12 @@ class TestTkLimbAnnotatorExtended:
 
     def test_stretch_level_clamping(self):
         """Test stretch level is properly clamped to valid range"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ), patch.object(
-            TkLimbAnnotator, "update_stretched_image"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
+            patch.object(TkLimbAnnotator, "update_stretched_image"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -454,14 +445,12 @@ class TestTkLimbAnnotatorExtended:
 
     def test_adjust_zoom_with_factors(self):
         """Test zoom adjustment with multiplicative factors"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ), patch.object(
-            TkLimbAnnotator, "update_stretched_image"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
+            patch.object(TkLimbAnnotator, "update_stretched_image"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -480,14 +469,12 @@ class TestTkLimbAnnotatorExtended:
 
     def test_adjust_stretch_with_delta(self):
         """Test stretch adjustment with additive delta"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ), patch.object(
-            TkLimbAnnotator, "update_stretched_image"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
+            patch.object(TkLimbAnnotator, "update_stretched_image"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -506,12 +493,11 @@ class TestTkLimbAnnotatorExtended:
 
     def test_coordinate_transformation_logic(self):
         """Test coordinate transformations between display and original"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -542,15 +528,13 @@ class TestTkLimbAnnotatorExtended:
 
     def test_auto_fit_zoom_calculation(self):
         """Test auto-fit zoom calculation functionality"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "update_stretched_image"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ) as mock_auto_fit:
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "update_stretched_image"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom") as mock_auto_fit,
+        ):
             mock_image = Mock()
             mock_image.size = (1600, 1200)  # Large image
             mock_image_open.return_value = mock_image
@@ -577,12 +561,11 @@ class TestTkLimbAnnotatorExtended:
 
     def test_get_status_text(self):
         """Test status text generation"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -603,12 +586,11 @@ class TestTkLimbAnnotatorExtended:
     @patch("tkinter.messagebox.showwarning")
     def test_save_points_no_points(self, mock_warning):
         """Test saving points when no points exist"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -624,14 +606,19 @@ class TestTkLimbAnnotatorExtended:
     @patch("builtins.open", new_callable=MagicMock)
     @patch("json.dump")
     @patch("tkinter.messagebox.showinfo")
-    def test_save_points_success(self, mock_info, mock_json_dump, mock_open):
+    @patch(
+        "tkinter.filedialog.asksaveasfilename",
+        return_value="/path/to/test_image_limb_points.json",
+    )
+    def test_save_points_success(
+        self, mock_dialog, mock_info, mock_json_dump, mock_open
+    ):
         """Test successful point saving"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -669,16 +656,13 @@ class TestTkLimbAnnotatorExtended:
         self, mock_info, mock_json_load, mock_open, mock_dialog
     ):
         """Test successful point loading"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ), patch.object(
-            TkLimbAnnotator, "redraw_points"
-        ), patch.object(
-            TkLimbAnnotator, "update_status"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
+            patch.object(TkLimbAnnotator, "redraw_points"),
+            patch.object(TkLimbAnnotator, "update_status"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -709,12 +693,11 @@ class TestTkLimbAnnotatorExtended:
     @patch("tkinter.filedialog.askopenfilename", return_value="")
     def test_load_points_no_file_selected(self, mock_dialog):
         """Test loading points when no file is selected"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -733,12 +716,11 @@ class TestTkLimbAnnotatorExtended:
     @patch("tkinter.messagebox.showerror")
     def test_load_points_file_error(self, mock_error, mock_open, mock_dialog):
         """Test loading points with file I/O error"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -756,16 +738,13 @@ class TestTkLimbAnnotatorExtended:
     @patch("tkinter.messagebox.askyesno", return_value=True)
     def test_clear_all_with_confirmation(self, mock_dialog):
         """Test clearing all points with user confirmation"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ), patch.object(
-            TkLimbAnnotator, "redraw_points"
-        ), patch.object(
-            TkLimbAnnotator, "update_status"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
+            patch.object(TkLimbAnnotator, "redraw_points"),
+            patch.object(TkLimbAnnotator, "update_status"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -782,12 +761,11 @@ class TestTkLimbAnnotatorExtended:
     @patch("tkinter.messagebox.askyesno", return_value=False)
     def test_clear_all_cancelled(self, mock_dialog):
         """Test clearing all points when user cancels"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -805,12 +783,11 @@ class TestTkLimbAnnotatorExtended:
 
     def test_clear_all_no_points(self):
         """Test clearing all points when no points exist"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -826,12 +803,11 @@ class TestTkLimbAnnotatorExtended:
 
     def test_target_generation_coordinate_rounding(self):
         """Test target generation with coordinate rounding"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -855,12 +831,11 @@ class TestTkLimbAnnotatorExtended:
 
     def test_target_generation_edge_coordinates(self):
         """Test target generation with edge case coordinates"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -892,12 +867,11 @@ class TestPILVersionCompatibility:
 
     def test_pil_resampling_new_version(self):
         """Test image resizing with new PIL Image.Resampling constants"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
         ):
             mock_image = Mock()
             mock_image.size = (800, 600)
@@ -918,8 +892,10 @@ class TestPILVersionCompatibility:
             annotator.status_label = Mock()  # Add missing status_label
 
             # Mock ImageTk.PhotoImage and update_status method
-            with patch("PIL.ImageTk.PhotoImage"), patch("tkinter.Canvas"), patch.object(
-                annotator, "update_status"
+            with (
+                patch("PIL.ImageTk.PhotoImage"),
+                patch("tkinter.Canvas"),
+                patch.object(annotator, "update_status"),
             ):
                 annotator.update_stretched_image()
 
@@ -928,74 +904,19 @@ class TestPILVersionCompatibility:
                 assert mock_image.resize.call_count == 1
                 assert mock_resized.resize.call_count == 1
 
-    def test_pil_resampling_old_version_fallback(self):
-        """Test fallback to old PIL constants when new ones don't exist"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ):
-            mock_image = Mock()
-            mock_image.size = (800, 600)
-
-            # Mock resize to raise AttributeError on first call (new style)
-            # then succeed on second call (old style)
-            call_count = 0
-
-            def side_effect(*args, **kwargs):
-                nonlocal call_count
-                call_count += 1
-                if call_count == 1:
-                    # First call - new style, should fail
-                    raise AttributeError(
-                        "'module' object has no attribute 'Resampling'"
-                    )
-                else:
-                    # Second call - old style, should work
-                    mock_resized = Mock()
-                    mock_resized.resize.return_value = mock_resized
-                    return mock_resized
-
-            mock_image.resize.side_effect = side_effect
-            mock_image_open.return_value = mock_image
-
-            annotator = TkLimbAnnotator("test_image.png")
-            annotator.zoom_level = 0.5
-            annotator.vertical_stretch = 2.0
-
-            # Add mock canvas and labels
-            annotator.canvas = Mock()
-            annotator.zoom_label = Mock()
-            annotator.stretch_label = Mock()
-            annotator.status_label = Mock()  # Add missing status_label
-
-            # Mock ImageTk.PhotoImage and update_status method
-            with patch("PIL.ImageTk.PhotoImage"), patch("tkinter.Canvas"), patch.object(
-                annotator, "update_status"
-            ):
-                # This should not raise an exception and should fall back to old constants
-                annotator.update_stretched_image()
-
-                # Verify resize was attempted with both new and old styles
-                assert mock_image.resize.call_count >= 1
-
 
 class TestScrollZoomHandling:
     """Test scroll wheel zoom handling"""
 
     def test_on_scroll_zoom_wheel_up(self):
         """Test scroll wheel up (zoom in)"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ), patch.object(
-            TkLimbAnnotator, "adjust_zoom"
-        ) as mock_adjust:
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
+            patch.object(TkLimbAnnotator, "adjust_zoom") as mock_adjust,
+        ):
             mock_image = Mock()
             mock_image.size = (800, 600)
             mock_image_open.return_value = mock_image
@@ -1013,15 +934,13 @@ class TestScrollZoomHandling:
 
     def test_on_scroll_zoom_wheel_down(self):
         """Test scroll wheel down (zoom out)"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ), patch.object(
-            TkLimbAnnotator, "adjust_zoom"
-        ) as mock_adjust:
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
+            patch.object(TkLimbAnnotator, "adjust_zoom") as mock_adjust,
+        ):
             mock_image = Mock()
             mock_image.size = (800, 600)
             mock_image_open.return_value = mock_image
@@ -1039,15 +958,13 @@ class TestScrollZoomHandling:
 
     def test_on_scroll_zoom_linux_up(self):
         """Test Linux scroll up (button 4)"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ), patch.object(
-            TkLimbAnnotator, "adjust_zoom"
-        ) as mock_adjust:
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
+            patch.object(TkLimbAnnotator, "adjust_zoom") as mock_adjust,
+        ):
             mock_image = Mock()
             mock_image.size = (800, 600)
             mock_image_open.return_value = mock_image
@@ -1065,15 +982,13 @@ class TestScrollZoomHandling:
 
     def test_on_scroll_zoom_linux_down(self):
         """Test Linux scroll down (button 5)"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ), patch.object(
-            TkLimbAnnotator, "adjust_zoom"
-        ) as mock_adjust:
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
+            patch.object(TkLimbAnnotator, "adjust_zoom") as mock_adjust,
+        ):
             mock_image = Mock()
             mock_image.size = (800, 600)
             mock_image_open.return_value = mock_image
@@ -1091,15 +1006,13 @@ class TestScrollZoomHandling:
 
     def test_on_scroll_zoom_invalid_event(self):
         """Test scroll event with invalid data"""
-        with patch("tkinter.Tk"), patch(
-            "PIL.Image.open"
-        ) as mock_image_open, patch.object(
-            TkLimbAnnotator, "create_widgets"
-        ), patch.object(
-            TkLimbAnnotator, "auto_fit_zoom"
-        ), patch.object(
-            TkLimbAnnotator, "adjust_zoom"
-        ) as mock_adjust:
+        with (
+            patch("tkinter.Tk"),
+            patch("PIL.Image.open") as mock_image_open,
+            patch.object(TkLimbAnnotator, "create_widgets"),
+            patch.object(TkLimbAnnotator, "auto_fit_zoom"),
+            patch.object(TkLimbAnnotator, "adjust_zoom") as mock_adjust,
+        ):
             mock_image = Mock()
             mock_image.size = (800, 600)
             mock_image_open.return_value = mock_image
@@ -1322,10 +1235,11 @@ class TestTkMaskSelectorInitialization:
         mask2 = np.random.random((100, 100)) > 0.7
         masks = [mask1, mask2]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks, initial_zoom=0.5)
@@ -1347,10 +1261,11 @@ class TestTkMaskSelectorInitialization:
             {"segmentation": mask_data, "area": 500},
         ]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1364,10 +1279,11 @@ class TestTkMaskSelectorInitialization:
         image = np.random.randint(0, 255, (200, 300, 3), dtype="uint8")
         masks = [np.random.random((200, 300)) > 0.5]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks, initial_zoom=None)  # type: ignore
@@ -1385,10 +1301,11 @@ class TestTkMaskSelectorInitialization:
             np.random.random((50, 50)) > 0.9,  # Small mask
         ]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1403,10 +1320,11 @@ class TestTkMaskSelectorInitialization:
         image = np.random.randint(0, 255, (30, 30, 3), dtype="uint8")
         masks = [np.random.random((30, 30)) > 0.5]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1420,10 +1338,11 @@ class TestTkMaskSelectorInitialization:
         image = np.random.randint(0, 255, (30, 30, 3), dtype="uint8")
         masks = []
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1442,10 +1361,11 @@ class TestMaskNormalization:
         mask2 = np.random.random((40, 40)) > 0.7
         masks = [mask1, mask2]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1465,10 +1385,11 @@ class TestMaskNormalization:
         mask_data = np.random.random((40, 40)) > 0.5
         masks = [{"mask": mask_data, "area": 500, "extra_field": "test"}]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1485,10 +1406,11 @@ class TestMaskNormalization:
         mask_data = np.random.random((40, 40)) > 0.5
         masks = [{"segmentation": mask_data}]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1528,10 +1450,11 @@ class TestMaskNormalization:
 
         masks = [small_mask, large_mask, medium_mask]  # Unsorted order
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1549,18 +1472,15 @@ class TestGUIComponents:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch("tkinter.Tk") as mock_tk, patch(
-            "tkinter.ttk.Frame"
-        ) as mock_frame, patch("tkinter.ttk.Label") as mock_label, patch(
-            "tkinter.Listbox"
-        ) as mock_listbox, patch(
-            "tkinter.Canvas"
-        ) as mock_canvas, patch.object(
-            TkMaskSelector, "_create_overlay_image"
-        ), patch.object(
-            TkMaskSelector, "update_canvas"
-        ), patch.object(
-            TkMaskSelector, "update_mask_list"
+        with (
+            patch("tkinter.Tk") as mock_tk,
+            patch("tkinter.ttk.Frame") as mock_frame,
+            patch("tkinter.ttk.Label") as mock_label,
+            patch("tkinter.Listbox") as mock_listbox,
+            patch("tkinter.Canvas") as mock_canvas,
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
+            patch.object(TkMaskSelector, "update_mask_list"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1577,10 +1497,11 @@ class TestGUIComponents:
         mask2 = np.random.random((50, 50)) > 0.7
         masks = [mask1, mask2]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1598,10 +1519,11 @@ class TestGUIComponents:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5, np.random.random((50, 50)) > 0.7]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1609,8 +1531,9 @@ class TestGUIComponents:
             selector.mask_listbox.curselection.return_value = (1,)
             selector.status_label = Mock()
 
-            with patch.object(selector, "_create_overlay_image"), patch.object(
-                selector, "update_canvas"
+            with (
+                patch.object(selector, "_create_overlay_image"),
+                patch.object(selector, "update_canvas"),
             ):
 
                 event = Mock()
@@ -1632,10 +1555,11 @@ class TestCanvasInteraction:
         mask2[30:40, 30:40] = True
         masks = [mask1, mask2]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1648,8 +1572,9 @@ class TestCanvasInteraction:
             selector.status_label = Mock()
             selector.zoom_level = 10.0
 
-            with patch.object(selector, "_create_overlay_image"), patch.object(
-                selector, "update_canvas"
+            with (
+                patch.object(selector, "_create_overlay_image"),
+                patch.object(selector, "update_canvas"),
             ):
 
                 event = Mock()
@@ -1665,10 +1590,11 @@ class TestCanvasInteraction:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1694,10 +1620,11 @@ class TestCanvasInteraction:
         mask1[80:90, 80:90] = True  # Only small area at bottom-right
         masks = [mask1]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1724,18 +1651,20 @@ class TestKeyboardShortcuts:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5 for _ in range(3)]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
             selector.mask_listbox = Mock()
             selector.status_label = Mock()
 
-            with patch.object(selector, "_create_overlay_image"), patch.object(
-                selector, "update_canvas"
+            with (
+                patch.object(selector, "_create_overlay_image"),
+                patch.object(selector, "update_canvas"),
             ):
 
                 # Test up arrow
@@ -1761,10 +1690,11 @@ class TestKeyboardShortcuts:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5 for _ in range(3)]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1772,8 +1702,9 @@ class TestKeyboardShortcuts:
             selector.mask_listbox = Mock()
             selector.status_label = Mock()
 
-            with patch.object(selector, "_create_overlay_image"), patch.object(
-                selector, "update_canvas"
+            with (
+                patch.object(selector, "_create_overlay_image"),
+                patch.object(selector, "update_canvas"),
             ):
 
                 event = Mock()
@@ -1786,19 +1717,22 @@ class TestKeyboardShortcuts:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5 for _ in range(3)]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
             selector.selected_mask = 1
             selector.status_label = Mock()
 
-            with patch.object(selector, "_create_overlay_image"), patch.object(
-                selector, "update_canvas"
-            ), patch.object(selector, "update_mask_list"):
+            with (
+                patch.object(selector, "_create_overlay_image"),
+                patch.object(selector, "update_canvas"),
+                patch.object(selector, "update_mask_list"),
+            ):
 
                 # Test 'p' for planet
                 event = Mock()
@@ -1821,10 +1755,11 @@ class TestKeyboardShortcuts:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1847,10 +1782,11 @@ class TestPanningAndZooming:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1871,10 +1807,11 @@ class TestPanningAndZooming:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1899,10 +1836,11 @@ class TestPanningAndZooming:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1923,10 +1861,11 @@ class TestPanningAndZooming:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -1944,17 +1883,19 @@ class TestPanningAndZooming:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
             original_zoom = selector.zoom_level
 
-            with patch.object(selector, "_create_overlay_image"), patch.object(
-                selector, "update_canvas"
+            with (
+                patch.object(selector, "_create_overlay_image"),
+                patch.object(selector, "update_canvas"),
             ):
 
                 event = Mock()
@@ -1968,17 +1909,19 @@ class TestPanningAndZooming:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
             original_zoom = selector.zoom_level
 
-            with patch.object(selector, "_create_overlay_image"), patch.object(
-                selector, "update_canvas"
+            with (
+                patch.object(selector, "_create_overlay_image"),
+                patch.object(selector, "update_canvas"),
             ):
 
                 event = Mock()
@@ -1992,16 +1935,18 @@ class TestPanningAndZooming:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
 
-            with patch.object(selector, "_create_overlay_image"), patch.object(
-                selector, "update_canvas"
+            with (
+                patch.object(selector, "_create_overlay_image"),
+                patch.object(selector, "update_canvas"),
             ):
 
                 # Test maximum zoom
@@ -2026,10 +1971,11 @@ class TestUtilityMethods:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5 for _ in range(4)]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -2039,9 +1985,11 @@ class TestUtilityMethods:
             selector.mask_classifications[2] = "planet"
             selector.mask_classifications[3] = "sky"
 
-            with patch.object(selector, "_create_overlay_image"), patch.object(
-                selector, "update_canvas"
-            ), patch.object(selector, "update_mask_list"):
+            with (
+                patch.object(selector, "_create_overlay_image"),
+                patch.object(selector, "update_canvas"),
+                patch.object(selector, "update_mask_list"),
+            ):
 
                 selector.reset_classifications()
 
@@ -2056,10 +2004,11 @@ class TestUtilityMethods:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5 for _ in range(4)]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)
@@ -2085,10 +2034,11 @@ class TestFinishAndCleanup:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch("tkinter.Tk") as mock_tk, patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk") as mock_tk,
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             mock_root = Mock()
@@ -2109,10 +2059,11 @@ class TestFinishAndCleanup:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch("tkinter.Tk") as mock_tk, patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk") as mock_tk,
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             mock_root = Mock()
@@ -2133,10 +2084,11 @@ class TestFinishAndCleanup:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch("tkinter.Tk") as mock_tk, patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk") as mock_tk,
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             mock_root = Mock()
@@ -2154,10 +2106,11 @@ class TestFinishAndCleanup:
         image = np.random.randint(0, 255, (50, 50, 3), dtype="uint8")
         masks = [np.random.random((50, 50)) > 0.5]
 
-        with patch("tkinter.Tk") as mock_tk, patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk") as mock_tk,
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             mock_root = Mock()
@@ -2187,9 +2140,11 @@ class TestOverlayImageCreation:
         # Mock cv2.dilate to return a simple dilation
         mock_dilate.return_value = np.ones((50, 50), dtype="uint8")
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "update_canvas"):
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "update_canvas"),
+        ):
 
             selector = TkMaskSelector(image, masks)
             selector.selected_mask = 0
@@ -2205,10 +2160,11 @@ class TestOverlayImageCreation:
         image = np.random.randint(0, 255, (100, 200, 3), dtype="uint8")
         masks = [np.random.random((100, 200)) > 0.5]
 
-        with patch("tkinter.Tk"), patch.object(
-            TkMaskSelector, "_build_gui"
-        ), patch.object(TkMaskSelector, "_create_overlay_image"), patch.object(
-            TkMaskSelector, "update_canvas"
+        with (
+            patch("tkinter.Tk"),
+            patch.object(TkMaskSelector, "_build_gui"),
+            patch.object(TkMaskSelector, "_create_overlay_image"),
+            patch.object(TkMaskSelector, "update_canvas"),
         ):
 
             selector = TkMaskSelector(image, masks)

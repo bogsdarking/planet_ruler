@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 from typing import Optional, List, Dict, Literal
-from scipy.optimize import differential_evolution
 import yaml
 import numpy as np
 import pandas as pd
@@ -41,8 +40,13 @@ from planet_ruler.image import (
 )
 from planet_ruler.annotate import TkLimbAnnotator
 from planet_ruler.validation import validate_limb_config
-from planet_ruler.fit import CostFunction, unpack_parameters, _validate_fit_results
-from planet_ruler.geometry import limb_arc
+from planet_ruler.fit import (
+    LimbFitter,
+    SagittaFitter,
+    unpack_parameters,
+    _validate_fit_results,
+)
+from planet_ruler.geometry import limb_arc, focal_length, detector_size
 from planet_ruler.dashboard import FitDashboard
 
 
@@ -94,7 +98,6 @@ MINIMIZER_PRESETS = {
         },
         "scipy-default": {
             # Exact scipy differential_evolution defaults
-            # Use this to match original prototype behavior
             "strategy": "best1bin",
             "popsize": 15,
             "mutation": (0.5, 1),
@@ -129,7 +132,6 @@ MINIMIZER_PRESETS = {
         },
         "scipy-default": {
             # Exact scipy dual_annealing defaults
-            # Use this to match original prototype behavior
             "initial_temp": 5230.0,
             "restart_temp_ratio": 2e-05,
             "visit": 2.62,
@@ -141,8 +143,77 @@ MINIMIZER_PRESETS = {
         "fast": {"niter": 100, "T": 1.5, "stepsize": 0.5, "local_maxiter": 50},
         "balanced": {"niter": 200, "T": 2.0, "stepsize": 0.5, "local_maxiter": 100},
         "robust": {"niter": 500, "T": 3.0, "stepsize": 0.7, "local_maxiter": 200},
+        "super_robust": {
+            "niter": 2000,
+            "T": 5.0,
+            "stepsize": 1.5,
+            "local_maxiter": 500,
+        },
+        "scipy-default": {
+            # Exact scipy basinhopping defaults
+            "niter": 100,
+            "T": 1.0,
+            "stepsize": 0.5,
+        },
+    },
+    "scipy-minimize": {
+        "fast": {"method": "L-BFGS-B", "n_restarts": 5, "ftol": 1e-6},
+        "balanced": {"method": "L-BFGS-B", "n_restarts": 20, "ftol": 1e-8},
+        "robust": {"method": "Powell", "n_restarts": 50, "ftol": 1e-10},
+        "super_robust": {"method": "Powell", "n_restarts": 200, "ftol": 1e-12},
+        "scipy-default": {
+            # Exact scipy minimize defaults (L-BFGS-B, single run)
+            "method": "L-BFGS-B",
+            "n_restarts": 1,
+        },
+    },
+    "shgo": {
+        "fast": {"n": 50, "iters": 1},
+        "balanced": {"n": 100, "iters": 2},
+        "robust": {"n": 200, "iters": 3},
+        "scipy-default": {
+            # Exact scipy shgo defaults
+            "n": 100,
+            "iters": 1,
+        },
     },
 }
+
+# Per-detection-method preset overrides. Checked before MINIMIZER_PRESETS.
+# Lets "balanced" mean different things for manual vs gradient-field fitting.
+METHOD_MINIMIZER_PRESETS: dict = {
+    "manual": {
+        "basinhopping": {
+            "fast": {"niter": 100, "T": 1.5, "stepsize": 0.5, "local_maxiter": 50},
+            "balanced": {"niter": 200, "T": 2.0, "stepsize": 0.5, "local_maxiter": 100},
+            "robust": {"niter": 500, "T": 3.0, "stepsize": 0.7, "local_maxiter": 200},
+            "super_robust": {
+                "niter": 2000,
+                "T": 5.0,
+                "stepsize": 1.5,
+                "local_maxiter": 500,
+            },
+        },
+        "scipy-minimize": {
+            "fast": {"method": "L-BFGS-B", "n_restarts": 5, "ftol": 1e-6},
+            "balanced": {"method": "L-BFGS-B", "n_restarts": 20, "ftol": 1e-8},
+            "robust": {"method": "L-BFGS-B", "n_restarts": 50, "ftol": 1e-10},
+            "super_robust": {"method": "Powell", "n_restarts": 200, "ftol": 1e-12},
+        },
+    },
+}
+
+
+def _resolve_preset_kwargs(
+    minimizer: str, preset: str, detection_method: Optional[str] = None
+) -> dict:
+    """Return preset kwargs, preferring method-specific overrides when available."""
+    if detection_method:
+        method_entry = METHOD_MINIMIZER_PRESETS.get(detection_method, {})
+        minimizer_entry = method_entry.get(minimizer, {})
+        if preset in minimizer_entry:
+            return dict(minimizer_entry[preset])
+    return dict(MINIMIZER_PRESETS.get(minimizer, {}).get(preset, {}))
 
 
 # ============================================================================
@@ -189,6 +260,191 @@ class PlanetObservation:
         if show:
             plt.show()
 
+    def crop_image(
+        self,
+        update_parameters: bool = True,
+    ) -> "PlanetObservation":
+        """
+        Interactively crop the observation image with automatic parameter scaling.
+
+        Opens a GUI tool allowing the user to select a rectangular region to crop.
+        If the observation has camera parameters (e.g., LimbObservation), they are
+        automatically scaled to match the cropped region.
+
+        Note: The principal point may end up outside the cropped region bounds
+        (negative coordinates). This is geometrically valid - it means the camera's
+        optical axis was pointing at a location not visible in the cropped image.
+
+        Args:
+            update_parameters: If True and parameters exist, scale them for the crop
+
+        Returns:
+            self: For method chaining
+
+        Example:
+            >>> obs = LimbObservation("airplane.jpg", "config.yaml")
+            >>> obs.crop_image()  # Opens interactive crop tool
+            >>> obs.detect_limb()
+            >>> obs.fit_arc()
+
+        Notes:
+            - Works for any PlanetObservation subclass
+            - For LimbObservation: automatically scales detector_size, principal_point, etc.
+            - Principal point can be outside cropped bounds (mathematically valid)
+        """
+        from planet_ruler.crop import TkImageCropper
+        from pathlib import Path
+        import logging
+        import numpy as np
+        from PIL import Image as PILImage
+
+        logger = logging.getLogger(__name__)
+
+        # Check if this observation has camera parameters (duck typing)
+        has_parameters = (
+            hasattr(self, "init_parameter_values")
+            and self.init_parameter_values is not None
+        )
+
+        # Prepare current parameters for the cropper (if they exist)
+        current_params = {}
+        if has_parameters:
+            current_params = {
+                "w": self.init_parameter_values.get("w"),
+                "n_pix_x": self.image.shape[1],
+                "n_pix_y": self.image.shape[0],
+                "x0": self.init_parameter_values.get("x0", self.image.shape[1] / 2),
+                "y0": self.init_parameter_values.get("y0", self.image.shape[0] / 2),
+            }
+
+            # Include h_detector if present
+            if "h_detector" in self.init_parameter_values:
+                current_params["h_detector"] = self.init_parameter_values["h_detector"]
+
+            logger.info("Opening interactive crop tool...")
+            logger.info(f"Current detector width: {current_params['w']*1000:.3f}mm")
+            logger.info(
+                f"Current image size: {current_params['n_pix_x']}×{current_params['n_pix_y']}px"
+            )
+            logger.info(
+                f"Current principal point: ({current_params['x0']:.0f}, {current_params['y0']:.0f})"
+            )
+        else:
+            logger.info("Opening interactive crop tool (no parameter scaling)...")
+            logger.info(
+                f"Current image size: {self.image.shape[1]}×{self.image.shape[0]}px"
+            )
+
+        # Run the crop tool
+        cropper = TkImageCropper(
+            self.image_filepath, current_params if has_parameters else None
+        )
+        cropper.run()
+
+        # Check if user completed the crop
+        if cropper.cropped_image is None:
+            logger.warning("Crop cancelled - no changes made")
+            return self
+
+        # Get results
+        cropped_image = cropper.cropped_image
+        crop_bounds = cropper.get_crop_bounds()
+        logger.info(f"Crop complete: {crop_bounds}")
+
+        # Update the image (always happens)
+        if isinstance(cropped_image, PILImage.Image):
+            self.image = np.array(cropped_image)
+        else:
+            self.image = cropped_image
+
+        # Update original image reference
+        self._original_image = self.image.copy()
+
+        # Update parameters (only if they exist and user wants to)
+        if has_parameters and update_parameters:
+            scaled_params = cropper.scaled_parameters
+
+            logger.info("Updating observation parameters...")
+            logger.info(f"New detector width: {scaled_params['w']*1000:.3f}mm")
+            logger.info(
+                f"New image size: {scaled_params['n_pix_x']}×{scaled_params['n_pix_y']}px"
+            )
+
+            # ================================================================
+            # CHECK: Inform user if principal point is out of bounds
+            # (But don't change it - the math works fine)
+            # ================================================================
+            x0_in_bounds = 0 <= scaled_params["x0"] < scaled_params["n_pix_x"]
+            y0_in_bounds = 0 <= scaled_params["y0"] < scaled_params["n_pix_y"]
+
+            if not x0_in_bounds or not y0_in_bounds:
+                logger.info(
+                    f"Principal point ({scaled_params['x0']:.0f}, {scaled_params['y0']:.0f}) "
+                    f"is outside cropped image bounds (0-{scaled_params['n_pix_x']}, "
+                    f"0-{scaled_params['n_pix_y']}.  Should still be geometrically valid.)"
+                )
+            else:
+                logger.info(
+                    f"New principal point: ({scaled_params['x0']:.0f}, {scaled_params['y0']:.0f}) [✓ in bounds]"
+                )
+
+            # Update pixel dimensions
+            self.init_parameter_values["n_pix_x"] = scaled_params["n_pix_x"]
+            self.init_parameter_values["n_pix_y"] = scaled_params["n_pix_y"]
+
+            # Update principal point
+            self.init_parameter_values["x0"] = scaled_params["x0"]
+            self.init_parameter_values["y0"] = scaled_params["y0"]
+
+            # Update detector size (CRITICAL)
+            if "w" in scaled_params:
+                old_w = self.init_parameter_values.get("w", 0)
+                self.init_parameter_values["w"] = scaled_params["w"]
+                logger.info(
+                    f"  Scaled detector width: {old_w*1000:.3f}mm → "
+                    f"{scaled_params['w']*1000:.3f}mm"
+                )
+
+            # Update detector height if present
+            if "h_detector" in scaled_params:
+                self.init_parameter_values["h_detector"] = scaled_params["h_detector"]
+
+            # Update parameter limits for detector width if they exist
+            if hasattr(self, "parameter_limits") and self.parameter_limits is not None:
+                if (
+                    "w" in self.parameter_limits
+                    and "w" in scaled_params
+                    and "w" in current_params
+                ):
+                    # Scale the limits proportionally
+                    crop_ratio = scaled_params["w"] / current_params["w"]
+                    old_limits = self.parameter_limits["w"]
+                    self.parameter_limits["w"] = [
+                        old_limits[0] * crop_ratio,
+                        old_limits[1] * crop_ratio,
+                    ]
+                    logger.info(
+                        f"  Scaled detector width limits: "
+                        f"[{old_limits[0]*1000:.3f}, {old_limits[1]*1000:.3f}]mm → "
+                        f"[{self.parameter_limits['w'][0]*1000:.3f}, "
+                        f"{self.parameter_limits['w'][1]*1000:.3f}]mm"
+                    )
+
+            # Note: Focal length (f) is NOT updated - it's a lens property
+            # Field of view will automatically update via geometry.field_of_view(f, w)
+
+            logger.info("Parameters updated successfully")
+
+        elif has_parameters and not update_parameters:
+            logger.info("Parameters NOT updated (update_parameters=False)")
+
+        elif not has_parameters:
+            logger.info(
+                "No parameters to update (observation type has no camera parameters)"
+            )
+
+        return self
+
 
 class LimbObservation(PlanetObservation):
     """
@@ -227,7 +483,13 @@ class LimbObservation(PlanetObservation):
             f"Must be one of: {valid_limb_methods}"
         )
 
-        valid_minimizers = ["differential-evolution", "dual-annealing", "basinhopping"]
+        valid_minimizers = [
+            "differential-evolution",
+            "dual-annealing",
+            "basinhopping",
+            "scipy-minimize",
+            "shgo",
+        ]
         assert minimizer in valid_minimizers, (
             f"Invalid minimizer '{minimizer}'. " f"Must be one of: {valid_minimizers}"
         )
@@ -244,34 +506,41 @@ class LimbObservation(PlanetObservation):
         self.minimizer = minimizer
 
         self._raw_limb = None
-        self.cost_function = None
-        self.fit = None
         self.best_parameters = None
         self.fit_results = None
+        self.stage_results: List[dict] = []
 
     def analyze(
         self,
-        detect_limb_kwargs: dict = None,
-        fit_limb_kwargs: dict = None,
+        detect_limb_kwargs: Optional[dict] = None,
+        fit_method: str = "arc",
+        fit_method_kwargs: Optional[dict] = None,
+        fit_stages: Optional[List[dict]] = None,
     ) -> "LimbObservation":
         """
         Perform complete limb analysis: detection + fitting in one call.
 
         Args:
-            detect_limb_kwargs (dict): Optional arguments for detect_limb()
-            fit_limb_kwargs (dict): Optional arguments for fit_limb()
+            detect_limb_kwargs: Optional kwargs for detect_limb().
+            fit_method: Single-stage method -- "arc" (default), "gradient", or "sagitta".
+                Ignored when fit_stages is provided.
+            fit_method_kwargs: Optional kwargs for the chosen fit method.
+            fit_stages: If provided, run fit_limb(fit_stages) (multi-stage orchestrator).
 
         Returns:
-            self: For method chaining
+            self: For method chaining.
         """
-        if detect_limb_kwargs is None:
-            detect_limb_kwargs = {}
-        if fit_limb_kwargs is None:
-            fit_limb_kwargs = {}
-
-        self.detect_limb(**detect_limb_kwargs)
-        self.fit_limb(**fit_limb_kwargs)
-
+        self.detect_limb(**(detect_limb_kwargs or {}))
+        if fit_stages is not None:
+            self.fit_limb(fit_stages)
+        elif fit_method == "sagitta":
+            self.fit_sagitta(**(fit_method_kwargs or {}))
+        elif fit_method == "arc":
+            self.fit_arc(**(fit_method_kwargs or {}))
+        elif fit_method == "gradient":
+            self.fit_gradient(**(fit_method_kwargs or {}))
+        else:
+            raise ValueError(f"Unknown fit_method: {fit_method!r}")
         return self
 
     @property
@@ -308,7 +577,15 @@ class LimbObservation(PlanetObservation):
         """
         if self.best_parameters is None:
             return 0.0
-        return self.best_parameters.get("f", 0.0) * 1000.0
+        f = self.best_parameters.get("f")
+        if f is None:
+            w = self.best_parameters.get("w")
+            fov = self.best_parameters.get("fov")
+            if w is not None and fov is not None:
+                f = focal_length(w, fov)
+            else:
+                return 0.0
+        return f * 1000.0
 
     @property
     def radius_uncertainty(self) -> float:
@@ -402,6 +679,39 @@ class LimbObservation(PlanetObservation):
                 "confidence_level": confidence_level,
                 "additional_info": str(e),
             }
+
+    @property
+    def methods(self) -> list:
+        """Fit methods applied, in order."""
+        return [s.get("method") for s in self.stage_results]
+
+    @property
+    def minimizers(self) -> list:
+        """Minimizers used per stage (None for sagitta)."""
+        return [s.get("minimizer") for s in self.stage_results]
+
+    def reset_params(self) -> "LimbObservation":
+        """Restore init_parameter_values to the original loaded values (cold start)."""
+        self.init_parameter_values = self._original_init_parameter_values.copy()
+        return self
+
+    def _apply_updated_limits(self, updated_limits: dict) -> None:
+        """Apply stage-returned bounds, always intersecting (never widening)."""
+        for param, bounds in updated_limits.items():
+            lo, hi = float(bounds[0]), float(bounds[1])
+            if param in self.parameter_limits:
+                cur_lo, cur_hi = self.parameter_limits[param]
+                self.parameter_limits[param] = [max(cur_lo, lo), min(cur_hi, hi)]
+            else:
+                self.parameter_limits[param] = [lo, hi]
+
+    def _apply_updated_init(self, updated_init: dict) -> None:
+        """Apply stage-returned init values, clipping each to its current bounds."""
+        for k, v in updated_init.items():
+            if k in self.parameter_limits:
+                lo, hi = self.parameter_limits[k]
+                v = max(lo, min(hi, float(v)))
+            self.init_parameter_values[k] = v
 
     def plot_3d(self, **kwargs) -> None:
         """
@@ -560,7 +870,9 @@ class LimbObservation(PlanetObservation):
 
         elif self.limb_detection == "manual":
             annotator = TkLimbAnnotator(
-                image_path=self.image_filepath, initial_stretch=1.0
+                image_path=self.image_filepath,
+                image=self.image,
+                initial_stretch=1.0,
             )
             annotator.run()  # Opens window
 
@@ -594,283 +906,316 @@ class LimbObservation(PlanetObservation):
             logging.info("Filling NaNs in fitted limb.")
             self.features["limb"] = fill_nans(self.features["limb"])
 
-    def fit_limb(
+    def fit_sagitta(
         self,
-        loss_function: Literal["l2", "l1", "log-l1", "gradient_field"] = "l2",
+        n_sigma: float = 2.0,
+        bias_correct: bool = False,
+        uncertainty: str = "both",
+    ) -> "LimbObservation":
+        """
+        Estimate planetary radius using the sagitta (arc-height) method.
+
+        Runs SagittaFitter: a 2-D L-BFGS-B optimizer over (kappa, theta_x)
+        using the exact projected-sagitta formula.  Updates self.init_parameter_values
+        and self.parameter_limits so that a subsequent fit_arc/fit_gradient stage
+        warm-starts from the result automatically.
+
+        Args:
+            n_sigma: Radius bound width in sigma units.
+            bias_correct: If True and y0 is provided, correct for camera tilt bias using
+                the apex y-offset to estimate theta_x, then refine kappa via 1-D minimization.
+            uncertainty: Bound-width method — "ols" (cheap, single pass),
+                "jackknife" (leave-one-out), or "both" (quadrature sum, default).
+
+        Returns:
+            self: For method chaining.
+        """
+        if "limb" not in self.features:
+            raise ValueError(
+                "Must detect limb before fitting. Call detect_limb() first."
+            )
+
+        f = self.init_parameter_values.get("f")
+        w_sensor = self.init_parameter_values.get("w")
+        fov = self.init_parameter_values.get("fov")
+
+        if f is None and w_sensor is not None and fov is not None:
+            f = focal_length(w_sensor, fov)
+        elif w_sensor is None and f is not None and fov is not None:
+            w_sensor = detector_size(f, fov)
+
+        if f is None or w_sensor is None:
+            raise ValueError(
+                "fit_sagitta requires at least two of (f, fov, w) in "
+                "init_parameter_values to compute the pixel focal length."
+            )
+
+        n_pix_x = self.image.shape[1]
+        f_px = f / w_sensor * n_pix_x
+        h = self.init_parameter_values["h"]
+        y0 = self.image.shape[0] / 2.0
+
+        fitter = SagittaFitter(
+            limb=self.features["limb"],
+            h=h,
+            f_px=f_px,
+            y0=y0,
+            free_parameters=self.free_parameters,
+            init_parameter_values=self.init_parameter_values,
+            parameter_limits=self.parameter_limits,
+            sigma_px="auto",
+            n_sigma=n_sigma,
+            bias_correct=bias_correct,
+            uncertainty=uncertainty,
+        )
+
+        result = fitter.fit()
+
+        self._apply_updated_limits(result.get("updated_limits", {}))
+        self._apply_updated_init(result.get("updated_init", {}))
+
+        working_parameters = self.init_parameter_values.copy()
+        working_parameters.update(
+            {
+                "n_pix_x": self.image.shape[1],
+                "n_pix_y": self.image.shape[0],
+                "x0": int(self.image.shape[1] * 0.5),
+                "y0": int(self.image.shape[0] * 0.5),
+            }
+        )
+        self.best_parameters = working_parameters
+
+        stage_entry = {
+            "method": "sagitta",
+            "n_sigma": n_sigma,
+            "uncertainty": uncertainty,
+            "bias_correct": bias_correct,
+        }
+        stage_entry.update(
+            {
+                k: v
+                for k, v in result.items()
+                if k not in ("updated_init", "updated_limits")
+            }
+        )
+        self.stage_results.append(stage_entry)
+
+        for w_msg in result.get("warnings", []):
+            logging.warning(w_msg)
+
+        return self
+
+    def fit_arc(
+        self,
+        loss_function: Literal["l2", "l1", "log-l1"] = "l2",
+        minimizer: Optional[
+            Literal[
+                "differential-evolution",
+                "dual-annealing",
+                "basinhopping",
+                "scipy-minimize",
+                "shgo",
+            ]
+        ] = None,
+        minimizer_preset: Literal[
+            "fast", "balanced", "robust", "super_robust", "scipy-default"
+        ] = "balanced",
+        minimizer_kwargs: Optional[Dict] = None,
         max_iter: int = 15000,
-        resolution_stages: Optional[List[int] | Literal["auto"]] = None,
-        max_iter_per_stage: Optional[List[int]] = None,
-        n_jobs: int = 1,
         seed: int = 0,
+        verbose: bool = False,
+        n_jobs: int = 1,
+        _dashboard=None,
+    ) -> "LimbObservation":
+        """
+        Fit the planet limb arc using a pixel-space cost function.
+
+        Requires a detected limb (call detect_limb() first, or register_limb()).
+        Reads self.init_parameter_values as the initial guess and writes fitted
+        free-parameter values back so a chained call warm-starts automatically.
+
+        Args:
+            loss_function: "l2" (default), "l1", or "log-l1".
+            minimizer: Minimizer name. Defaults to self.minimizer.
+            minimizer_preset: Preset config.
+            minimizer_kwargs: Override specific minimizer kwargs.
+            max_iter: Maximum iterations.
+            seed: Random seed.
+            verbose: Print progress.
+            n_jobs: Parallel workers. Effective only for differential-evolution
+                and shgo; emits a UserWarning for other minimizers.
+            _dashboard: Internal — FitDashboard instance passed by fit_limb.
+
+        Returns:
+            self: For method chaining.
+        """
+        if "limb" not in self.features:
+            raise ValueError(
+                "Must detect limb before fitting. Call detect_limb() first."
+            )
+
+        effective_minimizer = minimizer or self.minimizer
+        if verbose:
+            print(f"Using minimizer: {effective_minimizer}")
+
+        valid_presets = set(MINIMIZER_PRESETS.get(effective_minimizer, {}).keys())
+        if valid_presets and minimizer_preset not in valid_presets:
+            raise ValueError(
+                f"Unknown preset {minimizer_preset!r} for minimizer {effective_minimizer!r}. "
+                f"Valid presets: {sorted(valid_presets)}"
+            )
+
+        preset_kw = _resolve_preset_kwargs(
+            effective_minimizer, minimizer_preset, self.limb_detection
+        )
+        if minimizer_kwargs:
+            preset_kw.update(minimizer_kwargs)
+
+        working_parameters = self.init_parameter_values.copy()
+        working_parameters.update(
+            {
+                "n_pix_x": self.image.shape[1],
+                "n_pix_y": self.image.shape[0],
+                "x0": int(self.image.shape[1] * 0.5),
+                "y0": int(self.image.shape[0] * 0.5),
+            }
+        )
+
+        if _dashboard is not None:
+            _free = self.free_parameters
+
+            def _arc_db_callback(xk, convergence=None, *args, **kwargs):
+                _dashboard.update(unpack_parameters(xk, _free), convergence or 0.0)
+                return False
+
+            preset_kw["callback"] = _arc_db_callback
+
+        fitter = LimbFitter(
+            target=self.features["limb"],
+            free_parameters=self.free_parameters,
+            init_parameter_values=working_parameters,
+            parameter_limits=self.parameter_limits,
+            loss_function=loss_function,
+            minimizer=effective_minimizer,
+            minimizer_kwargs=preset_kw,
+            max_iter=max_iter,
+            seed=seed,
+            verbose=verbose,
+            n_jobs=n_jobs,
+        )
+
+        result = fitter.fit()
+
+        self._apply_updated_limits(result.get("updated_limits", {}))
+        self._apply_updated_init(result.get("updated_init", {}))
+
+        self.best_parameters = result["best_parameters"]
+        self.fit_results = result["fit_results"]
+
+        kwargs = self.init_parameter_values.copy()
+        kwargs.update(self.best_parameters)
+        self.features["fitted_limb"] = limb_arc(**kwargs)
+        self._plot_functions["fitted_limb"] = plot_limb
+
+        _validate_fit_results(self)
+
+        self.stage_results.append(
+            {
+                "method": "arc",
+                "loss_function": loss_function,
+                "minimizer": effective_minimizer,
+                "minimizer_preset": minimizer_preset,
+                "best_parameters": self.best_parameters,
+                "fit_results": self.fit_results,
+                "status": result.get("status", "ok"),
+                "warnings": result.get("warnings", []),
+            }
+        )
+
+        return self
+
+    def fit_gradient(
+        self,
+        resolution_stages: Optional[List[int] | Literal["auto"]] = None,
+        minimizer: Optional[
+            Literal[
+                "differential-evolution",
+                "dual-annealing",
+                "basinhopping",
+                "scipy-minimize",
+                "shgo",
+            ]
+        ] = None,
+        minimizer_preset: Literal[
+            "fast", "balanced", "robust", "super_robust", "scipy-default"
+        ] = "balanced",
+        minimizer_kwargs: Optional[Dict] = None,
         image_smoothing: Optional[float] = None,
         kernel_smoothing: float = 5.0,
         directional_smoothing: int = 50,
         directional_decay_rate: float = 0.15,
         prefer_direction: Optional[Literal["up", "down"]] = None,
-        minimizer: Optional[
-            Literal["differential-evolution", "dual-annealing", "basinhopping"]
-        ] = None,
-        minimizer_preset: Literal[
-            "fast", "balanced", "robust", "scipy-default"
-        ] = "balanced",
-        minimizer_kwargs: Optional[Dict] = None,
-        warm_start: bool = False,
-        dashboard: bool = False,
-        dashboard_kwargs: Optional[Dict] = None,
-        target_planet: str = "earth",
+        max_iter: int = 15000,
+        max_iter_per_stage: Optional[List[int]] = None,
+        seed: int = 0,
         verbose: bool = False,
+        n_jobs: int = 1,
+        _dashboard=None,
     ) -> "LimbObservation":
         """
-        Fit the limb to determine planetary parameters.
+        Fit using gradient field alignment, optionally with coarse-to-fine stages.
 
-        Supports single-resolution or multi-resolution (coarse-to-fine) optimization.
-        Multi-resolution is recommended for gradient_field loss to avoid local minima.
+        Does not require a pre-detected limb; operates directly on the image.
+        Multi-resolution stages warm-start from the previous stage automatically.
 
         Args:
-            loss_function: Loss function type
-                - 'l2', 'l1', 'log-l1': Traditional (requires detected limb)
-                - 'gradient_field': Direct gradient alignment (no detection needed)
-            max_iter: Maximum iterations (for single-resolution or total if multires)
-            resolution_stages: Resolution strategy
-                - None: Single resolution (original behavior)
-                - 'auto': Auto-determine stages based on image size
-                - List[int]: Custom stages, e.g., [4, 2, 1] = 1/4 → 1/2 → full
-                NOTE: Multi-resolution only works with gradient_field loss functions.
-                      Traditional loss functions (l2, l1, log-l1) require single resolution.
-            max_iter_per_stage: Iterations per stage (auto if None)
-            n_jobs: Number of parallel workers
-            seed: Random seed for reproducibility
-            image_smoothing: For gradient_field - Gaussian blur sigma applied to image
-                before gradient computation. Removes high-frequency artifacts (crater rims,
-                striations) that could mislead optimization. Different from kernel_smoothing.
-            kernel_smoothing: For gradient_field - initial blur for gradient direction
-                estimation. Makes the gradient field smoother for directional sampling.
-            directional_smoothing: For gradient_field - sampling distance along gradients
-            directional_decay_rate: For gradient_field - exponential decay for samples
-            prefer_direction: For gradient_field - prefer 'up' or 'down' gradients
-                where 'up' means dark-sky/bright-planet and v.v.
-                (None = no preference, choose best gradient regardless of direction)
-            minimizer (str): Choice of minimizer. Supports 'differential-evolution',
-                'dual-annealing', and 'basinhopping'.
-            minimizer_preset: Optimization strategy
-                - 'fast': Quick convergence, may miss global minimum
-                - 'balanced': Good trade-off (default)
-                - 'robust': Thorough exploration, slower
-            minimizer_kwargs: Override specific minimizer parameters (advanced)
-            warm_start: If True, use previous fit's results as starting point
-                (useful for iterative refinement). If False (default), use
-                original init_parameter_values.
-                Note: Multi-resolution stages always warm-start from previous
-                stages automatically. This parameter is for warm-starting across
-                separate fit_limb() calls.
-            dashboard: Show live progress dashboard during optimization
-            dashboard_kwargs: Additional kwargs for FitDashboard
-                - output_capture: OutputCapture instance for print/log display
-                - show_output: Show output section (default True if capture provided)
-                - max_output_lines: Number of output lines to show (default 3)
-                - min_refresh_delay: Fixed refresh delay (0.0 for adaptive, default)
-                - refresh_frequency: Refresh every N iterations (default 1)
-            target_planet: Reference planet for dashboard comparisons
-                ('earth', 'mars', 'jupiter', 'saturn', 'moon', 'pluto')
-            verbose: Print detailed progress
+            resolution_stages: Downsampling factors, e.g. [4, 2, 1] (coarse→fine).
+                None → single full-resolution stage. "auto" → inferred from image size.
+            minimizer: Minimizer name. Defaults to self.minimizer.
+            minimizer_preset: Preset config.
+            minimizer_kwargs: Override specific minimizer kwargs.
+            image_smoothing: Gaussian blur sigma applied before optimisation
+                (removes high-frequency artifacts; original image restored after).
+            kernel_smoothing: Gradient field kernel size.
+            directional_smoothing: Directional sampling distance along gradients.
+            directional_decay_rate: Exponential decay for directional samples.
+            prefer_direction: "up" (dark sky / bright planet), "down", or None.
+            max_iter: Total maximum iterations (split across stages if multi-res).
+            max_iter_per_stage: Explicit per-stage iteration budget.
+            seed: Random seed.
+            verbose: Print progress.
+            n_jobs: Parallel workers. Effective only for differential-evolution
+                and shgo; emits a UserWarning for other minimizers.
 
         Returns:
-            self: For method chaining
-
-        Examples:
-            # Simple single-resolution fit
-            obs.fit_limb()
-
-            # Auto multi-resolution for gradient field
-            obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
-
-            # Remove image artifacts before optimization
-            obs.fit_limb(
-                loss_function='gradient_field',
-                resolution_stages='auto',
-                image_smoothing=2.0,  # Remove crater rims, striations
-                kernel_smoothing=5.0  # Smooth gradient field
-            )
-
-            # Custom stages with robust optimization
-            obs.fit_limb(
-                loss_function='gradient_field',
-                resolution_stages=[8, 4, 2, 1],
-                minimizer_preset='robust'
-            )
-
-            # Override specific minimizer parameters
-            obs.fit_limb(
-                loss_function='gradient_field',
-                minimizer_kwargs={'popsize': 25, 'atol': 0.5}
-            )
-
-            # Dashboard with output capture
-            from planet_ruler.dashboard import OutputCapture
-            capture = OutputCapture()
-            with capture:
-                obs.fit_limb(
-                    loss_function='gradient_field',
-                    dashboard=True,
-                    dashboard_kwargs={'output_capture': capture}
-                )
-
-            # Iterative refinement with warm start
-            obs.fit_limb(loss_function='gradient_field', resolution_stages='auto')
-            obs.fit_limb(loss_function='gradient_field', warm_start=True,
-                         minimizer_preset='robust')  # Refine with more thorough search
+            self: For method chaining.
         """
+        effective_minimizer = minimizer or self.minimizer
+        if verbose:
+            print(f"Using minimizer: {effective_minimizer}")
 
-        if minimizer is not None:
-            self.minimizer = minimizer
-        print(f"Using minimizer: {self.minimizer}")
+        valid_presets = set(MINIMIZER_PRESETS.get(effective_minimizer, {}).keys())
+        if valid_presets and minimizer_preset not in valid_presets:
+            raise ValueError(
+                f"Unknown preset {minimizer_preset!r} for minimizer {effective_minimizer!r}. "
+                f"Valid presets: {sorted(valid_presets)}"
+            )
 
-        # ====================================================================
-        # STEP 0: Warm start handling - protect original values
-        # ====================================================================
-        if (
-            warm_start
-            and hasattr(self, "best_parameters")
-            and self.best_parameters is not None
-        ):
-            # Update init_parameter_values with previous fit's results
-            # Only update free parameters (don't touch inferred ones like n_pix_x, n_pix_y, x0, y0)
-            for param in self.free_parameters:
-                if param in self.best_parameters:
-                    self.init_parameter_values[param] = self.best_parameters[param]
-            if verbose:
-                print("Warm start: Using previous fit's results as starting point")
-        elif (
-            not warm_start
-            and hasattr(self, "_original_init_parameter_values")
-            and self._original_init_parameter_values is not None
-        ):
-            # Restore original initial parameter values when not using warm start
-            self.init_parameter_values = self._original_init_parameter_values.copy()
-            if verbose:
-                print("Cold start: Using original initial parameter values")
-
-        # ====================================================================
-        # STEP 1: Save original image ONCE (if smoothing will be applied)
-        # ====================================================================
         original_image = None
-        if (
-            image_smoothing is not None
-            and image_smoothing > 0
-            and "gradient_field" in loss_function
-        ):
-            original_image = self.image.copy()  # Save ONCE
-
-            # Apply smoothing to self.image
+        if image_smoothing is not None and image_smoothing > 0:
+            original_image = self.image.copy()
             if verbose:
                 print(f"Applying Gaussian blur to image (sigma={image_smoothing:.1f})")
             self.image = cv2.GaussianBlur(
                 self.image.astype(np.float32),
-                (0, 0),  # Kernel size auto-determined from sigma
+                (0, 0),
                 sigmaX=image_smoothing,
                 sigmaY=image_smoothing,
             )
 
-        # ====================================================================
-        # STEP 2: Determine resolution strategy
-        # ====================================================================
-        use_multires = resolution_stages is not None
-
-        # Multi-resolution only works with gradient_field loss functions
-        if use_multires and "gradient_field" not in loss_function:
-            logging.warning(
-                f"Multi-resolution optimization is only supported for gradient_field loss functions. "
-                f"Got loss_function='{loss_function}'. Falling back to single-resolution."
-            )
-            use_multires = False
-            resolution_stages = None
-
-        # ====================================================================
-        # STEP 3: Run optimization (single or multi-resolution)
-        # ====================================================================
-        try:
-            if not use_multires:
-                result = self._fit_single_resolution(
-                    loss_function=loss_function,
-                    minimizer=minimizer,
-                    max_iter=max_iter,
-                    n_jobs=n_jobs,
-                    seed=seed,
-                    kernel_smoothing=kernel_smoothing,
-                    directional_smoothing=directional_smoothing,
-                    directional_decay_rate=directional_decay_rate,
-                    prefer_direction=prefer_direction,
-                    minimizer_preset=minimizer_preset,
-                    minimizer_kwargs=minimizer_kwargs,
-                    dashboard=dashboard,
-                    dashboard_kwargs=dashboard_kwargs,
-                    target_planet=target_planet,
-                    verbose=verbose,
-                )
-            else:
-                result = self._fit_multi_resolution(
-                    loss_function=loss_function,
-                    minimizer=minimizer,
-                    resolution_stages=resolution_stages,
-                    max_iter=max_iter,
-                    max_iter_per_stage=max_iter_per_stage,
-                    n_jobs=n_jobs,
-                    seed=seed,
-                    kernel_smoothing=kernel_smoothing,
-                    directional_smoothing=directional_smoothing,
-                    directional_decay_rate=directional_decay_rate,
-                    prefer_direction=prefer_direction,
-                    minimizer_preset=minimizer_preset,
-                    minimizer_kwargs=minimizer_kwargs,
-                    dashboard=dashboard,
-                    dashboard_kwargs=dashboard_kwargs,
-                    target_planet=target_planet,
-                    verbose=verbose,
-                )
-        finally:
-            # ================================================================
-            # STEP 4: Restore original image ONCE (if it was smoothed)
-            # ================================================================
-            if original_image is not None:
-                self.image = original_image
-                if verbose:
-                    print(f"Restored original unsmoothed image")
-
-        return self
-
-    def _fit_multi_resolution(
-        self,
-        loss_function: str,
-        resolution_stages: List[int] | str,
-        max_iter: int,
-        max_iter_per_stage: Optional[List[int]],
-        n_jobs: int,
-        seed: int,
-        kernel_smoothing: float,
-        directional_smoothing: int,
-        directional_decay_rate: float,
-        prefer_direction: Optional[Literal["up", "down"]] = None,
-        minimizer: Optional[
-            Literal["differential-evolution", "dual-annealing", "basinhopping"]
-        ] = None,
-        minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
-        minimizer_kwargs: Optional[Dict] = None,
-        dashboard: bool = False,
-        dashboard_kwargs: Optional[Dict] = None,
-        target_planet: str = "earth",
-        verbose: bool = False,
-    ) -> "LimbObservation":
-        """
-        Multi-resolution optimization (internal method).
-
-        Note: self.image may be the smoothed version if image_smoothing was applied.
-        """
-        if minimizer is not None:
-            self.minimizer = minimizer
-            print(f"Using minimizer: {self.minimizer}")
-
-        # Auto-generate stages
-        if resolution_stages == "auto":
+        if resolution_stages is None:
+            resolution_stages = [1]
+        elif resolution_stages == "auto":
             min_dim = min(self.image.shape[:2])
             if min_dim >= 2000:
                 resolution_stages = [4, 2, 1]
@@ -879,7 +1224,6 @@ class LimbObservation(PlanetObservation):
             else:
                 resolution_stages = [1]
 
-        # Auto-determine iterations per stage
         if max_iter_per_stage is None:
             total_weight = sum(range(1, len(resolution_stages) + 1))
             max_iter_per_stage = [
@@ -887,512 +1231,224 @@ class LimbObservation(PlanetObservation):
                 for i in range(len(resolution_stages))
             ]
 
-        if verbose:
-            print(f"\n{'='*60}")
-            print(f"Multi-Resolution Optimization")
-            print(f"Stages: {resolution_stages}, Iterations: {max_iter_per_stage}")
-            print(f"Loss: {loss_function}, Preset: {minimizer_preset}")
-            print(f"{'='*60}\n")
+        result: dict = {}
+        try:
+            full_res_image = self.image.copy()
 
-        # Store current state (might be smoothed version)
-        full_res_image = self.image.copy()
-        original_params = self.init_parameter_values.copy()
-
-        # Set up target resolution cost function (highest resolution if not native)
-
-        # Scale parameters to target resolution
-        target_downsample = int(resolution_stages[-1])
-        target_res_params = self._scale_parameters_for_resolution(
-            original_params, target_downsample
-        )
-        # Downsample image for this stage
-        if target_downsample > 1:
-            h, w = full_res_image.shape[:2]
-            target_image = cv2.resize(
-                full_res_image,
-                (w // target_downsample, h // target_downsample),
-                interpolation=cv2.INTER_AREA,
-            )
-        else:
-            target_image = full_res_image.copy()
-
-        if verbose:
-            print("Setting up target resolution loss function...")
-            print(f"Size: {full_res_image.shape[:2]} → {target_image.shape[:2]}")
-
-        # Update to actual final resolution dimensions
-        target_res_params["n_pix_x"] = target_image.shape[1]
-        target_res_params["n_pix_y"] = target_image.shape[0]
-        target_res_params["x0"] = int(target_image.shape[1] * 0.5)
-        target_res_params["y0"] = int(target_image.shape[0] * 0.5)
-
-        # Create temporary cost function at final resolution
-        target_cost_fn = CostFunction(
-            target=(
-                target_image
-                if "gradient_field" in loss_function
-                else self.features.get("limb")
-            ),
-            function=limb_arc,
-            free_parameters=self.free_parameters,
-            init_parameter_values=target_res_params,
-            loss_function=loss_function,
-            kernel_smoothing=kernel_smoothing,
-            directional_smoothing=directional_smoothing,
-            directional_decay_rate=directional_decay_rate,
-            prefer_direction=prefer_direction,
-        )
-
-        # Initialize dashboard for multi-stage if requested
-        dash = None
-        if dashboard:
-            # Create dashboard with multi-stage awareness
-            total_iters = sum(max_iter_per_stage)
-            # Determine initial resolution label
-            first_downsample = resolution_stages[0]
-            if first_downsample == 1:
-                initial_resolution_label = "full"
-            else:
-                initial_resolution_label = f"1/{first_downsample}x"
-
-            dash = FitDashboard(
-                initial_params=original_params,
-                target_planet=target_planet,
-                max_iter=max_iter_per_stage[0],  # First stage iterations
-                free_params=self.free_parameters,
-                total_stages=len(resolution_stages),
-                cumulative_max_iter=total_iters,
-                **(dashboard_kwargs or {}),
-            )
-            # Set initial resolution label
-            dash.resolution_label = initial_resolution_label
-
-        # Loop through resolution stages
-        for stage_idx, (downsample, stage_iter) in enumerate(
-            zip(resolution_stages, max_iter_per_stage)
-        ):
-            # Create resolution label for dashboard
-            if downsample == 1:
-                resolution_label = "full"
-            else:
-                resolution_label = f"1/{downsample}x"
-
-            # Start new stage in dashboard (except first stage which starts automatically)
-            if dash is not None and stage_idx > 0:
-                dash.start_stage(stage_idx + 1, resolution_label, stage_iter)
-
-            if verbose:
-                print(f"\n{'─'*60}")
-                print(
-                    f"Stage {stage_idx + 1}/{len(resolution_stages)}: "
-                    f"{resolution_label} ({stage_iter} iter)"
-                )
-                print(f"{'─'*60}")
-
-            # Downsample image for this stage
-            if downsample == resolution_stages[-1]:
-                self.image = target_image
-            else:
-                # elif downsample > 1:
-                h, w = full_res_image.shape[:2]
-                self.image = cv2.resize(
-                    full_res_image,
-                    (w // downsample, h // downsample),
-                    interpolation=cv2.INTER_AREA,
-                )
-            # else:
-            #     self.image = full_res_image
-
-            if verbose:
-                print(f"Size: {full_res_image.shape[:2]} → {self.image.shape[:2]}")
-
-            # Scale parameters for this resolution
-            self.init_parameter_values = self._scale_parameters_for_resolution(
-                original_params, 1.0 / downsample
-            )
-
-            # Warm start from previous stage
-            if stage_idx > 0 and hasattr(self, "best_parameters"):
-                if verbose:
-                    print("Warm start from previous stage:")
-                for param in self.free_parameters:
-                    if param in self.best_parameters:
-                        if verbose:
-                            print(
-                                f"    {param}: {self.init_parameter_values[param]:.4f} → {self.best_parameters.get(param, 'N/A')}"
-                            )
-                        self.init_parameter_values[param] = self.best_parameters[param]
-
-            # Scale gradient parameters
-            scaled_kernel_smoothing = max(0.5, kernel_smoothing / downsample)
-            scaled_directional_smoothing = max(
-                5, int(directional_smoothing / downsample)
-            )
-
-            if verbose:
-                print(f"Gradient params:")
+            for stage_idx, (downsample, stage_iter) in enumerate(
+                zip(resolution_stages, max_iter_per_stage)
+            ):
                 if downsample > 1:
-                    print(
-                        f"  kernel_smoothing: {kernel_smoothing:.1f} → {scaled_kernel_smoothing:.1f}"
-                    )
-                    print(
-                        f"  directional_smoothing: {directional_smoothing} → {scaled_directional_smoothing}"
+                    img_h, img_w = full_res_image.shape[:2]
+                    stage_image = cv2.resize(
+                        full_res_image,
+                        (img_w // downsample, img_h // downsample),
+                        interpolation=cv2.INTER_AREA,
                     )
                 else:
-                    print(f"  kernel_smoothing: {scaled_kernel_smoothing:.1f}")
-                    print(f"  directional_smoothing: {scaled_directional_smoothing}")
+                    stage_image = full_res_image
 
-            # Fit at this resolution
-            if verbose:
-                print(f"Starting optimization with:")
-                for param in self.free_parameters:
-                    print(f"  {param}: {self.init_parameter_values.get(param, 'N/A')}")
+                scaled_kernel = max(0.5, kernel_smoothing / downsample)
+                scaled_directional = max(5, int(directional_smoothing / downsample))
 
-            self._fit_single_resolution(
-                loss_function=loss_function,
-                max_iter=stage_iter,
-                n_jobs=n_jobs,
-                seed=seed,
-                kernel_smoothing=scaled_kernel_smoothing,
-                directional_smoothing=scaled_directional_smoothing,
-                directional_decay_rate=directional_decay_rate,
-                prefer_direction=prefer_direction,
-                minimizer=minimizer,
-                minimizer_preset=minimizer_preset,
-                minimizer_kwargs=minimizer_kwargs,
-                dashboard=dashboard,  # Boolean flag
-                dashboard_kwargs=dashboard_kwargs,
-                target_planet=target_planet,
-                verbose=verbose,
-                dashboard_obj=dash,  # Pass dashboard object for multi-stage
-            )
+                working_params = self.init_parameter_values.copy()
+                if stage_idx > 0 and self.best_parameters is not None:
+                    for param in self.free_parameters:
+                        if param in self.best_parameters:
+                            working_params[param] = self.best_parameters[param]
 
-            if verbose and hasattr(self, "best_parameters"):
-                print(f"Fitted parameters:")
-                for param in self.free_parameters:
-                    print(f"  {param}: {self.best_parameters.get(param, 'N/A')}")
+                if verbose:
+                    print(
+                        f"\nStage {stage_idx + 1}/{len(resolution_stages)}: "
+                        f"1/{downsample}x ({stage_iter} iter)"
+                    )
 
-                # Evaluate at target resolution
-                target_cost = target_cost_fn.cost(self.fit_results.x)
-                print(f"Cost: {target_cost:.6f}")
-                if "gradient_field" in loss_function:
-                    print(f"Flux: {1.0 - target_cost:.6f}")
+                preset_kw = _resolve_preset_kwargs(
+                    effective_minimizer, minimizer_preset, self.limb_detection
+                )
+                if minimizer_kwargs:
+                    preset_kw.update(minimizer_kwargs)
 
-        # Restore full resolution
-        self.image = full_res_image
+                if _dashboard is not None:
+                    if stage_idx > 0:
+                        _lbl = "full" if downsample == 1 else f"1/{downsample}x"
+                        _dashboard.start_stage(stage_idx + 1, _lbl, stage_iter)
+                    _free = self.free_parameters
 
-        # Note: We don't restore init_parameter_values here because:
-        # 1. It's not needed for correctness (next fit will set its own)
-        # 2. It would break warm_start (where we want to keep updated values)
+                    def _grad_db_callback(xk, convergence=None, *args, **kwargs):
+                        _dashboard.update(
+                            unpack_parameters(xk, _free), convergence or 0.0
+                        )
+                        return False
 
-        # Scale final solution back to full resolution
-        if resolution_stages[-1] != 1:
-            scale_factor = resolution_stages[-1]
-            self.best_parameters = self._scale_parameters_for_resolution(
-                self.best_parameters, scale_factor
-            )
-            # Update image dimensions to actual full resolution
-            self.best_parameters["n_pix_x"] = full_res_image.shape[1]
-            self.best_parameters["n_pix_y"] = full_res_image.shape[0]
+                    preset_kw["callback"] = _grad_db_callback
 
-            # Recompute fitted limb at full resolution
-            inferred_parameters = {
-                "n_pix_x": full_res_image.shape[1],
-                "n_pix_y": full_res_image.shape[0],
-                "x0": int(full_res_image.shape[1] * 0.5),
-                "y0": int(full_res_image.shape[0] * 0.5),
-            }
-            full_res_params = self.best_parameters.copy()
-            full_res_params.update(inferred_parameters)
+                fitter = LimbFitter(
+                    target=stage_image,
+                    free_parameters=self.free_parameters,
+                    init_parameter_values=working_params,
+                    parameter_limits=self.parameter_limits,
+                    loss_function="gradient_field",
+                    minimizer=effective_minimizer,
+                    minimizer_kwargs=preset_kw,
+                    max_iter=stage_iter,
+                    seed=seed,
+                    verbose=verbose,
+                    kernel_smoothing=scaled_kernel,
+                    directional_smoothing=scaled_directional,
+                    directional_decay_rate=directional_decay_rate,
+                    prefer_direction=prefer_direction,
+                    n_jobs=n_jobs,
+                )
 
-            self.cost_function = CostFunction(
-                target=(
-                    full_res_image
-                    if "gradient_field" in loss_function
-                    else self.features.get("limb")
-                ),
-                function=limb_arc,
-                free_parameters=self.free_parameters,
-                init_parameter_values=full_res_params,
-                loss_function=loss_function,
-                kernel_smoothing=kernel_smoothing,
-                directional_smoothing=directional_smoothing,
-                directional_decay_rate=directional_decay_rate,
-                prefer_direction=prefer_direction,
-            )
-            self.features["fitted_limb"] = self.cost_function.evaluate(
-                self.best_parameters
-            )
+                result = fitter.fit()
 
-        if verbose:
-            print(f"\n{'='*60}")
-            print("Optimization Complete!")
-            print(f"{'='*60}\n")
+                self._apply_updated_limits(result.get("updated_limits", {}))
+                self._apply_updated_init(result.get("updated_init", {}))
 
-        # Validate fit results and issue warnings if needed
+                self.best_parameters = result["best_parameters"]
+                self.fit_results = result["fit_results"]
+
+            if resolution_stages and resolution_stages[-1] != 1:
+                self.best_parameters["n_pix_x"] = full_res_image.shape[1]
+                self.best_parameters["n_pix_y"] = full_res_image.shape[0]
+                self.best_parameters["x0"] = int(full_res_image.shape[1] * 0.5)
+                self.best_parameters["y0"] = int(full_res_image.shape[0] * 0.5)
+
+        finally:
+            if original_image is not None:
+                self.image = original_image
+
+        if self.best_parameters is not None:
+            kwargs = self.init_parameter_values.copy()
+            kwargs.update(self.best_parameters)
+            self.features["fitted_limb"] = limb_arc(**kwargs)
+            self._plot_functions["fitted_limb"] = plot_limb
+
         _validate_fit_results(self)
 
-        # Finalize dashboard after all stages complete
-        if dash is not None:
-            success = (
-                self.fit_results.success
-                if hasattr(self.fit_results, "success")
-                else True
-            )
-            dash.finalize(success=success)
+        self.stage_results.append(
+            {
+                "method": "gradient",
+                "resolution_stages": resolution_stages,
+                "minimizer": effective_minimizer,
+                "minimizer_preset": minimizer_preset,
+                "best_parameters": self.best_parameters,
+                "fit_results": self.fit_results,
+                "status": result.get("status", "ok"),
+                "warnings": result.get("warnings", []),
+            }
+        )
 
         return self
 
-    def _fit_single_resolution(
+    def fit_limb(
         self,
-        loss_function: str,
-        max_iter: int,
-        n_jobs: int,
-        seed: int,
-        kernel_smoothing: float,
-        directional_smoothing: int,
-        directional_decay_rate: float,
-        prefer_direction: Optional[Literal["up", "down"]] = None,
-        minimizer: Optional[
-            Literal["differential-evolution", "dual-annealing", "basinhopping"]
-        ] = None,
-        minimizer_preset: Literal["fast", "balanced", "robust"] = "balanced",
-        minimizer_kwargs: Optional[Dict] = None,
+        stages: List[dict],
         dashboard: bool = False,
         dashboard_kwargs: Optional[Dict] = None,
         target_planet: str = "earth",
-        verbose: bool = False,
-        dashboard_obj: Optional["FitDashboard"] = None,
+        n_jobs: int = 1,
     ) -> "LimbObservation":
         """
-        Internal method: single-resolution optimization.
+        Run a multi-stage fit by sequentially calling fit_sagitta / fit_arc / fit_gradient.
 
-        Note: self.image may be the smoothed version if image_smoothing was applied.
-        """
-        if minimizer is not None:
-            self.minimizer = minimizer
-
-        # Setup parameters
-        # x0, y0 always inferred from image center (not free parameters)
-        inferred_parameters = {
-            "n_pix_x": self.image.shape[1],
-            "n_pix_y": self.image.shape[0],
-            "x0": int(self.image.shape[1] * 0.5),
-            "y0": int(self.image.shape[0] * 0.5),
-        }
-        working_parameters = self.init_parameter_values.copy()
-        working_parameters.update(inferred_parameters)
-
-        # Choose target
-        if "gradient_field" in loss_function:
-            target = self.image
-            if verbose:
-                print(
-                    f"Gradient field: kernel_smoothing={kernel_smoothing}, "
-                    f"directional_smoothing={directional_smoothing}, decay={directional_decay_rate}"
-                )
-        else:
-            if "limb" not in self.features:
-                raise ValueError(
-                    f"Loss '{loss_function}' requires detected limb. "
-                    "Use detect_limb() or loss_function='gradient_field'"
-                )
-            target = self.features["limb"]
-
-        # Create cost function for this resolution
-        self.cost_function = CostFunction(
-            target=target,
-            function=limb_arc,
-            free_parameters=self.free_parameters,
-            init_parameter_values=working_parameters,
-            loss_function=loss_function,
-            kernel_smoothing=kernel_smoothing,
-            directional_smoothing=directional_smoothing,
-            directional_decay_rate=directional_decay_rate,
-            prefer_direction=prefer_direction,
-        )
-
-        # Initialize dashboard if requested
-        dash = dashboard_obj  # Use passed dashboard if provided (multi-stage)
-        if dash is None and dashboard:
-            # Create new dashboard for single-stage optimization
-            dash = FitDashboard(
-                initial_params=working_parameters,
-                target_planet=target_planet,
-                max_iter=max_iter,
-                free_params=self.free_parameters,
-                **(dashboard_kwargs or {}),
-            )
-
-        # Create callback for dashboard updates
-        def dashboard_callback(xk, *args, **kwargs):
-            """
-            Universal callback for all minimizers.
-
-            Signatures vary by minimizer:
-            - differential_evolution: callback(xk, convergence=None)
-            - dual_annealing: callback(x, f, context)
-            - basinhopping: callback(x, f, accept)
-            """
-            if dash is not None:
-                # Unpack parameters
-                current_params = unpack_parameters(xk, self.free_parameters)
-                full_params = working_parameters.copy()
-                full_params.update(current_params)
-
-                # Calculate current loss
-                # For dual_annealing and basinhopping, loss is passed as second arg
-                if len(args) > 0 and isinstance(args[0], (int, float)):
-                    loss = args[0]
-                else:
-                    loss = self.cost_function.cost(xk)
-
-                # Update dashboard
-                dash.update(full_params, loss)
-            return False  # Don't stop optimization
-
-        # Get minimizer configuration
-        if self.minimizer not in MINIMIZER_PRESETS:
-            raise ValueError(f"Unknown minimizer: {self.minimizer}")
-
-        if minimizer_preset not in MINIMIZER_PRESETS[self.minimizer]:
-            raise ValueError(
-                f"Unknown preset '{minimizer_preset}' for {self.minimizer}. "
-                f"Choose from: {list(MINIMIZER_PRESETS[self.minimizer].keys())}"
-            )
-
-        # Start with preset, then apply overrides
-        config = MINIMIZER_PRESETS[self.minimizer][minimizer_preset].copy()
-        if minimizer_kwargs:
-            config.update(minimizer_kwargs)
-
-        # Prepare bounds and initial guess
-        bounds = [self.parameter_limits[key] for key in self.free_parameters]
-        x0 = [working_parameters[key] for key in self.free_parameters]
-
-        # Clamp x0 to be strictly within bounds (avoid edge case violations)
-        x0_clamped = []
-        for val, (lower, upper) in zip(x0, bounds):
-            # Ensure value is strictly within bounds with small epsilon
-            epsilon = 1e-9 * (upper - lower)  # Relative epsilon
-            clamped_val = max(lower + epsilon, min(upper - epsilon, val))
-            if clamped_val != val:
-                import warnings
-
-                warnings.warn(
-                    f"Initial parameter {val} clamped to [{lower}, {upper}]",
-                    UserWarning,
-                )
-            x0_clamped.append(clamped_val)
-        x0 = x0_clamped
-
-        # Run minimizer
-        if self.minimizer == "differential-evolution":
-            updating = "deferred" if n_jobs > 1 else "immediate"
-
-            self.fit_results = differential_evolution(
-                self.cost_function.cost,
-                bounds,
-                x0=x0,
-                workers=n_jobs,
-                maxiter=max_iter,
-                updating=updating,
-                callback=dashboard_callback if dashboard else None,
-                disp=verbose,
-                seed=seed,
-                **config,  # Apply preset + overrides
-            )
-
-        elif self.minimizer == "dual-annealing":
-            from scipy.optimize import dual_annealing
-
-            self.fit_results = dual_annealing(
-                self.cost_function.cost,
-                bounds=bounds,
-                x0=x0,
-                maxiter=max_iter,
-                callback=dashboard_callback if dashboard else None,
-                seed=seed,
-                **config,
-            )
-
-        elif self.minimizer == "basinhopping":
-            from scipy.optimize import basinhopping
-
-            class BoundsChecker:
-                def __init__(self, bounds):
-                    self.bounds = bounds
-
-                def __call__(self, **kwargs):
-                    x = kwargs["x_new"]
-                    return all(l <= xi <= u for xi, (l, u) in zip(x, self.bounds))
-
-            local_maxiter = config.pop("local_maxiter", 100)
-            minimizer_kwargs_local = {
-                "method": "L-BFGS-B",
-                "bounds": bounds,
-                "options": {"maxiter": local_maxiter, "ftol": 1e-6},
-            }
-
-            self.fit_results = basinhopping(
-                self.cost_function.cost,
-                x0,
-                minimizer_kwargs=minimizer_kwargs_local,
-                accept_test=BoundsChecker(bounds),
-                callback=dashboard_callback if dashboard else None,
-                interval=20,
-                disp=verbose,
-                seed=seed,
-                **config,
-            )
-
-        # Extract results
-        best_parameters = unpack_parameters(self.fit_results.x, self.free_parameters)
-        working_parameters.update(best_parameters)
-        self.best_parameters = working_parameters
-        self.features["fitted_limb"] = self.cost_function.evaluate(self.best_parameters)
-        self._plot_functions["fitted_limb"] = plot_limb
-
-        # Validate fit results and issue warnings if needed
-        _validate_fit_results(self)
-
-        # Finalize dashboard only if we created it (single-stage)
-        # Multi-stage will finalize after all stages complete
-        if dash is not None and dashboard_obj is None:
-            success = (
-                self.fit_results.success
-                if hasattr(self.fit_results, "success")
-                else True
-            )
-            dash.finalize(success=success)
-
-        return self
-
-    def _scale_parameters_for_resolution(
-        self, params: Dict, scale_factor: float
-    ) -> Dict:
-        """
-        Scale parameters for different image resolution.
+        Resets self.stage_results before running so the list reflects only this call.
+        Individual fit_* calls accumulate into stage_results without resetting.
 
         Args:
-            params: Parameter dictionary
-            scale_factor: Resolution scale (0.5 = half res, 2.0 = double res)
+            stages: Ordered list of stage dicts, each with a "method" key
+                ("sagitta", "arc", or "gradient") plus kwargs for that method.
+            dashboard: Show a live FitDashboard during optimization.
+            dashboard_kwargs: Extra kwargs forwarded to FitDashboard.__init__.
+            target_planet: Planet name for dashboard reference radius.
+            n_jobs: Parallel workers forwarded to each arc/gradient stage.
+                Effective only for differential-evolution and shgo.
 
         Returns:
-            Scaled parameters
+            self: For method chaining.
+
+        Example::
+
+            obs.fit_limb([
+                {"method": "sagitta", "n_sigma": 2.0},
+                {"method": "arc", "minimizer": "basinhopping",
+                 "minimizer_preset": "robust"},
+            ])
         """
-        scaled = params.copy()
+        self.stage_results = []
 
-        # Parameters that scale with image dimensions
-        pixel_params = ["n_pix_x", "n_pix_y", "x0", "y0"]
-        for key in pixel_params:
-            if key in scaled:
-                scaled[key] = int(scaled[key] * scale_factor)
+        db = None
+        if dashboard:
+            # Count optimizer sub-stages (sagitta uses cheap regression, not counted)
+            total_opt_stages = 0
+            first_max_iter = None
+            cumulative_max_iter = 0
+            for s in stages:
+                m = s.get("method")
+                mi = s.get("max_iter", 15000)
+                if m == "arc":
+                    total_opt_stages += 1
+                    if first_max_iter is None:
+                        first_max_iter = mi
+                    cumulative_max_iter += mi
+                elif m == "gradient":
+                    res = s.get("resolution_stages")
+                    mips = s.get("max_iter_per_stage")
+                    if mips is not None:
+                        n = len(mips)
+                        stage0_mi = mips[0]
+                    elif res is not None and res != "auto":
+                        n = len(res)
+                        tw = sum(range(1, n + 1))
+                        stage0_mi = int(mi * 1 / tw)
+                    else:
+                        n = 1
+                        stage0_mi = mi
+                    total_opt_stages += n
+                    if first_max_iter is None:
+                        first_max_iter = stage0_mi
+                    cumulative_max_iter += mi
 
-        # Parameters that don't scale (physical units)
-        # r, h, f, fov, theta_x, theta_y, theta_z remain unchanged
+            working_params = self.init_parameter_values.copy()
+            working_params.update(
+                {
+                    "n_pix_x": self.image.shape[1],
+                    "n_pix_y": self.image.shape[0],
+                    "x0": int(self.image.shape[1] * 0.5),
+                    "y0": int(self.image.shape[0] * 0.5),
+                }
+            )
+            db_kw = dict(dashboard_kwargs or {})
+            db = FitDashboard(
+                initial_params=working_params,
+                target_planet=target_planet,
+                total_stages=max(1, total_opt_stages),
+                max_iter=first_max_iter or 15000,
+                cumulative_max_iter=cumulative_max_iter or None,
+                free_params=self.free_parameters,
+                **db_kw,
+            )
 
-        return scaled
+        try:
+            for stage in stages:
+                stage = dict(stage)
+                method = stage.pop("method")
+                if method == "sagitta":
+                    self.fit_sagitta(**stage)
+                elif method == "arc":
+                    stage.setdefault("n_jobs", n_jobs)
+                    self.fit_arc(_dashboard=db, **stage)
+                elif method == "gradient":
+                    stage.setdefault("n_jobs", n_jobs)
+                    self.fit_gradient(_dashboard=db, **stage)
+                else:
+                    raise ValueError(f"Unknown fit method: {method!r}")
+        finally:
+            if db is not None:
+                db.finalize()
+
+        return self
 
     def save_limb(self, filepath: str) -> None:
         """

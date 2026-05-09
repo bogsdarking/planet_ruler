@@ -4,10 +4,10 @@ API Reference
 This section provides detailed documentation for all Planet Ruler modules and functions.
 
 Core Modules
------------
+------------
 
 Geometry Module
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 .. automodule:: planet_ruler.geometry
    :members:
@@ -23,7 +23,7 @@ The geometry module contains fundamental mathematical functions for planetary ca
 * **Rotation matrices**: `get_rotation_matrix` - Euler angle to rotation matrix conversion
 
 Image Processing Module
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. automodule:: planet_ruler.image
    :members:
@@ -39,8 +39,46 @@ The image module handles computer vision tasks:
 * **Limb processing**: `smooth_limb`, `fill_nans` - post-processing operations
 * **Interpolation**: `bilinear_interpolate` - sub-pixel image sampling
 
+Crop Module
+~~~~~~~~~~~
+
+.. automodule:: planet_ruler.crop
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+The crop module provides interactive image cropping with automatic camera parameter scaling:
+
+* **Interactive cropping**: `TkImageCropper` - GUI tool for selecting crop regions
+* **Parameter scaling**: Automatic adjustment of detector size, principal point, and FOV
+* **Convenience function**: `crop_observation_image` - high-level interface
+* **Validation**: Ensures geometric consistency after cropping
+
+Key features:
+
+* Drag-to-select rectangular crop regions
+* Zoom/pan for precise selection
+* Automatic scaling of physical sensor dimensions
+* Handles out-of-bounds principal points correctly
+* Preserves pixel physical dimensions
+
+The crop operation scales camera parameters using the following rules::
+
+   detector_width_new = detector_width_old × (crop_width / image_width)
+   detector_height_new = detector_height_old × (crop_height / image_height)  
+   focal_length_new = focal_length_old (unchanged)
+   principal_point_x_new = principal_point_x_old - crop_x_offset
+   principal_point_y_new = principal_point_y_old - crop_y_offset
+   field_of_view_new = 2 × arctan(detector_width_new / (2 × focal_length))
+
+Physical pixel size remains constant: px = detector_width / n_pixels_x
+
+Principal points may be outside image bounds after cropping; this is
+geometrically valid and represents the camera pointing outside the
+cropped region.
+
 Observation Module
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 .. automodule:: planet_ruler.observation
    :members:
@@ -54,7 +92,7 @@ The observation module provides high-level interfaces:
 * **Results processing**: `unpack_diff_evol_posteriors`, `package_results`
 
 Annotation Module
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 .. automodule:: planet_ruler.annotate
    :members:
@@ -101,7 +139,7 @@ The fit module handles parameter optimization:
 * **Uncertainty analysis**: `calculate_parameter_uncertainty`, `format_parameter_result`
 
 Uncertainty Module
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 .. automodule:: planet_ruler.uncertainty
    :members:
@@ -186,7 +224,7 @@ The dashboard module provides real-time optimization monitoring:
 * **Configurable display**: Adjust width, message slots, and display time
 
 Demo and Configuration
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. automodule:: planet_ruler.demo
    :members:
@@ -199,10 +237,10 @@ The demo module manages example scenarios:
 * **Interactive widgets**: `make_dropdown` - creates UI elements for Jupyter notebooks
 
 Function Categories
-------------------
+-------------------
 
 Mathematical Functions
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 Core geometric calculations:
 
@@ -217,7 +255,7 @@ Core geometric calculations:
    planet_ruler.geometry.get_rotation_matrix
 
 Image Processing Functions
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Computer vision and image analysis:
 
@@ -247,7 +285,7 @@ Interactive limb detection and annotation:
    planet_ruler.annotate.TkLimbAnnotator.load_points
 
 Camera Parameter Functions
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Automatic camera parameter extraction:
 
@@ -264,7 +302,7 @@ Automatic camera parameter extraction:
    planet_ruler.camera.get_initial_radius
 
 Coordinate Transform Functions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Camera geometry and projections:
 
@@ -277,7 +315,7 @@ Camera geometry and projections:
    planet_ruler.geometry.limb_arc_sample
 
 Optimization Functions
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 Parameter fitting and uncertainty:
 
@@ -295,7 +333,7 @@ Parameter fitting and uncertainty:
    planet_ruler.uncertainty._uncertainty_from_bootstrap
 
 Validation Functions
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 Configuration and parameter validation:
 
@@ -305,7 +343,7 @@ Configuration and parameter validation:
    planet_ruler.validation.validate_limb_config
 
 Command-Line Functions
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 CLI interface and commands:
 
@@ -319,7 +357,7 @@ CLI interface and commands:
    planet_ruler.cli.load_config
 
 Visualization Functions
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Plotting and display:
 
@@ -338,7 +376,7 @@ Classes
 -------
 
 CostFunction
-~~~~~~~~~~~
+~~~~~~~~~~~~
 
 .. autoclass:: planet_ruler.fit.CostFunction
    :members:
@@ -348,7 +386,7 @@ CostFunction
 Cost function wrapper for optimization problems. Supports multiple loss functions (L1, L2, log-L1) and flexible parameter handling.
 
 PlanetObservation
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 .. autoclass:: planet_ruler.observation.PlanetObservation
    :members:
@@ -358,7 +396,7 @@ PlanetObservation
 Base class for planetary observations. Handles image loading and basic plotting functionality.
 
 LimbObservation
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 .. autoclass:: planet_ruler.observation.LimbObservation
    :members:
@@ -382,7 +420,7 @@ Complete workflow class for limb-based planetary radius determination. Default d
 * Support for multiple minimizers (differential-evolution, dual-annealing, basinhopping)
 
 MaskSegmenter
-~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 .. autoclass:: planet_ruler.image.MaskSegmenter
    :members:
@@ -392,7 +430,7 @@ MaskSegmenter
 Advanced image segmentation with pluggable backends. Supports Segment Anything model (optional dependency) and custom segmentation functions. Provides automated mask generation, interactive classification, and limb extraction from complex images.
 
 TkLimbAnnotator
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 .. autoclass:: planet_ruler.annotate.TkLimbAnnotator
    :members:
@@ -410,10 +448,10 @@ Interactive GUI for manual limb annotation. Provides precise user control over h
 * **Target generation**: Convert sparse points to dense limb arrays
 
 Constants and Configuration
---------------------------
+---------------------------
 
 Camera Database
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 The camera module includes a comprehensive database of sensor dimensions for automatic parameter extraction:
 
@@ -424,7 +462,7 @@ The camera module includes a comprehensive database of sensor dimensions for aut
 * **Generic sensors**: Common sensor sizes (1/2.3", 1/1.7", APS-C, Full Frame)
 
 Planet Radius Database
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 Built-in planetary radii for initial optimization guesses (automatically perturbed):
 
@@ -437,7 +475,7 @@ Built-in planetary radii for initial optimization guesses (automatically perturb
 * And others...
 
 Default Parameters
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 The following default values are used throughout Planet Ruler:
 
@@ -448,7 +486,7 @@ The following default values are used throughout Planet Ruler:
 * **Perturbation factor**: 50% (for initial radius guessing)
 
 File Formats
-~~~~~~~~~~~
+~~~~~~~~~~~~
 
 Supported file formats:
 
@@ -458,7 +496,7 @@ Supported file formats:
 * **Annotation sessions**: JSON
 
 Error Handling
--------------
+--------------
 
 Planet Ruler raises specific exceptions for different error conditions:
 

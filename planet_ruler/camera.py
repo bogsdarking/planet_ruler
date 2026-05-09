@@ -22,7 +22,7 @@ from PIL import Image
 from PIL.ExifTags import TAGS
 import json
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
@@ -31,30 +31,304 @@ logger = logging.getLogger(__name__)
 # Camera database - sensor dimensions in mm
 # Includes phones, point-and-shoot, DSLRs, etc.
 CAMERA_DB = {
-    # iPhone models
-    "iPhone 14 Pro": {"sensor_width": 9.8, "sensor_height": 7.3, "type": "phone"},
-    "iPhone 14": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
-    "iPhone 13 Pro": {"sensor_width": 9.8, "sensor_height": 7.3, "type": "phone"},
-    "iPhone 13": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
-    "iPhone 12 Pro": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
-    "iPhone 12": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
-    "iPhone 11 Pro": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
-    "iPhone 11": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
-    "iPhone SE": {"sensor_width": 4.8, "sensor_height": 3.6, "type": "phone"},
-    # Samsung Galaxy models
-    "SM-G998U": {
-        "sensor_width": 8.8,
-        "sensor_height": 6.6,
+    # ========================================================================
+    # Multi-Camera Phones
+    # ========================================================================
+    # Samsung Galaxy S22+ (SM-S906E/B/U variants)
+    "SM-S906E": {
         "type": "phone",
-    },  # S21 Ultra
-    "SM-G991U": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},  # S21
-    "SM-G996U": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},  # S21+
-    "SM-G981U": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},  # S20
-    # Google Pixel models
-    "Pixel 7 Pro": {"sensor_width": 8.0, "sensor_height": 6.0, "type": "phone"},
-    "Pixel 7": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
-    "Pixel 6 Pro": {"sensor_width": 8.0, "sensor_height": 6.0, "type": "phone"},
-    "Pixel 6": {"sensor_width": 7.6, "sensor_height": 5.7, "type": "phone"},
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.4,
+                "aperture": 1.8,
+                "sensor_width": 7.6,
+                "sensor_height": 5.7,
+                "notes": "50MP main camera",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 7.0,
+                "aperture": 2.4,
+                "sensor_width": 5.16,
+                "sensor_height": 3.87,
+                "notes": "10MP 3x optical zoom",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.2,
+                "aperture": 2.2,
+                "sensor_width": 6.4,
+                "sensor_height": 4.8,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    # Samsung Galaxy S22 Ultra (SM-S908E/B/U)
+    "SM-S908E": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.4,
+                "aperture": 1.8,
+                "sensor_width": 8.0,
+                "sensor_height": 6.0,
+                "notes": "108MP main camera",
+            },
+            {
+                "name": "telephoto_3x",
+                "focal_length_mm": 6.9,
+                "aperture": 2.4,
+                "sensor_width": 5.16,
+                "sensor_height": 3.87,
+                "notes": "10MP 3x optical zoom",
+            },
+            {
+                "name": "telephoto_10x",
+                "focal_length_mm": 23.0,
+                "aperture": 4.9,
+                "sensor_width": 4.32,
+                "sensor_height": 3.24,
+                "notes": "10MP 10x optical zoom",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.2,
+                "aperture": 2.2,
+                "sensor_width": 6.4,
+                "sensor_height": 4.8,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    # iPhone 13 (base model)
+    "iPhone 13": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.1,
+                "aperture": 1.6,
+                "sensor_width": 7.6,
+                "sensor_height": 5.7,
+                "notes": "12MP main camera",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 1.54,
+                "aperture": 2.4,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    # iPhone 13 Pro/Pro Max
+    "iPhone 13 Pro": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.7,
+                "aperture": 1.5,
+                "sensor_width": 8.47,
+                "sensor_height": 6.35,
+                "notes": "12MP main camera",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 9.0,
+                "aperture": 2.8,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP 3x optical zoom",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 1.8,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    # iPhone 14 Pro/Pro Max
+    "iPhone 14 Pro": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.9,
+                "aperture": 1.78,
+                "sensor_width": 9.8,
+                "sensor_height": 7.35,
+                "notes": "48MP main camera",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 9.0,
+                "aperture": 2.8,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP 3x optical zoom",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 2.2,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    # iPhone 15 (base model)
+    "iPhone 15": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.86,
+                "aperture": 1.6,
+                "sensor_width": 9.8,
+                "sensor_height": 7.35,
+                "notes": "48MP main camera",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 2.4,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    # iPhone 15 Pro/Pro Max
+    "iPhone 15 Pro": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.86,
+                "aperture": 1.78,
+                "sensor_width": 9.8,
+                "sensor_height": 7.35,
+                "notes": "48MP main camera",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 9.0,  # Pro
+                "aperture": 2.8,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP 3x optical zoom (Pro)",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 2.2,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    # iPhone 15 Pro Max (different telephoto)
+    "iPhone 15 Pro Max": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.86,
+                "aperture": 1.78,
+                "sensor_width": 9.8,
+                "sensor_height": 7.35,
+                "notes": "48MP main camera",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 12.7,  # Pro Max
+                "aperture": 2.8,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP 5x optical zoom (Pro Max)",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 2.2,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    # Google Pixel 7 Pro
+    "Pixel 7 Pro": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.81,
+                "aperture": 1.85,
+                "sensor_width": 8.0,
+                "sensor_height": 6.0,
+                "notes": "50MP main camera",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 12.0,
+                "aperture": 3.5,
+                "sensor_width": 5.76,
+                "sensor_height": 4.29,
+                "notes": "48MP 5x optical zoom",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.2,
+                "aperture": 2.2,
+                "sensor_width": 6.4,
+                "sensor_height": 4.8,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    # Realme 9 Pro+ (RMX3393)
+    "RMX3393": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.7,  # Calculated from 24mm equiv. and sensor size
+                "aperture": 1.8,
+                "sensor_width": 8.19,
+                "sensor_height": 6.14,
+                "notes": "50MP Sony IMX766 with OIS",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.2,  # Estimated from 15mm equiv.
+                "aperture": 2.2,
+                "sensor_width": 6.4,  # Typical 8MP ultrawide
+                "sensor_height": 4.8,
+                "notes": "8MP ultra-wide, 119° FOV",
+            },
+            {
+                "name": "macro",
+                "focal_length_mm": 3.1,  # Estimated from 21.8mm equiv.
+                "aperture": 2.4,
+                "sensor_width": 2.76,  # Typical 2MP macro
+                "sensor_height": 2.07,
+                "notes": "2MP macro, fixed focus 4cm",
+            },
+        ],
+    },
+    # ========================================================================
+    # Traditional Digital
+    # ========================================================================
     # Canon PowerShot series
     "Canon PowerShot G12": {
         "sensor_width": 7.6,
@@ -88,6 +362,7 @@ CAMERA_DB = {
         "sensor_height": 14.9,
         "type": "dslr",
     },
+    "Canon EOS RP": {"sensor_width": 36, "sensor_height": 24, "type": "dslr"},
     # Nikon cameras
     "NIKON D850": {"sensor_width": 35.9, "sensor_height": 23.9, "type": "dslr"},
     "NIKON D750": {"sensor_width": 35.9, "sensor_height": 24.0, "type": "dslr"},
@@ -132,11 +407,20 @@ def extract_exif(image_path: str) -> Dict:
         image = Image.open(image_path)
         exif_data = {}
 
-        if hasattr(image, "_getexif") and image._getexif() is not None:
-            exif = image._getexif()
+        exif = image.getexif()
+        if exif:
             for tag_id, value in exif.items():
                 tag = TAGS.get(tag_id, tag_id)
                 exif_data[tag] = value
+            # Decode EXIF sub-IFD (FocalLength, FNumber, ISO, etc.)
+            exif_ifd = exif.get_ifd(34665)
+            for tag_id, value in exif_ifd.items():
+                tag = TAGS.get(tag_id, tag_id)
+                exif_data[tag] = value
+            # Decode GPS sub-IFD
+            gps_ifd = exif.get_ifd(34853)
+            if gps_ifd:
+                exif_data["GPSInfo"] = dict(gps_ifd)
 
         return exif_data
     except Exception as e:
@@ -172,12 +456,29 @@ def get_camera_model(exif_data: Dict) -> Optional[str]:
     if model and model in CAMERA_DB:
         return model
 
-    # Try partial matches
+    # Try partial matches (avoid matching sensor size entries like "1", "1/1.7", etc.)
+    # Sort by length descending to prefer longer, more specific matches
+    candidate_models = []
     for known_model in CAMERA_DB:
+        # Skip sensor size entries and very short entries that might cause false matches
+        if len(known_model) <= 3 or known_model in [
+            "1",
+            "1/1.7",
+            "1/2.3",
+            "APS-C",
+            "Full Frame",
+            "default",
+        ]:
+            continue
+
         if known_model.lower() in full_model.lower():
-            return known_model
-        if known_model.lower() in model.lower():
-            return known_model
+            candidate_models.append(known_model)
+        elif known_model.lower() in model.lower():
+            candidate_models.append(known_model)
+
+    if candidate_models:
+        # Return the longest match (most specific)
+        return max(candidate_models, key=len)
 
     # Check LensModel as fallback (for some cameras)
     if "LensModel" in exif_data:
@@ -187,6 +488,118 @@ def get_camera_model(exif_data: Dict) -> Optional[str]:
 
     logger.info(f"Camera model '{full_model}' not in database")
     return None
+
+
+def get_aperture(exif_data: Dict) -> Optional[float]:
+    """
+    Extract aperture (f-number) from EXIF data.
+
+    Args:
+        exif_data: EXIF dictionary
+
+    Returns:
+        Aperture as float (e.g., 2.4 for f/2.4), or None if not found
+    """
+    if not exif_data:
+        return None
+
+    try:
+        from PIL.ExifTags import TAGS
+
+        # Look for FNumber or ApertureValue tags
+        for tag_id, value in exif_data.items():
+            tag_name = TAGS.get(tag_id, tag_id)
+
+            if tag_name == "FNumber":
+                # FNumber is typically stored as rational (numerator, denominator)
+                if isinstance(value, tuple):
+                    return value[0] / value[1]
+                else:
+                    return float(value)
+
+            elif tag_name == "ApertureValue":
+                # ApertureValue is stored as APEX value: f-number = 2^(value/2)
+                if isinstance(value, tuple):
+                    apex = value[0] / value[1]
+                else:
+                    apex = float(value)
+                return 2 ** (apex / 2)
+
+    except Exception as e:
+        logger.debug(f"Could not extract aperture: {e}")
+
+    return None
+
+
+def match_camera_module(
+    camera_data: Dict, focal_length_mm: float, aperture: Optional[float] = None
+) -> Dict:
+    """
+    Match specific camera module for multi-camera phones.
+
+    Uses focal length as primary matcher, aperture as secondary confirmation.
+    Falls back to main camera if no match found.
+
+    Args:
+        camera_data: Camera entry from CAMERA_DB
+        focal_length_mm: Actual focal length from EXIF
+        aperture: F-number from EXIF (optional)
+
+    Returns:
+        Camera module dict with sensor_width, sensor_height, etc.
+    """
+    # Legacy format: single camera (no "cameras" array)
+    if "cameras" not in camera_data:
+        return camera_data
+
+    # Multi-camera phone: match based on focal length + aperture
+    cameras = camera_data["cameras"]
+
+    # Tolerance for focal length matching (±0.3mm accounts for manufacturing variance)
+    FOCAL_LENGTH_TOLERANCE = 0.3
+
+    best_match = None
+    best_score = -1
+
+    for cam in cameras:
+        score = 0
+
+        # Primary: Focal length match
+        focal_diff = abs(cam["focal_length_mm"] - focal_length_mm)
+        if focal_diff <= FOCAL_LENGTH_TOLERANCE:
+            score += 100  # Strong match
+            score -= focal_diff * 10  # Prefer closer matches
+        else:
+            continue  # Skip if focal length doesn't match
+
+        # Secondary: Aperture match (if available)
+        if aperture is not None and "aperture" in cam:
+            aperture_diff = abs(cam["aperture"] - aperture)
+            if aperture_diff < 0.1:
+                score += 50  # Confirms correct camera
+            elif aperture_diff < 0.5:
+                score += 20  # Close enough
+            # Larger diff doesn't disqualify, just doesn't add points
+
+        if score > best_score:
+            best_score = score
+            best_match = cam
+
+    if best_match:
+        logger.info(
+            f"Matched '{best_match['name']}' camera: "
+            f"f={best_match['focal_length_mm']:.1f}mm, f/{best_match['aperture']}"
+        )
+        return best_match
+
+    # No match found - fall back to main camera with warning
+    main_camera = cameras[0]  # Convention: main camera is first
+    logger.warning(
+        f"Could not match camera module (f={focal_length_mm:.1f}mm"
+        + (f", f/{aperture}" if aperture else "")
+        + f") - using '{main_camera['name']}' camera as fallback"
+    )
+    return main_camera
 
 
 def get_focal_length_mm(exif_data: Dict) -> Optional[float]:
@@ -216,6 +629,147 @@ def get_image_dimensions(image_path: str) -> Tuple[int, int]:
         return img.size  # (width, height)
 
 
+def get_image_orientation_from_exif(exif_data: Optional[Dict] = None) -> Optional[str]:
+    """
+    Determine orientation from EXIF Orientation tag only.
+
+    Args:
+        exif_data: Pre-extracted EXIF data
+
+    Returns:
+        'portrait', 'landscape', or None if can't determine
+    """
+    if exif_data is None:
+        return None
+
+    try:
+        from PIL.ExifTags import TAGS
+
+        # Find Orientation tag
+        orientation = None
+        for tag_id, value in exif_data.items():
+            tag_name = TAGS.get(tag_id, tag_id)
+            if tag_name == "Orientation":
+                orientation = value
+                break
+
+        if orientation is not None:
+            # Values 5, 6, 7, 8 indicate 90° or 270° rotation
+            if orientation in [5, 6, 7, 8]:
+                logger.info(f"EXIF Orientation={orientation}: portrait mode detected")
+                return "portrait"
+            else:
+                logger.info(f"EXIF Orientation={orientation}: landscape mode detected")
+                return "landscape"
+    except Exception as e:
+        logger.debug(f"Could not read EXIF Orientation tag: {e}")
+
+    return None
+
+
+def get_image_orientation_from_dimensions(width: int, height: int) -> str:
+    """
+    Determine orientation from image dimensions (heuristic).
+
+    Args:
+        width: Image width in pixels
+        height: Image height in pixels
+
+    Returns:
+        'portrait' or 'landscape'
+    """
+    if height > width:
+        logger.info(f"Image dimensions {width}×{height}: portrait mode (heuristic)")
+        return "portrait"
+    else:
+        logger.info(f"Image dimensions {width}×{height}: landscape mode (heuristic)")
+        return "landscape"
+
+
+def apply_orientation_correction(
+    params: Dict, exif_data: Optional[Dict] = None
+) -> Dict:
+    """
+    Apply orientation correction to camera parameters.
+
+    This modifies params in-place and returns it.
+    Call this RIGHT BEFORE each return statement in extract_camera_parameters().
+
+    Args:
+        params: Camera parameters dict (must have image_width_px, image_height_px)
+        exif_data: Optional pre-extracted EXIF data
+
+    Returns:
+        params: Modified parameters (same object, modified in-place)
+    """
+    # Detect orientation (try EXIF first, fall back to dimensions)
+    orientation = get_image_orientation_from_exif(exif_data)
+
+    if orientation is None:
+        # Fall back to dimensions (already in params, no file I/O needed!)
+        if params.get("image_width_px") and params.get("image_height_px"):
+            orientation = get_image_orientation_from_dimensions(
+                params["image_width_px"], params["image_height_px"]
+            )
+        else:
+            # Can't determine orientation, skip correction
+            logger.debug("Cannot determine orientation - skipping sensor correction")
+            return params
+
+    # Correct sensor dimensions
+    if params["sensor_width_mm"] is not None and params["sensor_height_mm"] is not None:
+        sensor_is_landscape = params["sensor_width_mm"] > params["sensor_height_mm"]
+
+        # If orientations don't match, swap dimensions
+        if orientation == "portrait" and sensor_is_landscape:
+            logger.info(
+                f"Portrait image with landscape sensor: swapping dimensions "
+                f"{params['sensor_width_mm']:.1f}mm × {params['sensor_height_mm']:.1f}mm → "
+                f"{params['sensor_height_mm']:.1f}mm × {params['sensor_width_mm']:.1f}mm"
+            )
+            params["sensor_width_mm"], params["sensor_height_mm"] = (
+                params["sensor_height_mm"],
+                params["sensor_width_mm"],
+            )
+        elif orientation == "landscape" and not sensor_is_landscape:
+            logger.info(
+                f"Landscape image with portrait sensor: swapping dimensions "
+                f"{params['sensor_width_mm']:.1f}mm × {params['sensor_height_mm']:.1f}mm → "
+                f"{params['sensor_height_mm']:.1f}mm × {params['sensor_width_mm']:.1f}mm"
+            )
+            params["sensor_width_mm"], params["sensor_height_mm"] = (
+                params["sensor_height_mm"],
+                params["sensor_width_mm"],
+            )
+
+    # Also correct min/max ranges if they exist
+    if params.get("sensor_width_min") and params.get("sensor_height_min"):
+        sensor_min_is_landscape = (
+            params["sensor_width_min"] > params["sensor_height_min"]
+        )
+        if (orientation == "portrait" and sensor_min_is_landscape) or (
+            orientation == "landscape" and not sensor_min_is_landscape
+        ):
+            params["sensor_width_min"], params["sensor_height_min"] = (
+                params["sensor_height_min"],
+                params["sensor_width_min"],
+            )
+
+    if params.get("sensor_width_max") and params.get("sensor_height_max"):
+        sensor_max_is_landscape = (
+            params["sensor_width_max"] > params["sensor_height_max"]
+        )
+        if (orientation == "portrait" and sensor_max_is_landscape) or (
+            orientation == "landscape" and not sensor_max_is_landscape
+        ):
+            params["sensor_width_max"], params["sensor_height_max"] = (
+                params["sensor_height_max"],
+                params["sensor_width_max"],
+            )
+
+    return params
+
+
 def calculate_sensor_dimensions(
     focal_length_mm: float, focal_length_35mm: float
 ) -> Tuple[float, float]:
@@ -237,7 +791,7 @@ def calculate_sensor_dimensions(
     return sensor_width, sensor_height
 
 
-def get_sensor_statistics_by_type(camera_type: str) -> Dict:
+def get_sensor_statistics_by_type(camera_type: str) -> Optional[Dict]:
     """
     Calculate sensor dimension statistics for a given camera type.
     Returns median, min, and max for sensor width and height.
@@ -247,8 +801,27 @@ def get_sensor_statistics_by_type(camera_type: str) -> Dict:
     if not cameras_of_type:
         return None
 
-    widths = [cam["sensor_width"] for cam in cameras_of_type]
-    heights = [cam["sensor_height"] for cam in cameras_of_type]
+    # Collect sensor dimensions, handling both old and new camera database formats
+    widths = []
+    heights = []
+
+    for cam in cameras_of_type:
+        # Multi-camera format
+        if "cameras" in cam:
+            for camera_module in cam["cameras"]:
+                if "sensor_width" in camera_module:
+                    widths.append(camera_module["sensor_width"])
+                if "sensor_height" in camera_module:
+                    heights.append(camera_module["sensor_height"])
+        # Single-camera format
+        else:
+            if "sensor_width" in cam:
+                widths.append(cam["sensor_width"])
+            if "sensor_height" in cam:
+                heights.append(cam["sensor_height"])
+
+    if not widths or not heights:
+        return None
 
     import numpy as np
 
@@ -259,7 +832,7 @@ def get_sensor_statistics_by_type(camera_type: str) -> Dict:
         "sensor_height_median": float(np.median(heights)),
         "sensor_height_min": float(np.min(heights)),
         "sensor_height_max": float(np.max(heights)),
-        "count": len(cameras_of_type),
+        "count": len(widths),  # Count individual camera modules, not camera models
     }
 
     return stats
@@ -362,8 +935,20 @@ def extract_camera_parameters(image_path: str) -> Dict:
     if camera_model and camera_model in CAMERA_DB:
         camera_data = CAMERA_DB[camera_model]
 
-        params["sensor_width_mm"] = camera_data.get("sensor_width", None)
-        params["sensor_height_mm"] = camera_data.get("sensor_height", None)
+        # For multi-camera phones, match specific camera module
+        aperture = get_aperture(exif_data)
+        if focal_length_mm is not None:
+            camera_module = match_camera_module(camera_data, focal_length_mm, aperture)
+        else:
+            # If no focal length, use first camera (main) as fallback
+            camera_module = (
+                camera_data.get("cameras", [camera_data])[0]
+                if "cameras" in camera_data
+                else camera_data
+            )
+
+        params["sensor_width_mm"] = camera_module.get("sensor_width", None)
+        params["sensor_height_mm"] = camera_module.get("sensor_height", None)
 
         if (params["sensor_width_mm"]) is None and (params["sensor_height_mm"] is None):
             logger.warning(
@@ -395,7 +980,7 @@ def extract_camera_parameters(image_path: str) -> Dict:
             logger.info(
                 f"Detected known camera: {camera_model} ({camera_data['type']})"
             )
-            return params
+            return apply_orientation_correction(params, exif_data)
 
     # Strategy 2: Calculate from focal length ratio (medium-high confidence)
     if focal_length_mm and focal_length_35mm:
@@ -409,7 +994,7 @@ def extract_camera_parameters(image_path: str) -> Dict:
         logger.info(
             f"Calculated sensor dimensions from focal length ratio: {sensor_width:.1f}mm × {sensor_height:.1f}mm"
         )
-        return params
+        return apply_orientation_correction(params, exif_data)
 
     # Strategy 3: Infer from camera type (medium-low confidence)
     inferred_type = infer_camera_type(exif_data)
@@ -430,7 +1015,7 @@ def extract_camera_parameters(image_path: str) -> Dict:
             logger.info(
                 f"  Sensor width range: [{stats['sensor_width_min']:.1f}, {stats['sensor_width_max']:.1f}] mm (from {stats['count']} cameras)"
             )
-            return params
+            return apply_orientation_correction(params, exif_data)
 
     # Strategy 4: Use defaults (low confidence)
     logger.warning(
@@ -445,7 +1030,7 @@ def extract_camera_parameters(image_path: str) -> Dict:
     )  # typical compact camera focal length
     params["confidence"] = "low"
 
-    return params
+    return apply_orientation_correction(params, exif_data)
 
 
 def get_gps_altitude(image_path: str) -> Optional[float]:
@@ -493,44 +1078,193 @@ PLANET_RADII = {
 }
 
 
-def get_initial_radius(
-    planet: str = "earth", perturbation_factor: float = 0.5, seed: Optional[int] = None
+def sample_param_from_bounds(
+    lo: float,
+    hi: float,
+    ref: Optional[float] = None,
+    perturbation_factor: float = 1.0,
+    seed: Optional[int] = None,
 ) -> float:
     """
-    Get initial radius guess with perturbation.
+    Sample a parameter initial value uniformly from a sub-interval of [lo, hi].
+
+    Each side of the interval is scaled proportionally toward ``ref`` by
+    ``(1 - perturbation_factor)``, preserving asymmetry in the original bounds.
+    With ``perturbation_factor=1.0`` the full [lo, hi] range is used; with 0.0
+    only ``ref`` is returned.
+
+    Example: lo=0.7, hi=1.2, ref=1.0, perturbation_factor=0.5
+      new_lo = 1.0 - (1.0 - 0.7) * 0.5 = 0.85
+      new_hi = 1.0 + (1.2 - 1.0) * 0.5 = 1.10
+
+    Uses a local Random instance to avoid polluting global random state.
 
     Args:
-        planet: Planet name
-        perturbation_factor: Relative perturbation (default: 0.5 = ±50%)
-        seed: Random seed for reproducibility (default: None = unseeded)
+        lo: Lower bound of search interval (inclusive)
+        hi: Upper bound of search interval (inclusive)
+        ref: Reference value toward which bounds are scaled.  Defaults to the
+            midpoint (lo + hi) / 2, which is exact for symmetric bounds.
+        perturbation_factor: 1.0 = full [lo, hi]; 0.0 = ref only. (default: 1.0)
+        seed: Optional seed for reproducibility
     """
     import random
 
-    if seed is not None:
-        random.seed(seed)
+    if ref is None:
+        ref = 0.5 * (lo + hi)
+    new_lo = ref - (ref - lo) * perturbation_factor
+    new_hi = ref + (hi - ref) * perturbation_factor
+    rng = random.Random(seed)
+    return rng.uniform(new_lo, new_hi)
 
-    if planet.lower() in PLANET_RADII:
-        true_value = PLANET_RADII[planet.lower()]
-        min_factor = 1.0 - perturbation_factor
-        max_factor = 1.0 + perturbation_factor
-        perturbation = random.uniform(min_factor, max_factor)
-        r_init = true_value * perturbation
-        logger.info(
-            f"Perturbed {planet} radius: {true_value/1000:.0f} km → {r_init/1000:.0f} km ({perturbation:.2f}x)"
-        )
-        return r_init
+
+def init_params_from_bounds(
+    param_limits: Dict[str, List[float]],
+    perturbation_factor: float = 1.0,
+    seed: Optional[int] = None,
+    ref_values: Optional[Dict[str, float]] = None,
+    params: Optional[List[str]] = None,
+) -> Dict[str, float]:
+    """
+    Sample initial values for parameters uniformly from their search bounds.
+
+    Each parameter is sampled via :func:`sample_param_from_bounds`.  A single
+    seeded RNG advances sequentially through a fixed parameter ordering so that
+    each parameter's draw is independent of which other parameters are included,
+    and results are fully reproducible given the same seed.
+
+    Args:
+        param_limits: Dict mapping parameter name → [lo, hi].
+        perturbation_factor: Passed to :func:`sample_param_from_bounds`.
+            1.0 (default) samples the full [lo, hi] range; 0.0 returns ref only.
+        seed: Optional seed for reproducibility.
+        ref_values: Optional dict of reference values used as the proportional
+            centre for each parameter.  Defaults to the midpoint of each
+            parameter's bounds when not provided.
+        params: Optional list of parameter names to sample.  When None, all
+            keys present in ``param_limits`` are sampled in the fixed order
+            below (unknown names are appended at the end).
+
+    Returns:
+        Dict mapping parameter name → sampled initial value.
+    """
+    import random
+
+    _FIXED_ORDER = ["r", "h", "theta_x", "theta_y", "theta_z", "f", "w"]
+
+    if ref_values is None:
+        ref_values = {}
+
+    if params is None:
+        params_to_sample = list(param_limits.keys())
     else:
-        logger.warning(f"Unknown planet '{planet}', using middle-range guess")
-        return 10_000_000  # 10,000 km
+        params_to_sample = [p for p in params if p in param_limits]
+
+    ordered = [p for p in _FIXED_ORDER if p in params_to_sample]
+    ordered += [p for p in params_to_sample if p not in _FIXED_ORDER]
+
+    rng = random.Random(seed)
+    result: Dict[str, float] = {}
+    for param in ordered:
+        lo, hi = float(param_limits[param][0]), float(param_limits[param][1])
+        ref = ref_values.get(param)
+        result[param] = sample_param_from_bounds(
+            lo,
+            hi,
+            ref=ref,
+            perturbation_factor=perturbation_factor,
+            seed=rng.randint(0, 2**31),
+        )
+    return result
+
+
+def get_initial_radius(planet: str = "earth") -> float:
+    """Return the known radius for a planet (metres), or 10,000 km for unknown planets."""
+    planet_lower = planet.lower()
+    if planet_lower in PLANET_RADII:
+        return float(PLANET_RADII[planet_lower])
+    logger.warning(f"Unknown planet '{planet}', using middle-range guess")
+    return 10_000_000.0  # 10,000 km
+
+
+def check_planet_ruler_crop_metadata(image_path: str) -> Optional[Dict]:
+    """
+    Check for crop metadata in sidecar JSON file.
+
+    Args:
+        image_path: Path to image file
+
+    Returns:
+        Dict with crop metadata if found, None otherwise
+    """
+    import json
+    from pathlib import Path
+
+    # Look for .crop.json sidecar
+    json_path = (
+        str(image_path).replace(".jpg", ".crop.json").replace(".JPG", ".crop.json")
+    )
+
+    if Path(json_path).exists():
+        try:
+            with open(json_path) as f:
+                metadata = json.load(f)
+
+            if "planet_ruler_crop" in metadata:
+                crop_data = metadata["planet_ruler_crop"]
+                print(f"✓ Found crop metadata: {json_path}")
+                print(f"  scaled_w = {crop_data.get('scaled_w')*1000:.3f} mm")
+                logger.info(
+                    f"✓ Detected Planet Ruler cropped image (v{crop_data.get('version', 'unknown')})"
+                )
+                logger.info(
+                    f"  Original: {crop_data.get('original_dimensions', '?')} → Crop: {crop_data.get('crop_region', '?')}"
+                )
+                return crop_data
+        except Exception as e:
+            logger.warning(f"Could not read crop metadata from {json_path}: {e}")
+
+    return None
+
+
+# Per-parameter fractional tolerances for each preset.
+# All parameters scale with the preset; theta_* are the only exception —
+# they always span ±π because camera orientation has no useful prior.
+# h has two variants: h_gps (altitude read from EXIF) and h_manual (caller-
+# supplied).  GPS warrants tighter limits within each preset, but loose still
+# loosens GPS bounds relative to tight/balanced.
+_LIMITS_PRESETS: Dict[str, Dict[str, float]] = {
+    "tight": {
+        "r": 0.05,  # ±5%  around planet init radius
+        "f": 0.02,  # ±2%  EXIF focal length is usually very accurate
+        "w": 0.03,  # ±3%  sensor width from known device database
+        "h_gps": 0.05,  # ±5%  GPS at cruise ≈ ±50–100 m
+        "h_manual": 0.10,  # ±10% manually entered, assumed reasonably known
+    },
+    "balanced": {
+        "r": 0.20,
+        "f": 0.05,
+        "w": 0.08,
+        "h_gps": 0.10,
+        "h_manual": 0.25,
+    },
+    "loose": {
+        "r": 0.50,
+        "f": 0.10,
+        "w": 0.15,
+        "h_gps": 0.30,
+        "h_manual": 0.70,
+    },
+}
+_DEFAULT_PRESET = "balanced"
 
 
 def create_config_from_image(
     image_path: str,
     altitude_m: Optional[float] = None,
     planet: str = "earth",
-    param_tolerance: float = 0.1,
-    perturbation_factor: float = 0.5,
-    seed: Optional[int] = None,
+    limits_preset: str = _DEFAULT_PRESET,
+    param_tolerances: Optional[Dict[str, float]] = None,
+    param_tolerance: Optional[float] = None,  # deprecated
 ) -> Dict:
     """
     Create a complete planet_ruler configuration from an image.
@@ -540,27 +1274,98 @@ def create_config_from_image(
         image_path: Path to the image
         altitude_m: Altitude in meters (REQUIRED if not in GPS data)
         planet: Planet name for initial radius guess (default: 'earth')
-        param_tolerance: Fractional tolerance for parameter limits (default: 0.1 = ±10%)
-        perturbation_factor: Initial radius perturbation (default: 0.5 = ±50%)
-        seed: Random seed for reproducibility (default: None = unseeded)
+        limits_preset: How tightly to constrain camera/altitude parameters.
+            ``"tight"``    — trust EXIF and GPS data; small search windows.
+            ``"balanced"`` — default; moderate windows for most photos.
+            ``"loose"``    — wide windows; use when metadata reliability
+            is uncertain.
+            Altitude (h) bounds are automatically tightened when GPS
+            altitude is detected, regardless of preset.
+        param_tolerances: Per-parameter fractional tolerance overrides, e.g.
+            ``{"h": 0.30}`` to widen the altitude window without changing other
+            parameters.  Keys: ``"f"``, ``"w"``, ``"h"``.
+        param_tolerance: *Deprecated.* Pass ``limits_preset`` instead.  A
+            deprecation warning is raised; the value is ignored and
+            ``"balanced"`` is used.
 
     Returns:
         dict: Configuration ready for planet_ruler
 
     Raises:
         ValueError: If altitude cannot be determined from GPS and not provided manually
+        ValueError: If ``limits_preset`` is not a recognised preset name.
 
     Notes:
-        - Initial radius is randomly perturbed to avoid local minima and prove data-driven results
-        - For uncertainty quantification, consider running multiple times (multi-start optimization)
-        - Theta parameters (orientation) have wide default limits to handle r-h coupling
+        - For uncertainty quantification, consider running multiple times
+          (multi-start optimization)
+        - Theta parameters (orientation) always span ±π; they have no prior
+        - r bounds scale with the preset around the planet init radius
     """
+    import warnings
+
+    if param_tolerance is not None:
+        warnings.warn(
+            "param_tolerance is deprecated and will be removed in a future "
+            "version. Use limits_preset='tight', 'balanced', or 'loose' "
+            "instead. Falling back to limits_preset='balanced'.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        limits_preset = _DEFAULT_PRESET
+
+    if limits_preset not in _LIMITS_PRESETS:
+        raise ValueError(
+            f"Unknown limits_preset {limits_preset!r}. "
+            f"Choose from: {list(_LIMITS_PRESETS)}"
+        )
+
+    tolerances = dict(_LIMITS_PRESETS[limits_preset])
+    if param_tolerances:
+        # "h" override applies to whichever h_* key will be active; store both
+        for key, val in param_tolerances.items():
+            if key == "h":
+                tolerances["h_gps"] = val
+                tolerances["h_manual"] = val
+            else:
+                tolerances[key] = val
+
+    # Check for Planet Ruler crop metadata FIRST
+    crop_metadata = check_planet_ruler_crop_metadata(image_path)
+
+    if crop_metadata:
+        print(
+            f"✓ Found crop metadata: scaled_w = {crop_metadata.get('scaled_w')*1000:.3f} mm"
+        )
+    else:
+        print(f"✗ No crop metadata found")
+
     # Extract camera parameters
     camera_params = extract_camera_parameters(image_path)
 
+    # Override sensor dimensions if crop metadata is present
+    if crop_metadata:
+        print(f"✓ Overriding sensor width with crop metadata")
+        if crop_metadata.get("scaled_w"):
+            camera_params["sensor_width_mm"] = (
+                crop_metadata["scaled_w"] * 1000
+            )  # Convert m to mm
+            print(f"  Set sensor_width_mm = {camera_params['sensor_width_mm']:.3f} mm")
+        if crop_metadata.get("scaled_h_detector"):
+            # Note: sensor height isn't used in current geometry, but store it anyway
+            camera_params["sensor_height_mm"] = (
+                crop_metadata["scaled_h_detector"] * 1000
+            )
+            print(
+                f"  Set sensor_height_mm = {camera_params.get('sensor_height_mm', 0):.3f} mm"
+            )
+
     # Try to get GPS altitude if not provided
+    altitude_from_gps = False
     if altitude_m is None:
-        altitude_m = get_gps_altitude(image_path)
+        gps_alt = get_gps_altitude(image_path)
+        if gps_alt is not None:
+            altitude_m = gps_alt
+            altitude_from_gps = True
 
     # Altitude is REQUIRED - no placeholders
     if altitude_m is None:
@@ -571,24 +1376,27 @@ def create_config_from_image(
             "Altitude is critical for accurate planetary radius measurement."
         )
 
-    # Get initial planet radius with perturbation to avoid local minima
-    r_init = get_initial_radius(planet, perturbation_factor, seed=seed)
+    # Get initial planet radius
+    r_init = get_initial_radius(planet)
 
     # Determine which camera parameters to use (pick 2 of 3)
     # Priority: focal_length > sensor_width > field_of_view
     free_params = ["r", "h", "theta_x", "theta_y", "theta_z"]  # Always free
     init_values = {"r": r_init, "h": altitude_m}
-    param_limits = {"r": [1000000, 100000000]}  # Wide range: 1000 km to 100,000 km
+    r_tol = tolerances["r"]
+    param_limits = {
+        "r": [r_init * (1 - r_tol), r_init * (1 + r_tol)],
+    }
 
     # Always include focal length if available (highest priority)
     if camera_params["focal_length_mm"]:
         focal_m = camera_params["focal_length_mm"] / 1000
         free_params.append("f")
         init_values["f"] = focal_m
-        # Tight constraint: ±param_tolerance
+        f_tol = tolerances["f"]
         param_limits["f"] = [
-            focal_m * (1 - param_tolerance),
-            focal_m * (1 + param_tolerance),
+            focal_m * (1 - f_tol),
+            focal_m * (1 + f_tol),
         ]
 
     # Include sensor width if available (second priority)
@@ -598,7 +1406,11 @@ def create_config_from_image(
         init_values["w"] = sensor_m
 
         # Use data-driven limits if available (from camera type statistics)
-        if camera_params["sensor_width_min"] and camera_params["sensor_width_max"]:
+        if (
+            camera_params["sensor_width_min"]
+            and camera_params["sensor_width_max"]
+            and not crop_metadata
+        ):
             param_limits["w"] = [
                 camera_params["sensor_width_min"] / 1000,
                 camera_params["sensor_width_max"] / 1000,
@@ -607,17 +1419,29 @@ def create_config_from_image(
                 f"Using data-driven sensor width limits: [{param_limits['w'][0]*1000:.1f}, {param_limits['w'][1]*1000:.1f}] mm"
             )
         else:
-            # Use tight constraint for known sensors
+            w_tol = tolerances["w"]
             param_limits["w"] = [
-                sensor_m * (1 - param_tolerance),
-                sensor_m * (1 + param_tolerance),
+                sensor_m * (1 - w_tol),
+                sensor_m * (1 + w_tol),
             ]
 
-    # Constrain altitude with tolerance since precision altitude is rare
+    # Altitude bounds — GPS data earns tighter limits automatically
+    h_tol_key = "h_gps" if altitude_from_gps else "h_manual"
+    h_tol = tolerances[h_tol_key]
     param_limits["h"] = [
-        altitude_m * (1 - param_tolerance),
-        altitude_m * (1 + param_tolerance),
+        float(altitude_m * (1 - h_tol)),
+        float(altitude_m * (1 + h_tol)),
     ]
+    if altitude_from_gps:
+        print(
+            f"✓ GPS altitude detected ({altitude_m:.0f} m) — "
+            f"altitude bounds set to ±{h_tol:.0%} ({limits_preset} preset)"
+        )
+    else:
+        print(
+            f"  Manual altitude ({altitude_m:.0f} m) — "
+            f"altitude bounds set to ±{h_tol:.0%} ({limits_preset} preset)"
+        )
 
     # Calculate initial theta_x using geometry
     # theta_y and theta_z default to 0 (user doesn't know orientation)
@@ -662,7 +1486,8 @@ def create_config_from_image(
                 camera_params["image_height_px"],
             ],
             "planet": planet,
-            "altitude_source": "gps" if get_gps_altitude(image_path) else "manual",
+            "altitude_source": "gps" if altitude_from_gps else "manual",
+            "limits_preset": limits_preset,
         },
         "notes": {
             "r_init_perturbed": True,

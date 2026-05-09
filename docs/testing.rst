@@ -4,10 +4,10 @@ Testing
 Planet Ruler includes a comprehensive test suite with 635+ tests covering all functionality.
 
 Test Categories
---------------
+---------------
 
 Unit Tests
-~~~~~~~~~
+~~~~~~~~~~
 
 * **Geometry functions**: Mathematical calculations and coordinate transforms
 * **Image processing**: Loading, gradient detection, and limb smoothing
@@ -15,7 +15,7 @@ Unit Tests
 * **Configuration management**: YAML loading and parameter validation
 
 Integration Tests
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 * **Real planetary data**: Earth ISS, Pluto New Horizons, Saturn Cassini scenarios
 * **End-to-end workflows**: Complete observation processing pipelines
@@ -23,7 +23,7 @@ Integration Tests
 * **Multi-planetary scenarios**: Cross-scenario parameter scaling validation
 
 Property-Based Tests
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 Using Hypothesis framework for mathematical function validation:
 
@@ -41,10 +41,10 @@ Performance Benchmarks
 * **Scaling analysis**: Performance vs. image size and parameter complexity
 
 Running Tests
-------------
+-------------
 
 Basic Test Execution
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
@@ -60,7 +60,7 @@ Basic Test Execution
    pytest -m benchmark tests/ -v
 
 Detailed Test Configuration
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
@@ -77,7 +77,7 @@ Detailed Test Configuration
    pytest tests/test_integration_real_data.py -v
 
 Test Environment Setup
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
@@ -92,10 +92,10 @@ Test Environment Setup
    python -m pytest --markers
 
 Test Coverage Analysis
----------------------
+----------------------
 
 Current Coverage
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Planet Ruler maintains 84% overall test coverage with the following module-level coverage:
 
@@ -116,7 +116,7 @@ Planet Ruler maintains 84% overall test coverage with the following module-level
 **Total: 84% line coverage** (3307 statements, 545 missed)
 
 Coverage Reports
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
@@ -131,10 +131,10 @@ Coverage Reports
    pytest --cov=planet_ruler --cov-report=xml
 
 Integration Test Details
------------------------
+------------------------
 
 Real Mission Data Tests
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 **Earth ISS Scenario:**
 
@@ -167,7 +167,7 @@ Real Mission Data Tests
        assert horizon_dist > 10000000
 
 Configuration Validation Tests
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -184,10 +184,10 @@ Configuration Validation Tests
                assert low <= init_val <= high
 
 Performance Benchmarks
----------------------
+----------------------
 
 Benchmark Categories
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 **Mathematical Functions:**
 
@@ -225,10 +225,10 @@ Running Benchmarks
    pytest --benchmark-only --benchmark-compare=baseline.json
 
 Custom Test Fixtures
--------------------
+--------------------
 
 Planetary Configuration Fixtures
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -250,7 +250,7 @@ Planetary Configuration Fixtures
        return image
 
 Mock Objects and Patches
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -265,14 +265,14 @@ Mock Objects and Patches
            # Test processing...
 
 Continuous Integration Testing
------------------------------
+------------------------------
 
 GitHub Actions Workflow
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Planet Ruler uses GitHub Actions for automated testing across:
 
-* **Python versions**: 3.8, 3.9, 3.10, 3.11
+* **Python versions**: 3.10, 3.11, 3.12
 * **Operating systems**: Ubuntu, macOS, Windows  
 * **Dependencies**: Core and optional (PyTorch, Segment Anything)
 
@@ -286,7 +286,7 @@ Planet Ruler uses GitHub Actions for automated testing across:
 * Artifact collection (coverage reports, benchmarks)
 
 Test Workflow Configuration
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: yaml
 
@@ -305,10 +305,10 @@ Test Workflow Configuration
          --benchmark-json=benchmark_results.json
 
 Writing New Tests
-----------------
+-----------------
 
 Test Organization
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 Follow the existing test structure:
 
@@ -326,7 +326,7 @@ Follow the existing test structure:
    └── test_benchmarks.py        # Performance benchmarks
 
 Test Function Naming
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 Use descriptive test names that indicate:
 
@@ -346,7 +346,7 @@ Use descriptive test names that indicate:
        """Test cost function returns low cost with perfect parameters."""
 
 Property-Based Test Examples
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -363,7 +363,7 @@ Property-Based Test Examples
        assert h2 > h1
 
 Adding Benchmarks
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -377,10 +377,10 @@ Adding Benchmarks
        assert len(result) == 1000  # Verify correct output
 
 Best Practices
--------------
+--------------
 
 Test Design Principles
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 1. **Independence**: Tests should not depend on each other
 2. **Determinism**: Use fixed seeds for reproducible results
@@ -389,7 +389,7 @@ Test Design Principles
 5. **Performance awareness**: Use benchmarks for performance-critical functions
 
 Mock Strategy
-~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 * Mock external dependencies (PIL, PyTorch models)
 * Use synthetic data for consistent test results
@@ -397,7 +397,7 @@ Mock Strategy
 * Mock expensive computations in unit tests
 
 Error Testing
-~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -408,10 +408,10 @@ Error Testing
                         f=0.024, w=0.036, theta_x=0, theta_y=0, theta_z=0)
 
 Running Tests Locally
---------------------
+---------------------
 
 Development Workflow
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
@@ -429,7 +429,7 @@ Development Workflow
    pytest -m integration tests/ -v         # Integration tests only
 
 Test Debugging
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
@@ -443,7 +443,7 @@ Test Debugging
    pytest tests/test_observation.py::test_limb_observation_workflow --pdb
 
 Test Quality Metrics
--------------------
+--------------------
 
 The Planet Ruler test suite maintains high quality standards:
 
@@ -454,7 +454,7 @@ The Planet Ruler test suite maintains high quality standards:
 * **Performance Tracking**: Continuous benchmarking prevents performance regressions
 
 Contributing to Tests
--------------------
+---------------------
 
 When contributing new features or bug fixes:
 

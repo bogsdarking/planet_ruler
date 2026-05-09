@@ -8,9 +8,9 @@ authors = [
     {name = "Brandon Anderson", email = "bogsdarking@proton.me"}
 ]
 description = "Measure planetary radii from horizon photographs using computer vision and geometry"
-version = "1.7.0"
+version = "2.0.0"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license-expression = "Apache-2.0"
 dependencies = [
     "pandas>=1.3.0,<3.0.0",
@@ -18,14 +18,14 @@ dependencies = [
     "numpy>=1.20.0,<2.0.0",
     "tqdm>=4.60.0,<5.0.0",
     "scipy>=1.7.0,<2.0.0",
-    "Pillow>=8.0.0,<12.0.0",
+    "Pillow>=12.2.0",
     "PyYAML>=5.4.0,<7.0.0",
     "seaborn>=0.11.0,<1.0.0",
     "ipywidgets>=7.6.0,<9.0.0",
     "ipython>=7.16.0,<9.0.0",
     "opencv-python>=4.5.0,<5.0.0",
-    "kagglehub>=0.1.0,<1.0.0; python_version>='3.9'",
-    "segment-anything>=1.0,<2.0.0; python_version>='3.8' and platform_system!='Darwin' or python_version>='3.9'",
+    "kagglehub>=0.1.0,<1.0.0",
+    "segment-anything>=1.0,<2.0.0; platform_system!='Darwin'",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -34,8 +34,6 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -53,7 +51,7 @@ minimal = [
     "numpy>=1.20.0,<2.0.0",
     "tqdm>=4.60.0,<5.0.0",
     "scipy>=1.7.0,<2.0.0",
-    "Pillow>=8.0.0,<12.0.0",
+    "Pillow>=12.2.0",
     "PyYAML>=5.4.0,<7.0.0",
     "seaborn>=0.11.0,<1.0.0",
     "opencv-python>=4.5.0,<5.0.0",
@@ -78,7 +76,7 @@ jupyter = [
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
-    "black>=22.0.0",
+    "black==25.1.0",
     "flake8>=6.0.0",
     "isort>=5.12.0",
 ]
@@ -115,7 +113,8 @@ exclude = [
     "*.egg-info",
     "notebooks/build_demos.ipynb",
     "notebooks/tutorials/quick_reference.md",
-    "demo/images/beach-ocean-panorama-187916.jpg"
+    "demo/images/beach-ocean-panorama-187916.jpg",
+    "planet_ruler/benchmarks",
 ]
 
 [tool.coverage.run]
