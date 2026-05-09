@@ -1451,5 +1451,116 @@ class TestFitValidation:
             # Should work without crashing, though no warnings expected
 
 
+# ---------------------------------------------------------------------------
+# GradientFieldCostFunction — prefer_direction paths
+# ---------------------------------------------------------------------------
+
+
+class TestPreferDirection:
+    """Cover the prefer_direction='down' and invalid branches in CostFunction."""
+
+    def _image_and_fn(self):
+        image = np.zeros((80, 100), dtype=np.uint8)
+        image[40:, :] = 200
+
+        def horizon(**kwargs):
+            return np.full(100, 40.0)
+
+        return image, horizon
+
+    def test_prefer_down_returns_finite_cost(self):
+        image, horizon = self._image_and_fn()
+        cost_func = GradientFieldCostFunction(
+            target=image,
+            function=horizon,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="gradient_field",
+            prefer_direction="down",
+        )
+        assert np.isfinite(cost_func.cost({}))
+
+    def test_prefer_none_uses_abs(self):
+        image, horizon = self._image_and_fn()
+        cost_func = GradientFieldCostFunction(
+            target=image,
+            function=horizon,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="gradient_field",
+            prefer_direction=None,
+        )
+        assert np.isfinite(cost_func.cost({}))
+
+    def test_invalid_prefer_direction_raises(self):
+        image, _ = self._image_and_fn()
+
+        def horizon(**kwargs):
+            return np.full(100, 40.0)
+
+        cost_func = GradientFieldCostFunction(
+            target=image,
+            function=horizon,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="gradient_field",
+            prefer_direction="sideways",
+        )
+        with pytest.raises(ValueError, match="prefer_direction"):
+            cost_func.cost({})
+
+
+# ---------------------------------------------------------------------------
+# LimbFitter — scipy-minimize minimizer path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestLimbFitterSciPyMinimize:
+    """Cover the scipy-minimize dispatch in LimbFitter.fit() (lines 506-523)."""
+
+    def _make_fitter(self, minimizer, minimizer_kwargs=None, **extra):
+        from planet_ruler.fit import LimbFitter
+
+        n_pix_x, n_pix_y = 80, 60
+        # l2 loss: target is a 1-D limb array; n_pix_x/y must be in init_params
+        target = np.full(n_pix_x, n_pix_y / 2)
+        return LimbFitter(
+            target=target,
+            free_parameters=["r"],
+            init_parameter_values={
+                "r": 6_371_000,
+                "h": 10_000,
+                "f": 0.050,
+                "w": 0.036,
+                "theta_x": 0.0,
+                "theta_y": 0.0,
+                "theta_z": np.pi,
+                "n_pix_x": n_pix_x,
+                "n_pix_y": n_pix_y,
+                "x0": n_pix_x / 2,
+                "y0": n_pix_y / 2,
+            },
+            parameter_limits={"r": [5_000_000, 8_000_000]},
+            loss_function="l2",
+            minimizer=minimizer,
+            minimizer_kwargs=minimizer_kwargs or {},
+            max_iter=5,
+            seed=0,
+            **extra,
+        )
+
+    def test_scipy_minimize_runs_and_returns_result(self):
+        fitter = self._make_fitter("scipy-minimize")
+        result = fitter.fit()
+        assert "best_parameters" in result
+        assert "r" in result["best_parameters"]
+
+    def test_scipy_minimize_n_restarts(self):
+        fitter = self._make_fitter("scipy-minimize", minimizer_kwargs={"n_restarts": 2})
+        result = fitter.fit()
+        assert result["best_parameters"] is not None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -20,10 +20,12 @@ import math
 import sqlite3
 import tempfile
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 
 from planet_ruler.benchmarks.analyzer import BenchmarkAnalyzer
 
@@ -1240,7 +1242,7 @@ class TestVetImagesMain:
 
     def test_image_filter_passes_through(self, tmp_path, capsys):
         import sys
-        from unittest.mock import patch, call
+        from unittest.mock import patch
 
         from planet_ruler.benchmarks.vet_images import main
 
@@ -1252,7 +1254,7 @@ class TestVetImagesMain:
                 patch(
                     "planet_ruler.benchmarks.vet_images._find_benchmark_dir",
                     return_value=tmp_path,
-                ) as _fbd,
+                ),
                 patch(
                     "planet_ruler.benchmarks.vet_images.discover_pairs",
                     return_value=pairs,
@@ -1698,3 +1700,570 @@ class TestRunnerMakeGridScenarioNameExtra:
         name_r = runner._make_grid_scenario_name(params_r)
         name_rh = runner._make_grid_scenario_name(params_rh)
         assert name_r != name_rh
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkRunner — static code helpers (_fp_code, _rl_code branches)
+# ---------------------------------------------------------------------------
+
+
+class TestRunnerStaticCodeMethods:
+    """Cover uncovered branches in _fp_code and _rl_code."""
+
+    def test_fp_code_includes_w(self):
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        assert "w" in BenchmarkRunner._fp_code(["r", "w"])
+
+    def test_fp_code_includes_f(self):
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        assert "f" in BenchmarkRunner._fp_code(["r", "f"])
+
+    def test_rl_code_r05(self):
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        assert BenchmarkRunner._rl_code([6000, 6750]) == "r05"
+
+    def test_rl_code_r10(self):
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        assert BenchmarkRunner._rl_code([6000, 7070]) == "r10"
+
+    def test_rl_code_r20(self):
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        assert BenchmarkRunner._rl_code([5800, 7800]) == "r20"
+
+    def test_rl_code_r50(self):
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        assert BenchmarkRunner._rl_code([4000, 9700]) == "r50"
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkRunner — _make_grid_scenario_name (arc-only, constrain_radius_only,
+# perturbation_factor dict)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    not (
+        Path(__file__).parent.parent / "planet_ruler/benchmarks/configs/smoke_test.yaml"
+    ).exists(),
+    reason="smoke_test.yaml not found",
+)
+class TestRunnerScenarioNameEdgeCases:
+    def _runner(self, tmp_path):
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        config_path = (
+            Path(__file__).parent.parent
+            / "planet_ruler/benchmarks/configs/smoke_test.yaml"
+        )
+        return BenchmarkRunner(config_path, db_path=tmp_path / "test.db")
+
+    def test_fit_stages_arc_only_no_sag_suffix(self, tmp_path):
+        runner = self._runner(tmp_path)
+        # fit_stages with arc but NO sagitta → sag_suffix stays ""
+        params = {
+            "minimizer": "basinhopping",
+            "minimizer_preset": "fast",
+            "free_parameters": ["r"],
+            "fit_stages": [{"method": "arc"}],
+            "r_limits_km": [2000, 14000],
+            "fit_params": {},
+        }
+        name = runner._make_grid_scenario_name(params)
+        assert "sag_only" not in name
+
+    def test_constrain_radius_only(self, tmp_path):
+        runner = self._runner(tmp_path)
+        params = {
+            "constrain_radius_only": True,
+            "free_parameters": ["r"],
+            "fit_params": {},
+        }
+        name = runner._make_grid_scenario_name(params)
+        assert "cr_only" in name
+
+    def test_perturbation_factor_dict(self, tmp_path):
+        runner = self._runner(tmp_path)
+        params = {
+            "minimizer": "basinhopping",
+            "minimizer_preset": "fast",
+            "free_parameters": ["r"],
+            "r_limits_km": [2000, 14000],
+            "perturbation_factor": {"r": 1.2, "h": 0.8},
+            "fit_params": {},
+        }
+        name = runner._make_grid_scenario_name(params)
+        assert "p120" in name
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkRunner — _expand_top_level_grid
+# ---------------------------------------------------------------------------
+
+
+class TestRunnerExpandTopLevelGrid:
+    """Cover the entire _expand_top_level_grid path (lines 521-577)."""
+
+    def _runner_with_grid(self, tmp_path, grid_cfg):
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        config = {"scenarios": [], "grid": grid_cfg}
+        config_path = tmp_path / "grid_config.yaml"
+        config_path.write_text(yaml.dump(config))
+        return BenchmarkRunner(config_path, db_path=tmp_path / "test.db")
+
+    # Note: r_limits_km must be in 'fixed:' (not param_grid) because param_grid
+    # treats list values as sweep dimensions. Putting it in fixed avoids r_limits_km
+    # being iterated element-by-element.
+
+    def test_expand_basic_cross_product(self, tmp_path):
+        runner = self._runner_with_grid(
+            tmp_path,
+            {
+                "images": ["img1", "img2"],
+                "fixed": {"r_limits_km": [5000, 8000], "fit_params": {}},
+                "param_grid": [
+                    {
+                        "minimizer": ["basinhopping", "de"],
+                        "minimizer_preset": "fast",
+                        "free_parameters": ["r"],
+                    }
+                ],
+            },
+        )
+        scenarios = runner._expand_top_level_grid()
+        assert len(scenarios) == 4
+
+    def test_expand_no_grid_returns_empty(self, tmp_path):
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        config = {"scenarios": []}
+        config_path = tmp_path / "no_grid.yaml"
+        config_path.write_text(yaml.dump(config))
+        runner = BenchmarkRunner(config_path, db_path=tmp_path / "test.db")
+        assert runner._expand_top_level_grid() == []
+
+    def test_expand_skips_h_limits_pct_when_h_not_free(self, tmp_path):
+        runner = self._runner_with_grid(
+            tmp_path,
+            {
+                "images": ["img1"],
+                "fixed": {"r_limits_km": [5000, 8000], "fit_params": {}},
+                "param_grid": [
+                    {
+                        "minimizer": "basinhopping",
+                        "minimizer_preset": "fast",
+                        "free_parameters": [["r"], ["r", "h"]],
+                        "h_limits_pct": [None, 0.1],
+                    }
+                ],
+            },
+        )
+        scenarios = runner._expand_top_level_grid()
+        # (["r"], None) ok, (["r"], 0.1) skipped (h not free), (["r","h"], None) ok,
+        # (["r","h"], 0.1) ok  → 3 scenarios
+        assert len(scenarios) == 3
+
+    def test_expand_fit_params_max_iter_shorthand(self, tmp_path):
+        runner = self._runner_with_grid(
+            tmp_path,
+            {
+                "images": ["img1"],
+                "fixed": {"r_limits_km": [5000, 8000]},
+                "param_grid": [
+                    {
+                        "minimizer": "basinhopping",
+                        "minimizer_preset": "fast",
+                        "free_parameters": ["r"],
+                        "fit_params_max_iter": 500,
+                    }
+                ],
+            },
+        )
+        scenarios = runner._expand_top_level_grid()
+        assert len(scenarios) == 1
+        assert scenarios[0]["fit_params"]["max_iter"] == 500
+        assert "fit_params_max_iter" not in scenarios[0]
+
+    def test_expand_annotation_file_pattern(self, tmp_path):
+        runner = self._runner_with_grid(
+            tmp_path,
+            {
+                "images": ["earth_01"],
+                "annotation_file_pattern": "{image}_points.json",
+                "fixed": {"r_limits_km": [5000, 8000], "fit_params": {}},
+                "param_grid": [
+                    {
+                        "minimizer": "basinhopping",
+                        "minimizer_preset": "fast",
+                        "free_parameters": ["r"],
+                    }
+                ],
+            },
+        )
+        scenarios = runner._expand_top_level_grid()
+        assert scenarios[0]["annotation_file"] == "earth_01_points.json"
+
+    def test_expand_fixed_propagated(self, tmp_path):
+        runner = self._runner_with_grid(
+            tmp_path,
+            {
+                "images": ["img1"],
+                "fixed": {
+                    "planet_name": "Earth",
+                    "detection_method": "manual",
+                    "r_limits_km": [5000, 8000],
+                    "fit_params": {},
+                },
+                "param_grid": [
+                    {
+                        "minimizer": "basinhopping",
+                        "minimizer_preset": "fast",
+                        "free_parameters": ["r"],
+                    }
+                ],
+            },
+        )
+        scenarios = runner._expand_top_level_grid()
+        assert scenarios[0]["planet_name"] == "Earth"
+        assert scenarios[0]["detection_method"] == "manual"
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkRunner — _build_fit_stages gradient-field path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    not (
+        Path(__file__).parent.parent / "planet_ruler/benchmarks/configs/smoke_test.yaml"
+    ).exists(),
+    reason="smoke_test.yaml not found",
+)
+class TestRunnerBuildFitStages:
+    def _runner(self, tmp_path):
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        return BenchmarkRunner(
+            Path(__file__).parent.parent
+            / "planet_ruler/benchmarks/configs/smoke_test.yaml",
+            db_path=tmp_path / "test.db",
+        )
+
+    def test_gradient_detection_builds_gradient_stage(self, tmp_path):
+        runner = self._runner(tmp_path)
+        stages = runner._build_fit_stages(
+            scenario={},
+            limb_detection="gradient-field",
+            fit_params={"max_iter": 100},
+            minimizer_method="differential-evolution",
+            minimizer_preset=None,
+            minimizer_kwargs=None,
+        )
+        assert len(stages) == 1
+        assert stages[0]["method"] == "gradient"
+
+    def test_gradient_detection_with_resolution_stages(self, tmp_path):
+        runner = self._runner(tmp_path)
+        stages = runner._build_fit_stages(
+            scenario={},
+            limb_detection="gradient-field",
+            fit_params={"max_iter": 100, "resolution_stages": [4, 2, 1]},
+            minimizer_method="differential-evolution",
+            minimizer_preset="fast",
+            minimizer_kwargs={"popsize": 10},
+        )
+        assert stages[0]["resolution_stages"] == [4, 2, 1]
+        assert stages[0]["minimizer_preset"] == "fast"
+        assert stages[0]["minimizer_kwargs"] == {"popsize": 10}
+
+    def test_explicit_fit_stages_with_minimizer_kwargs(self, tmp_path):
+        runner = self._runner(tmp_path)
+        scenario = {"fit_stages": [{"method": "arc"}]}
+        stages = runner._build_fit_stages(
+            scenario=scenario,
+            limb_detection="manual",
+            fit_params={"max_iter": 100},
+            minimizer_method="basinhopping",
+            minimizer_preset="fast",
+            minimizer_kwargs={"niter": 5},
+        )
+        assert stages[0]["minimizer"] == "basinhopping"
+        assert stages[0]["minimizer_kwargs"] == {"niter": 5}
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkRunner — run() with mocked _run_with_augmentation
+# ---------------------------------------------------------------------------
+
+
+class TestRunnerRun:
+    """Cover the run() dispatch logic (lines 607-682) without real optimization."""
+
+    def _runner_with_scenario(self, tmp_path, scenario_list=None):
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        scenarios = scenario_list or [
+            {
+                "name": "test_s1",
+                "images": ["img1"],
+                "detection_method": "manual",
+            }
+        ]
+        config = {"scenarios": scenarios}
+        config_path = tmp_path / "run_config.yaml"
+        config_path.write_text(yaml.dump(config))
+        return BenchmarkRunner(config_path, db_path=tmp_path / "test.db")
+
+    def test_run_empty_images_returns_empty(self, tmp_path):
+        runner = self._runner_with_scenario(
+            tmp_path, [{"name": "s1", "images": [], "detection_method": "manual"}]
+        )
+        results = runner.run(skip_completed=False)
+        assert results == []
+
+    def test_run_scenario_name_filter(self, tmp_path, mocker):
+        runner = self._runner_with_scenario(tmp_path)
+        mock_aug = mocker.patch.object(
+            runner, "_run_with_augmentation", return_value=[]
+        )
+        runner.run(scenarios=["nonexistent_scenario"], skip_completed=False)
+        mock_aug.assert_not_called()
+
+    def test_run_image_filter(self, tmp_path, mocker):
+        runner = self._runner_with_scenario(tmp_path)
+        mock_aug = mocker.patch.object(
+            runner, "_run_with_augmentation", return_value=[]
+        )
+        runner.run(images=["no_such_image"], skip_completed=False)
+        mock_aug.assert_not_called()
+
+    def test_run_calls_augmentation_and_store(self, tmp_path, mocker):
+        runner = self._runner_with_scenario(tmp_path)
+        mock_result = Mock()
+        mock_aug = mocker.patch.object(
+            runner, "_run_with_augmentation", return_value=[mock_result]
+        )
+        mock_store = mocker.patch.object(runner, "_store_result")
+        results = runner.run(skip_completed=False)
+        mock_aug.assert_called_once()
+        mock_store.assert_called_once_with(mock_result)
+        assert results == [mock_result]
+
+    def test_run_skip_completed_queries_db(self, tmp_path, mocker):
+        runner = self._runner_with_scenario(tmp_path)
+        mock_aug = mocker.patch.object(
+            runner, "_run_with_augmentation", return_value=[]
+        )
+        mocker.patch.object(
+            runner, "_get_completed_keys", return_value={("test_s1", "img1")}
+        )
+        mocker.patch.object(runner, "_expected_names", return_value=["test_s1"])
+        runner.run(skip_completed=True)
+        mock_aug.assert_not_called()
+
+    def test_run_get_completed_keys(self, tmp_path):
+        runner = self._runner_with_scenario(tmp_path)
+        keys = runner._get_completed_keys()
+        assert isinstance(keys, set)
+
+    def test_run_skip_false_does_not_query_db(self, tmp_path, mocker):
+        runner = self._runner_with_scenario(tmp_path)
+        mocker.patch.object(runner, "_run_with_augmentation", return_value=[])
+        mocker.patch.object(runner, "_store_result")
+        spy_keys = mocker.patch.object(
+            runner, "_get_completed_keys", return_value=set()
+        )
+        runner.run(skip_completed=False)
+        spy_keys.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkRunner — _build_fit_config overrides
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    not (
+        Path(__file__).parent.parent / "planet_ruler/benchmarks/configs/smoke_test.yaml"
+    ).exists(),
+    reason="smoke_test.yaml not found",
+)
+class TestRunnerBuildFitConfig:
+    """Cover override paths in _build_fit_config (lines 1110-1212)."""
+
+    _BASE_CONFIG = {
+        "free_parameters": ["r"],
+        "init_parameter_values": {"r": 6371000, "h": 10000, "f": 0.05},
+        "parameter_limits": {
+            "r": [4000000, 9000000],
+            "h": [5000, 20000],
+            "f": [0.04, 0.06],
+        },
+    }
+
+    def _runner(self, tmp_path):
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        return BenchmarkRunner(
+            Path(__file__).parent.parent
+            / "planet_ruler/benchmarks/configs/smoke_test.yaml",
+            db_path=tmp_path / "test.db",
+        )
+
+    def _call(self, runner, scenario, mock_config=None):
+        cfg = dict(mock_config or self._BASE_CONFIG)
+        cfg["init_parameter_values"] = dict(cfg["init_parameter_values"])
+        cfg["parameter_limits"] = {
+            k: list(v) for k, v in cfg["parameter_limits"].items()
+        }
+        with patch("planet_ruler.camera.create_config_from_image", return_value=cfg):
+            return runner._build_fit_config(scenario, Path("fake.jpg"))
+
+    def test_r_limits_km_override(self, tmp_path):
+        runner = self._runner(tmp_path)
+        result = self._call(
+            runner, {"r_limits_km": [5000, 8000], "planet_name": "earth"}
+        )
+        assert result["parameter_limits"]["r"] == [5_000_000.0, 8_000_000.0]
+
+    def test_parameter_limits_override(self, tmp_path):
+        runner = self._runner(tmp_path)
+        result = self._call(
+            runner,
+            {
+                "parameter_limits_override": {"h": [8000, 12000]},
+                "planet_name": "earth",
+            },
+        )
+        assert result["parameter_limits"]["h"] == [8000.0, 12000.0]
+
+    def test_init_values_override(self, tmp_path):
+        runner = self._runner(tmp_path)
+        result = self._call(
+            runner,
+            {
+                "init_parameter_values_override": {"r": 7000000.0},
+                "planet_name": "earth",
+            },
+        )
+        assert result["init_parameter_values"]["r"] == 7_000_000.0
+
+    def test_free_parameters_override(self, tmp_path):
+        runner = self._runner(tmp_path)
+        result = self._call(
+            runner, {"free_parameters": ["r", "h"], "planet_name": "earth"}
+        )
+        assert result["free_parameters"] == ["r", "h"]
+
+    def test_h_limits_pct_when_h_is_free(self, tmp_path):
+        runner = self._runner(tmp_path)
+        cfg = dict(self._BASE_CONFIG)
+        cfg["free_parameters"] = ["r", "h"]
+        cfg["init_parameter_values"] = dict(cfg["init_parameter_values"])
+        cfg["parameter_limits"] = {
+            k: list(v) for k, v in cfg["parameter_limits"].items()
+        }
+        with patch("planet_ruler.camera.create_config_from_image", return_value=cfg):
+            result = runner._build_fit_config(
+                {
+                    "free_parameters": ["r", "h"],
+                    "h_limits_pct": 0.2,
+                    "planet_name": "earth",
+                },
+                Path("fake.jpg"),
+            )
+        h_init = 10000
+        expected_lo = max(0.0, h_init * 0.8)
+        expected_hi = h_init * 1.2
+        assert result["parameter_limits"]["h"] == [expected_lo, expected_hi]
+
+    def test_init_clipped_to_limits(self, tmp_path):
+        runner = self._runner(tmp_path)
+        result = self._call(
+            runner,
+            {
+                "r_limits_km": [6000, 6500],
+                "planet_name": "earth",
+            },
+        )
+        lo, hi = result["parameter_limits"]["r"]
+        r_init = result["init_parameter_values"]["r"]
+        assert lo <= r_init <= hi
+
+    def test_perturb_params_scalar_factor(self, tmp_path, mocker):
+        runner = self._runner(tmp_path)
+        mock_init = mocker.patch(
+            "planet_ruler.camera.init_params_from_bounds",
+            return_value={"r": 6500000.0},
+        )
+        self._call(
+            runner,
+            {
+                "perturb_params": ["r"],
+                "perturbation_factor": 0.5,
+                "planet_name": "earth",
+            },
+        )
+        mock_init.assert_called_once()
+
+    def test_perturb_params_dict_factor(self, tmp_path, mocker):
+        runner = self._runner(tmp_path)
+        mock_init = mocker.patch(
+            "planet_ruler.camera.init_params_from_bounds",
+            return_value={"r": 6500000.0},
+        )
+        self._call(
+            runner,
+            {
+                "perturb_params": ["r"],
+                "perturbation_factor": {"r": 0.5, "default": 1.0},
+                "planet_name": "earth",
+            },
+        )
+        mock_init.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkRunner — init edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestRunnerInitEdgeCases:
+    """Cover __init__ optional paths and _load_config edge case."""
+
+    def test_config_without_scenarios_key(self, tmp_path):
+        """A config with only 'grid' should auto-add scenarios=[]."""
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        config = {
+            "grid": {
+                "images": ["img1"],
+                "param_grid": [
+                    {
+                        "minimizer": "basinhopping",
+                        "minimizer_preset": "fast",
+                        "free_parameters": ["r"],
+                        "r_limits_km": [5000, 8000],
+                        "fit_params": {},
+                    }
+                ],
+            }
+        }
+        config_path = tmp_path / "grid_only.yaml"
+        config_path.write_text(yaml.dump(config))
+        runner = BenchmarkRunner(config_path, db_path=tmp_path / "test.db")
+        assert runner.config["scenarios"] == []
+
+    def test_config_missing_both_keys_raises(self, tmp_path):
+        from planet_ruler.benchmarks.runner import BenchmarkRunner
+
+        config_path = tmp_path / "bad_config.yaml"
+        config_path.write_text(yaml.dump({"thresholds": {}}))
+        with pytest.raises(ValueError, match="Config must contain"):
+            BenchmarkRunner(config_path, db_path=tmp_path / "test.db")
