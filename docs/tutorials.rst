@@ -4,17 +4,17 @@ Tutorials
 This section provides step-by-step tutorials for using Planet Ruler to determine planetary radius from horizon photographs using the default interactive manual annotation approach.
 
 Tutorial 0: Pre-Configured Earth Radius Measurement
-------------------------------------------
+---------------------------------------------------
 
 .. include:: tutorial_preconfig.rst
 
 Tutorial 1: Auto-Configured Earth Radius Measurement
-------------------------------------------
+----------------------------------------------------
 
 .. include:: tutorial_autoconfig.rst
 
 Tutorial 1.5: Measure Earth from an Airplane Window
---------------------------------------------------
+---------------------------------------------------
 
 .. include:: tutorial_airplane.rst
 
@@ -24,19 +24,21 @@ Tutorial 2: Advanced Manual Annotation Techniques
 .. include:: tutorial_advanced_manual.rst
 
 Tutorial 2.5: Gradient-Field Automated Detection
------------------------------------------------
+------------------------------------------------
 
 .. include:: tutorial_gradient_field.rst
 
 Tutorial 3: Multi-planetary Analysis (Manual Annotation)
--------------------------------------------------------
+--------------------------------------------------------
 
 Comparing Earth, Pluto, and Saturn with Precise Manual Selection
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
    import pandas as pd
+   from planet_ruler.observation import LimbObservation
+   from planet_ruler.uncertainty import calculate_parameter_uncertainty
    
    # Scenarios to analyze
    scenarios = [
@@ -51,7 +53,7 @@ Comparing Earth, Pluto, and Saturn with Precise Manual Selection
        print(f"\nProcessing {name}...")
        
        # Load and process observation with manual annotation
-       obs_obj = obs.LimbObservation(image_path, config_path)
+       obs_obj = LimbObservation(image_path, config_path)
        
        print(f"  Opening manual annotation GUI for {name}...")
        print("  Instructions:")
@@ -60,7 +62,7 @@ Comparing Earth, Pluto, and Saturn with Precise Manual Selection
        print("    - Press 'g' to generate target, 's' to save, 'q' to close")
        
        # Use manual annotation (default, precise)
-       obs_obj.detect_limb(method="manual")
+       obs_obj.detect_limb(detection_method="manual")
        method_used = "Manual Annotation"
        
        obs_obj.smooth_limb()
@@ -68,7 +70,7 @@ Comparing Earth, Pluto, and Saturn with Precise Manual Selection
        
        # Calculate uncertainties
        radius_result = calculate_parameter_uncertainty(
-           obs_obj, "r", scale_factor=1000, uncertainty_type="std"
+           obs_obj, "r", scale_factor=1000, method="auto"
        )
        
        results.append({
@@ -87,7 +89,7 @@ Comparing Earth, Pluto, and Saturn with Precise Manual Selection
    print(df.to_string(index=False))
 
 Tutorial 4: Detection Method Comparison
---------------------------------------
+---------------------------------------
 
 .. include:: tutorial_method_selection.rst
 
@@ -95,7 +97,7 @@ Installation and Setup
 ----------------------
 
 Basic Installation
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Planet Ruler works immediately after installation with no additional dependencies:
 
@@ -105,7 +107,7 @@ Planet Ruler works immediately after installation with no additional dependencie
    python -m pip install planet-ruler
 
 Verification Test
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -125,7 +127,7 @@ Verification Test
        print(f"⚠ GUI not available: {e}")
 
 Optional: Advanced Detection Methods
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For automatic detection methods, install additional dependencies:
 
@@ -138,7 +140,7 @@ For automatic detection methods, install additional dependencies:
    python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 
 Testing Optional Dependencies
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -152,7 +154,7 @@ Testing Optional Dependencies
        print("Install with: pip install segment-anything torch")
 
 Troubleshooting
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 **Common issues and solutions:**
 

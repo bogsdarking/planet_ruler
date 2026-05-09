@@ -23,6 +23,7 @@ from . import image
 from . import observation
 from . import plot
 from . import annotate
+from . import crop
 from . import camera
 from . import validation
 from . import uncertainty
@@ -31,6 +32,7 @@ from . import dashboard
 # Main classes for user-facing API
 from .observation import LimbObservation, PlanetObservation
 from .annotate import TkLimbAnnotator
+from .crop import TkImageCropper
 from .dashboard import OutputCapture
 
 __all__ = [
@@ -42,6 +44,7 @@ __all__ = [
     "observation",
     "plot",
     "annotate",
+    "crop",
     "camera",
     "validation",
     "uncertainty",
@@ -50,8 +53,9 @@ __all__ = [
     "LimbObservation",
     "PlanetObservation",
     "TkLimbAnnotator",
+    "TkImageCropper",
     "OutputCapture",
 ]
 
 # Version information
-__version__ = "1.7.0"
+__version__ = "2.0.0"

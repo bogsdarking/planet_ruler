@@ -3,7 +3,7 @@
 This tutorial shows you how to measure Earth's radius using nothing but your smartphone camera from an airplane window. It's the perfect introduction to practical astronomy and demonstrates why Planet Ruler exists: to make planetary science accessible to everyone.
 
 Prerequisites
-~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 * A smartphone or camera with EXIF data
 * A window seat on a commercial flight
@@ -14,7 +14,7 @@ Prerequisites
    **Perfect for:** Students, teachers, curious travelers, anyone with a window seat and a sense of wonder! No special equipment needed.
 
 The Science: Why This Works
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 From the ground, Earth's horizon appears flat. But climb to 35,000 feet in an airplane, and you'll see the horizon curve. This isn't an optical illusion - you're seeing Earth's actual roundness.
 
@@ -23,7 +23,7 @@ The higher you go, the more curvature becomes visible. By measuring how much the
 **Historical Context**: Ancient Greek scientist Eratosthenes measured Earth's circumference using a stick and the sun around 240 BCE. You're doing something conceptually similar, but with modern tools that fit in your pocket!
 
 Part 1: Taking Your Photo
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Best Timing
 ^^^^^^^^^^^
@@ -37,21 +37,21 @@ Best Timing
 
 **What makes a good photo:**
 
-✅ Clear, unobstructed horizon line
-✅ Minimal clouds at horizon level  
-✅ Camera roughly level with horizon (not tilted)
-✅ Horizon in middle third of frame
-✅ Good lighting (avoid shooting into sun)
+| ✅ Clear, unobstructed horizon line
+| ✅ Minimal clouds at horizon level
+| ✅ Camera roughly level with horizon (not tilted)
+| ✅ Horizon in middle third of frame
+| ✅ Good lighting (avoid shooting into sun)
 
 **What to avoid:**
 
-❌ Wing blocking the view
-❌ Heavy cloud layer at horizon
-❌ Scratched or dirty windows (some OK, but avoid major obstructions)
-❌ Excessive zoom (normal or wide-angle is best)
+| ❌ Wing blocking the view
+| ❌ Heavy cloud layer at horizon
+| ❌ Scratched or dirty windows (some OK, but avoid major obstructions)
+| ❌ Excessive zoom (normal or wide-angle is best)
 
 Photography Tips
-^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^
 
 .. code-block:: text
 
@@ -73,13 +73,14 @@ Photography Tips
    * Turn off digital zoom
    * Let auto-exposure handle brightness
 
-Part 2: Finding Your Altitude
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Part 3: Finding Your Altitude
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You need to know your altitude when you took the photo. Here are four methods, from most to least accurate:
 
 Method 1: FlightRadar24 (Recommended)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 **Real-time tracking:**
 
@@ -102,7 +103,7 @@ Method 1: FlightRadar24 (Recommended)
    Example: "AA1234 on Nov 4 at 14:23 UTC: 35,000 feet"
 
 Method 2: In-Flight Display
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Many aircraft show altitude on seatback screens or overhead displays.
 
@@ -115,7 +116,7 @@ Many aircraft show altitude on seatback screens or overhead displays.
    Example: 35,000 feet = 10,668 meters
 
 Method 3: Ask the Flight Crew
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Flight attendants usually know the cruising altitude:
 
@@ -127,7 +128,7 @@ Flight attendants usually know the cruising altitude:
    Typical answer: "We're at 37,000 feet today."
 
 Method 4: Estimate from Flight Type
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you can't get exact altitude, use these typical values:
 
@@ -151,13 +152,13 @@ If you can't get exact altitude, use these typical values:
 .. warning::
    Altitude uncertainty of ±2,000 feet typically adds 5-10% error to your final radius measurement. Try to be as accurate as possible, but don't worry if you can only estimate.
 
-Part 3: Analysis with Planet Ruler
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Part 4: Analysis with Planet Ruler
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Now for the fun part - let's measure Earth's radius!
 
 Zero-Config Workflow
-^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^
 
 Planet Ruler's auto-config feature extracts camera parameters from your photo's EXIF data:
 
@@ -165,7 +166,8 @@ Planet Ruler's auto-config feature extracts camera parameters from your photo's 
 
    import planet_ruler as pr
    from planet_ruler.camera import create_config_from_image
-   from planet_ruler.fit import calculate_parameter_uncertainty, format_parameter_result
+   from planet_ruler.uncertainty import calculate_parameter_uncertainty
+   from planet_ruler.fit import format_parameter_result
    
    # Your airplane photo and altitude
    photo_path = "airplane_horizon.jpg"  # Your actual photo filename
@@ -175,42 +177,103 @@ Planet Ruler's auto-config feature extracts camera parameters from your photo's 
    config = create_config_from_image(
        image_path=photo_path,
        altitude_m=altitude_meters,
-       planet="earth"
+       planet="earth",
+       limits_preset="balanced",  # "tight", "balanced" (default), or "loose"
    )
    
    # See what was detected
    print("Auto-detected camera:")
-   camera = config["camera"]
-   print(f"  {camera.get('make', 'Unknown')} {camera.get('model', 'Unknown')}")
-   print(f"  Focal length: {camera['focal_length_mm']:.1f} mm")
-   print(f"  Sensor width: {camera['sensor_width_mm']:.1f} mm")
-   print(f"  Field of view: {config['observation']['field_of_view_deg']:.1f}°")
-
-Horizon Detection
-^^^^^^^^^^^^^^^^
-
-Use manual annotation for precise, user-controlled detection:
-
-.. code-block:: python
+   camera_info = config["camera_info"]
+   print(f"  Model: {camera_info.get('camera_model', 'Unknown')}")
+   f_mm = config["init_parameter_values"]["f"] * 1000
+   w_mm = config["init_parameter_values"]["w"] * 1000
+   print(f"  Focal length: {f_mm:.1f} mm")
+   print(f"  Sensor width: {w_mm:.1f} mm")
 
    # Create observation
    obs = pr.LimbObservation(photo_path, config)
+
+Image Cropping (Optional)
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Sometimes obstructions are unavoidable. If you end up with a photo that contains a window frame,
+airplane wing, or other object that either obscures the horizon directly or could confuse the fit, 
+cropping is a great option. To get started, simply run the `crop_image` method. You'll get a pop-up GUI 
+containing your image where you can drag a rectangle that will contain the area you want to keep.
+Try to get as much of the horizon as you can while avoiding whatever is obscuring it.
+
+.. code-block:: python
+
+   obs.crop_image()
+
+GUI controls
+
+.. code-block:: text
+
+   Crop Tool Controls:
+   Click & Drag     Select crop region
+   Scroll Wheel     Zoom in/out
+   +/- Keys         Zoom in/out
+   Esc              Clear selection
    
-   # Interactive horizon detection
-   print("\nClick points along the horizon curve.")
-   print("Controls:")
-   print("  • Left click: Add point")
-   print("  • Right click: Remove nearest point")
-   print("  • 'g': Generate smooth curve")
-   print("  • 'q': Finish and close")
+   Buttons:
+   Crop & Save      Apply crop and save to disk
+   Crop (No Save)   Crop in-memory only
+   Clear Selection  Remove crop region
+
+.. figure:: images/crop.png
+   :width: 100%
+
+   Drag the crop rectangle to select a region without obstuctions.
+
+.. note::
+   Cropping the image implicitly changes the camera parameters (field of view, for one). Planet-ruler compensates for this by automatically re-scaling those parameters appropriately after you crop.
+
+
+Horizon Detection
+^^^^^^^^^^^^^^^^^
+
+Use manual annotation for precise, user-controlled detection.
+
+.. code-block:: python
    
-   obs.detect_limb(method="manual")
+   obs.detect_limb(detection_method="manual")
+
+GUI controls
+
+.. code-block:: text
+
+   Crop Tool Controls:
+   Left Click        Place horizon point
+   Right Click       Remove previous point
+   Scroll Wheel      Zoom in/out
+   +/- Keys          Zoom in/out
+   
+   Zoom Buttons:
+   Generate Target   Save points to memory (ok to close window after)
+   Save Points       Save points to disk for usage later
+   Load Points       Load a previous set of points
+   Clear all         Remove all points
+   Zoom In/Out       Zoom in/out
+   Fit to Window     Zoom to fit image vertically
+   100% (1:1)        Zoom to full resolution
+
+   Vertical Stretch Buttons:
+   Increase          Stretch image vertically (increases apparent curvature)
+   Decrease          Relax image vertically (decreases apparent curvature)
+   Reset (1x)        Restore original vertical ratio
+
 
 .. tip::
-   **Clicking strategy:** Click 15-25 points spread evenly across the horizon. More points near areas of high curvature, fewer where horizon is straighter. The spline will interpolate smoothly between your points.
+   **Clicking strategy:** Click 10-15 points spread evenly across the horizon. More points near areas of high curvature, fewer where horizon is straighter. Don't be shy with the vertical stretch button -- this makes it dramatically easier to see the curve and place points accurately.
+
+.. figure:: images/annotated.png
+   :width: 100%
+
+   Annotating using a 4.5x vertical stretch.
 
 Parameter Fitting
-^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^
 
 Now fit the planetary radius to match your detected horizon:
 
@@ -218,16 +281,16 @@ Now fit the planetary radius to match your detected horizon:
 
    # Fit Earth's radius
    print("\nFitting planetary parameters...")
-   obs.fit_limb(
+   obs.fit_arc(
        minimizer='differential-evolution',
-       maxiter=1000,
+       max_iter=1000,
        seed=42
    )
-   
+
    print("✓ Fit completed!")
 
 Results and Uncertainty
-^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^
 
 Extract your measurement with uncertainty quantification:
 
@@ -263,7 +326,7 @@ Extract your measurement with uncertainty quantification:
        print("📊 Try another photo for better accuracy")
 
 Expected Output
-^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^
 
 .. code-block:: text
 
@@ -288,11 +351,11 @@ Expected Output
    Your error: 137 km (2.2%)
    🎉 Excellent measurement!
 
-Part 4: Understanding Your Results
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Part 5: Understanding Your Results
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 What to Expect
-^^^^^^^^^^^^^
+^^^^^^^^^^^^^^
 
 **Typical Results:**
 
@@ -304,7 +367,7 @@ What to Expect
    Even with 10-25% error, you've measured something the size of a **planet** using just your phone! That's remarkable. Professional measurements use satellites and achieve centimeter precision, but your result is scientifically meaningful.
 
 Sources of Error
-^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^
 
 Understanding why your measurement isn't exactly 6,371 km:
 
@@ -344,7 +407,7 @@ Understanding why your measurement isn't exactly 6,371 km:
    **The key insight:** Despite these errors, you successfully measured a planetary-scale object! Understanding error sources is as educational as getting the "right" answer.
 
 Improving Your Accuracy
-^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^
 
 Want better results? Try these techniques:
 
@@ -359,9 +422,9 @@ Want better results? Try these techniques:
    for photo in photos:
        config = create_config_from_image(photo, altitude_m=10668, planet="earth")
        obs = pr.LimbObservation(photo, config)
-       obs.detect_limb(method="manual")
+       obs.detect_limb(detection_method="manual")
        obs.smooth_limb()
-       obs.fit_limb(maxiter=1000)
+       obs.fit_arc(max_iter=1000)
        
        radius_result = calculate_parameter_uncertainty(
            obs, "r", scale_factor=1000, method='auto'
@@ -392,20 +455,17 @@ For more consistent results across multiple photos:
 
 .. code-block:: python
 
-   # Gradient-field detection (no manual clicking)
-   obs.detect_limb(method="gradient-field")
-   obs.smooth_limb()
-   obs.fit_limb(
-       loss_function='gradient_field',
+   # Gradient-field optimization (no manual clicking, no detect_limb needed)
+   obs.fit_gradient(
        resolution_stages='auto',
-       maxiter=800
+       max_iter=800
    )
 
-Part 5: Educational Extensions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Part 6: Educational Extensions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Class Projects
-^^^^^^^^^^^^^
+^^^^^^^^^^^^^^
 
 **Individual Project:**
 
@@ -422,7 +482,7 @@ Class Projects
 * Statistical analysis of combined data
 
 Discussion Questions
-^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^
 
 1. **Measurement Comparison**
    
@@ -449,7 +509,7 @@ Discussion Questions
    * Could you measure Mars this way if you were there?
 
 Advanced Challenges
-^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^
 
 **Challenge 1: Altitude vs. Accuracy**
 
@@ -484,11 +544,11 @@ Advanced Challenges
    3. Could achieve <5% accuracy
    4. Great science fair project!
 
-Part 6: Troubleshooting
-~~~~~~~~~~~~~~~~~~~~~~
+Part 7: Troubleshooting
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Common Issues
-^^^^^^^^^^^^
+^^^^^^^^^^^^^
 
 **"The detection isn't finding my horizon"**
 
@@ -513,12 +573,42 @@ Override with manual field-of-view:
 
 .. code-block:: python
 
+   # Use "loose" preset to give the optimizer more room when metadata is uncertain
    config = create_config_from_image(
        photo_path,
        altitude_m=10668,
        planet="earth",
-       override_fov_deg=75  # Typical smartphone FOV
+       limits_preset="loose",       # Wide search bounds
+       param_tolerances={"f": 0.5}  # Extra slack on focal length
    )
+
+**"My photo has the aircraft wing in it"**
+
+Use the crop tool to remove obstructions:
+
+.. code-block:: python
+
+   from planet_ruler.crop import crop_observation_image
+   
+   # Interactive crop to remove wing
+   cropped_img, scaled_params, crop_bounds = crop_observation_image(
+       image_path="airplane_photo.jpg",
+       initial_parameters=config['observation']
+   )
+   
+   # Instructions will appear:
+   # - Drag to select region without wing
+   # - Ensure full horizon arc is included
+   # - Click "Crop & Save" when done
+   
+   # Save cropped image
+   cropped_img.save("airplane_photo_cropped.jpg")
+   
+   # Update config with scaled parameters
+   config['observation'].update(scaled_params)
+   
+   # Continue with normal workflow
+   obs = pr.LimbObservation("airplane_photo_cropped.jpg", config)
 
 **"Result varies between photos"**
 
@@ -528,7 +618,7 @@ Normal! Try:
 * Ensure photos are all from similar altitude
 
 Command Line Alternative
-^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 For batch processing or simpler workflow:
 
@@ -550,13 +640,13 @@ For batch processing or simpler workflow:
        airplane_photo.jpg
 
 Next Steps
-~~~~~~~~~
+~~~~~~~~~~
 
 **Continue Learning:**
 
 * Try :doc:`examples` for real spacecraft data
 * Explore :doc:`api` for advanced techniques  
-* Read about :ref:`Method Comparison<tutorial-4-detection-method-comparison>` to understand trade-offs
+* Read about :doc:`tutorial_method_selection` to understand trade-offs
 
 **Share Your Science:**
 
@@ -592,7 +682,7 @@ Even if your measurement had 20% error, you:
 * Quantified uncertainty in your data
 * Connected ancient science to modern tools
 
-That's what science is about. Well done! 🌍✈️🔬
+That's what science is about. Well done!
 
 .. tip::
    **For Educators:** This tutorial aligns with NGSS standards for Earth and Space Sciences (ESS1), Engineering Design (ETS1), and Common Core Math standards for Geometry and Statistics. Consider using as a semester-long project with data collection, analysis, and presentation components.

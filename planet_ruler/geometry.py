@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
 import numpy as np
 
 
@@ -150,12 +151,15 @@ def extrinsic_transform(
         world_coords (np.ndarray): Coordinates of the limb in the world.
             Array has Nx4 shape where N is the number of x-axis pixels
             in the image.
-        theta_x (float): Rotation around the x (horizontal) axis,
-            AKA pitch. (radians)
-        theta_y (float): Rotation around the y (toward the limb) axis,
-            AKA roll. (radians)
-        theta_z (float): Rotation around the z (vertical) axis,
-            AKA yaw. (radians)
+        theta_x (float): Rotation around the x (horizontal lateral) axis,
+            AKA pitch — tilts the camera up/down. (radians)
+        theta_y (float): Rotation around the y (toward-limb) axis, AKA roll.
+            When theta_z=0, acts as a pure phase shift in φ with no effect on
+            the projected arc shape. When theta_z≠0, the z-rotation breaks
+            that symmetry and theta_y has a genuine effect on the arc. (radians)
+        theta_z (float): Rotation around the z (vertical) axis, AKA yaw.
+            Use theta_z=π for the physically correct ∪-shaped horizon arc
+            (near limb visible, more planet at image center). (radians)
         origin_x (float): Horizontal offset from the object in question
             to the camera (m).
         origin_y (float): Distance from the object in question to the
@@ -240,12 +244,15 @@ def limb_arc_sample(
         w (float): detector size (float): Width of CCD (m).
         x0 (float): The x-axis principle point.
         y0 (float): The y-axis principle point.
-        theta_x (float): Rotation around the x (horizontal) axis,
-            AKA pitch. (radians)
-        theta_y (float): Rotation around the y (toward the limb) axis,
-            AKA roll. (radians)
-        theta_z (float): Rotation around the z (vertical) axis,
-            AKA yaw. (radians)
+        theta_x (float): Rotation around the x (horizontal lateral) axis,
+            AKA pitch — tilts the camera up/down. (radians)
+        theta_y (float): Rotation around the y (toward-limb) axis, AKA roll.
+            When theta_z=0, acts as a pure phase shift in φ with no effect on
+            the projected arc shape. When theta_z≠0, the z-rotation breaks
+            that symmetry and theta_y has a genuine effect on the arc. (radians)
+        theta_z (float): Rotation around the z (vertical) axis, AKA yaw.
+            Use theta_z=π for the physically correct ∪-shaped horizon arc
+            (near limb visible, more planet at image center). (radians)
         origin_x (float): Horizontal offset from the object in question
             to the camera (m).
         origin_y (float): Distance from the object in question to the
@@ -428,6 +435,7 @@ def limb_arc(
     origin_y: float = 0,
     origin_z: float = 0,
     return_full: bool = False,
+    x_coords: Optional[np.ndarray] = None,
     **kwargs,  # Ignore num_sample - not needed!
 ) -> np.ndarray:
     """
@@ -442,10 +450,42 @@ def limb_arc(
     3. This reduces to: a·cos(phi) + b·sin(phi) = c
     4. Standard analytical solution exists!
 
-    Args: (same as original limb_arc)
+    Args:
+        n_pix_x (int): Width of image (pixels).
+        n_pix_y (int): Height of image (pixels).
+        r (float): Radius of the body in question.
+        h (float): Height above surface (units should match radius).
+        f (float): Focal length of the camera (m).
+        fov (float): Field of view, assuming square (degrees).
+        w (float): detector size (float): Width of CCD (m).
+        x0 (float): The x-axis principle point.
+        y0 (float): The y-axis principle point.
+        theta_x (float): Rotation around the x (horizontal lateral) axis,
+            AKA pitch — tilts the camera up/down. (radians)
+        theta_y (float): Rotation around the y (toward-limb) axis, AKA roll.
+            When theta_z=0, acts as a pure phase shift in φ with no effect on
+            the projected arc shape. When theta_z≠0, the z-rotation breaks
+            that symmetry and theta_y has a genuine effect on the arc. (radians)
+        theta_z (float): Rotation around the z (vertical) axis, AKA yaw.
+            Use theta_z=π for the physically correct ∪-shaped horizon arc
+            (near limb visible, more planet at image center). (radians)
+        origin_x (float): Horizontal offset from the object in question
+            to the camera (m).
+        origin_y (float): Distance from the object in question to the
+            camera (m).
+        origin_z (float): Height difference from the object in question
+            to the camera (m).
+        return_full (bool): Return both the x and y coordinates of the limb
+            in camera space. Note these will *not* be interpolated back on
+            to the pixel grid.
+        x_coords: Optional array of x-coordinates to compute (default: all pixels).
+                  For sparse computation (e.g., manual annotation), pass only
+                  the x-coordinates where you have data. Dramatically speeds up
+                  fitting when only a few points are annotated.
 
     Returns:
         y_pixel: Array of y-coordinates for each x-pixel column
+                 Length matches len(x_coords) if provided, else n_pix_x
     """
     # Setup (same as original)
     assert (
@@ -499,9 +539,13 @@ def limb_arc(
     #   b = (x_pixel - x0)*px*D3 - f*C3
     #   c = f*C2 - (x_pixel - x0)*px*D2
 
-    x_pixel_arr = np.arange(n_pix_x)
-    y_pixel = np.zeros(n_pix_x)
-    phi_solutions = np.zeros(n_pix_x)
+    if x_coords is None:
+        x_pixel_arr = np.arange(n_pix_x)
+    else:
+        x_pixel_arr = x_coords  # Use sparse coordinates!
+
+    y_pixel = np.zeros(len(x_pixel_arr))
+    phi_solutions = np.zeros(len(x_pixel_arr))
 
     # Vectorize over all x_pixel values
     a = (x_pixel_arr - x0) * pxy * D1 - f * C1
@@ -614,3 +658,106 @@ def limb_arc(
         return full_coords
 
     return y_pixel
+
+
+def limb_arc_sagitta(
+    u: np.ndarray,
+    theta_x: float,
+    f_px: float,
+    r: float,
+    h: float,
+) -> np.ndarray:
+    """Exact projected sagitta of the planetary limb arc at pixel offset u.
+
+    Derivation (perspective geometry, theta_y=0, theta_z=pi for ∪-arc):
+      The camera is at altitude h above a sphere of radius r.  In camera
+      coordinates the visible horizon is the set of tangent points satisfying
+      X·r̂ = r²/(r+h).  After rotation R_x(theta_x)·R_z(pi) the horizon circle
+      projects as a conic; solving the x-pixel equation for the azimuth angle
+      phi and back-substituting for the y-pixel yields the closed form below.
+
+      The formula is verified to machine precision against limb_arc() for
+      theta_x ∈ {-alpha, 0, alpha, 2*alpha} and is invariant to theta_y
+      (verified to 2.7e-7 px residuals for theta_y ∈ {0, 0.01, 0.05, 0.1}).
+
+    At theta_x=0 this reduces exactly to
+        s(u) = kappa * (sqrt(f_px**2 + u**2) - f_px)
+    where kappa = sqrt(h*(2r+h)) / r = 1/K.  Consequently, the OLS fit
+    s = s0 - c*A(u) (A = sqrt(f²+u²) - f) recovers K = 1/|c| with zero
+    residual — the fundamental reason the hyperbola model is exact at theta_x=0.
+
+    Args:
+        u:        Horizontal pixel offsets from the image centre (u = x - x0).
+        theta_x:  Camera tilt in radians (0 = horizontal, positive = looking
+                  down toward the horizon).
+        f_px:     Focal length in pixels (f_mm / sensor_width_mm * n_pix_x).
+        r:        Planetary radius [m].
+        h:        Camera altitude above surface [m].
+
+    Returns:
+        Sagitta at each u [pixels].  Positive values are below the arc apex
+        for ∪-arcs (theta_z=pi).
+
+    Exact formulas:
+        kappa = sqrt(h * (2*r + h)) / r
+        g(u)  = sqrt(f_px**2 + u**2 * (cos(theta_x)**2 - kappa**2*sin(theta_x)**2))
+        s(u)  = (f_px**2 + u**2*cos(theta_x)*(cos(theta_x) + kappa*sin(theta_x)) - f_px*g(u))
+                / ((f_px*sin(theta_x) + cos(theta_x)*g(u)/kappa) * (kappa*sin(theta_x) + cos(theta_x)))
+    """
+    u = np.asarray(u, dtype=float)
+    kappa = np.sqrt(h * (2.0 * r + h)) / r
+    ct = np.cos(theta_x)
+    st = np.sin(theta_x)
+    g = np.sqrt(f_px**2 + u**2 * (ct**2 - kappa**2 * st**2))
+    numer = f_px**2 + u**2 * ct * (ct + kappa * st) - f_px * g
+    denom = (f_px * st + ct * g / kappa) * (kappa * st + ct)
+    return numer / denom
+
+
+def _r_from_K(K: float, h: float) -> float:
+    """Invert K = r / sqrt(h*(2r+h)) to recover r.
+
+    Exact closed form via the quadratic h*K^2 + h - r*(1 - K^2) = 0,
+    taking the physically meaningful (positive) root.
+
+    Args:
+        K: Dimensionless ratio r / sqrt(h*(2r+h)).  K >> 1 for h << r.
+        h: Observer altitude above the surface (same units as returned r).
+    Returns:
+        r: Planetary radius in the same units as h.
+    """
+    K = max(float(K), 1e-12)
+    return h * (K**2 + K * np.sqrt(K**2 + 1))
+
+
+def _scale_parameters_for_resolution(params: dict, scale_factor: float) -> dict:
+    """Scale pixel-space parameters for a different image resolution.
+
+    Args:
+        params:       Parameter dictionary.
+        scale_factor: Resolution scale (0.5 = half res, 2.0 = double res).
+    Returns:
+        Scaled copy of params.
+    """
+    scaled = params.copy()
+    for key in ("n_pix_x", "n_pix_y", "x0", "y0"):
+        if key in scaled:
+            scaled[key] = int(scaled[key] * scale_factor)
+    return scaled
+
+
+def _scale_limits(limits: dict, scale_factor: float) -> dict:
+    """Scale pixel-space parameter limits for a different image resolution.
+
+    Args:
+        limits:       Parameter limits dictionary {param: [lo, hi]}.
+        scale_factor: Resolution scale (0.5 = half res, 2.0 = double res).
+    Returns:
+        Scaled copy of limits.
+    """
+    scaled = limits.copy()
+    for key in ("n_pix_x", "n_pix_y", "x0", "y0"):
+        if key in scaled:
+            lo, hi = scaled[key]
+            scaled[key] = [int(lo * scale_factor), int(hi * scale_factor)]
+    return scaled

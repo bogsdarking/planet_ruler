@@ -1,5 +1,5 @@
 Interactive GUI Features
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 The manual annotation interface provides several advanced features:
 
@@ -20,7 +20,7 @@ The manual annotation interface provides several advanced features:
    # - 'l': Load points from JSON file
    # - ESC or 'q': Close window
    
-   observation.detect_limb(method="manual")
+   observation.detect_limb(detection_method="manual")
 
 Working with Difficult Images
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -40,7 +40,7 @@ For challenging images with clouds, terrain, or atmospheric effects:
    observation.detect_limb(detection_method="manual")
 
 Saving and Loading Annotation Sessions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 

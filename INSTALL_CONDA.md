@@ -6,7 +6,7 @@ This guide addresses common installation issues when using Planet Ruler in conda
 
 ```bash
 # Create fresh conda environment
-conda create -n planet-ruler python=3.9
+conda create -n planet-ruler python=3.10
 conda activate planet-ruler
 
 # Install core scientific packages via conda first
@@ -33,7 +33,7 @@ pip install -e .[minimal]
 ### 2. Conda Environment Conflicts
 ```bash
 # Use pip-only environment
-conda create -n planet-ruler-pip python=3.9
+conda create -n planet-ruler-pip python=3.10
 conda activate planet-ruler-pip
 pip install -e .
 ```
