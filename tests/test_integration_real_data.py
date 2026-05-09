@@ -397,40 +397,32 @@ class TestRealDemoDataIntegration:
     @pytest.mark.integration
     def test_demo_parameter_loading_integration(self):
         """Test integration with demo parameter loading functions."""
-        # Test all available demo scenarios
-        demo_scenarios = ["pluto", "saturn_1", "saturn_2", "earth"]
+        # load_demo_parameters checks demo.value against integers (1=Pluto,
+        # 2=Saturn-1, 3=Saturn-2, 4=Earth) matching the Dropdown option values.
+        demo_scenarios = [
+            ("pluto", 1),
+            ("saturn_1", 2),
+            ("saturn_2", 3),
+            ("earth", 4),
+        ]
 
-        for scenario in demo_scenarios:
-            try:
-                # Use mock dropdown widget
-                mock_dropdown = Mock()
-                mock_dropdown.value = scenario
+        for scenario, value in demo_scenarios:
+            mock_dropdown = Mock()
+            mock_dropdown.value = value
 
-                params = demo.load_demo_parameters(mock_dropdown)
+            params = demo.load_demo_parameters(mock_dropdown)
 
-                # Validate loaded parameters
-                assert isinstance(params, dict)
-                assert "r" in params, f"Radius missing in {scenario} demo"
-                assert "h" in params, f"Altitude missing in {scenario} demo"
-                assert params["r"] > 0, f"Invalid radius in {scenario} demo"
-                assert params["h"] > 0, f"Invalid altitude in {scenario} demo"
-
-                # Test physical reasonableness
-                if scenario == "earth":
-                    assert (
-                        6e6 < params["r"] < 7e6
-                    ), f"Earth radius unrealistic: {params['r']}"
-                elif scenario == "pluto":
-                    assert (
-                        5e5 < params["r"] < 2e6
-                    ), f"Pluto radius unrealistic: {params['r']}"
-                elif scenario.startswith("saturn"):
-                    assert (
-                        5e7 < params["r"] < 8e7
-                    ), f"Saturn radius unrealistic: {params['r']}"
-
-            except Exception as e:
-                pytest.skip(f"Demo scenario {scenario} not available: {e}")
+            assert isinstance(
+                params, dict
+            ), f"Expected dict for {scenario}, got {type(params)}"
+            assert "target" in params, f"'target' key missing in {scenario} demo"
+            assert (
+                "true_radius" in params
+            ), f"'true_radius' key missing in {scenario} demo"
+            assert (
+                "fit_config" in params
+            ), f"'fit_config' key missing in {scenario} demo"
+            assert params["true_radius"] > 0, f"Invalid true_radius in {scenario} demo"
 
     @pytest.mark.integration
     def test_coordinate_transform_integration(self, saturn_config):

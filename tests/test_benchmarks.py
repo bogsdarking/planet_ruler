@@ -1143,6 +1143,490 @@ class TestVetImagesPrintResults:
 
 
 # ---------------------------------------------------------------------------
+# vet_images — main() CLI integration (mocked pairs + vet_image)
+# ---------------------------------------------------------------------------
+
+
+def _fake_vet_result(name="test_img", verdict="PASS", h_km=10.0, r_km=None):
+    from planet_ruler.benchmarks.vet_images import VetResult
+
+    return VetResult(
+        image_name=name,
+        annotation_file=f"{name}_limb_points.json",
+        fitted_altitude_km=h_km,
+        gps_altitude_km=10.5,
+        fitted_radius_km=r_km,
+        radius_error_pct=None,
+        convergence="success",
+        runtime_s=0.1,
+        verdict=verdict,
+        notes=f"h_fit={h_km:.1f} km",
+    )
+
+
+@pytest.mark.unit
+class TestVetImagesMain:
+    def _pairs(self, tmp_path):
+        img = tmp_path / "img1.jpg"
+        img.write_bytes(b"x")
+        ann = tmp_path / "img1_limb_points.json"
+        ann.write_text("{}")
+        return [(img, ann)]
+
+    def _run(self, argv, tmp_path, results=None, *, final_scan=False):
+        import sys
+        from unittest.mock import patch
+
+        from planet_ruler.benchmarks.vet_images import main
+
+        pairs = self._pairs(tmp_path)
+        if results is None:
+            results = [_fake_vet_result()]
+        old = sys.argv
+        try:
+            sys.argv = argv
+            vi_fn = "vet_image_final_scan" if final_scan else "vet_image"
+            with (
+                patch(
+                    "planet_ruler.benchmarks.vet_images._find_benchmark_dir",
+                    return_value=tmp_path,
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images.discover_pairs",
+                    return_value=pairs,
+                ),
+                patch(
+                    f"planet_ruler.benchmarks.vet_images.{vi_fn}",
+                    side_effect=results,
+                ),
+            ):
+                main()
+        finally:
+            sys.argv = old
+
+    def test_basic_run_prints_results(self, tmp_path, capsys):
+        self._run(["vet_images"], tmp_path)
+        out = capsys.readouterr().out
+        assert "PASS" in out or "Vetting" in out
+
+    def test_fast_flag_used(self, tmp_path, capsys):
+        self._run(["vet_images", "--fast"], tmp_path)
+        out = capsys.readouterr().out
+        assert len(out) > 0
+
+    def test_no_pairs_exits_with_error(self, tmp_path, capsys):
+        import sys
+        from unittest.mock import patch
+
+        from planet_ruler.benchmarks.vet_images import main
+
+        old = sys.argv
+        try:
+            sys.argv = ["vet_images"]
+            with (
+                patch(
+                    "planet_ruler.benchmarks.vet_images._find_benchmark_dir",
+                    return_value=tmp_path,
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images.discover_pairs",
+                    return_value=[],
+                ),
+                pytest.raises(SystemExit),
+            ):
+                main()
+        finally:
+            sys.argv = old
+
+    def test_image_filter_passes_through(self, tmp_path, capsys):
+        import sys
+        from unittest.mock import patch, call
+
+        from planet_ruler.benchmarks.vet_images import main
+
+        pairs = self._pairs(tmp_path)
+        old = sys.argv
+        try:
+            sys.argv = ["vet_images", "--image", "img1"]
+            with (
+                patch(
+                    "planet_ruler.benchmarks.vet_images._find_benchmark_dir",
+                    return_value=tmp_path,
+                ) as _fbd,
+                patch(
+                    "planet_ruler.benchmarks.vet_images.discover_pairs",
+                    return_value=pairs,
+                ) as mock_dp,
+                patch(
+                    "planet_ruler.benchmarks.vet_images.vet_image",
+                    return_value=_fake_vet_result(),
+                ),
+            ):
+                main()
+            # image_filter should be ["img1"]
+            _, kwargs = mock_dp.call_args
+            assert kwargs.get("image_filter") == ["img1"] or mock_dp.call_args[0][
+                1
+            ] == ["img1"]
+        finally:
+            sys.argv = old
+
+    def test_log_flag_saves_csv(self, tmp_path, capsys):
+        log_path = tmp_path / "log.csv"
+        self._run(["vet_images", "--log", str(log_path)], tmp_path)
+        assert log_path.exists()
+
+    def test_warn_result_printed(self, tmp_path, capsys):
+        self._run(
+            ["vet_images"],
+            tmp_path,
+            results=[_fake_vet_result(verdict="WARN")],
+        )
+        out = capsys.readouterr().out
+        assert "WARN" in out
+
+    def test_fail_result_printed(self, tmp_path, capsys):
+        self._run(
+            ["vet_images"],
+            tmp_path,
+            results=[_fake_vet_result(verdict="FAIL", h_km=50.0)],
+        )
+        out = capsys.readouterr().out
+        assert "FAIL" in out
+
+    def test_final_scan_mode(self, tmp_path, capsys):
+        self._run(
+            ["vet_images", "--final-scan"],
+            tmp_path,
+            results=[_fake_vet_result()],
+            final_scan=True,
+        )
+        out = capsys.readouterr().out
+        assert len(out) > 0
+
+    def test_update_exif_requires_two_step(self, tmp_path):
+        import sys
+        from unittest.mock import patch
+
+        from planet_ruler.benchmarks.vet_images import main
+
+        old = sys.argv
+        try:
+            sys.argv = ["vet_images", "--update-exif"]
+            with (
+                patch(
+                    "planet_ruler.benchmarks.vet_images._find_benchmark_dir",
+                    return_value=tmp_path,
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images.discover_pairs",
+                    return_value=self._pairs(tmp_path),
+                ),
+                pytest.raises(SystemExit),
+            ):
+                main()
+        finally:
+            sys.argv = old
+
+    def test_two_step_flag(self, tmp_path, capsys):
+        import sys
+        from unittest.mock import patch
+
+        from planet_ruler.benchmarks.vet_images import main
+
+        pairs = self._pairs(tmp_path)
+        old = sys.argv
+        try:
+            sys.argv = ["vet_images", "--two-step"]
+            with (
+                patch(
+                    "planet_ruler.benchmarks.vet_images._find_benchmark_dir",
+                    return_value=tmp_path,
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images.discover_pairs",
+                    return_value=pairs,
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images.vet_image",
+                    return_value=_fake_vet_result(),
+                ),
+            ):
+                main()
+        finally:
+            sys.argv = old
+        out = capsys.readouterr().out
+        assert len(out) > 0
+
+    def test_multiple_images_loop(self, tmp_path, capsys):
+        import sys
+        from unittest.mock import patch
+
+        from planet_ruler.benchmarks.vet_images import main
+
+        img1 = tmp_path / "img1.jpg"
+        img1.write_bytes(b"x")
+        ann1 = tmp_path / "img1_limb_points.json"
+        ann1.write_text("{}")
+        img2 = tmp_path / "img2.jpg"
+        img2.write_bytes(b"x")
+        ann2 = tmp_path / "img2_limb_points.json"
+        ann2.write_text("{}")
+        pairs = [(img1, ann1), (img2, ann2)]
+
+        old = sys.argv
+        try:
+            sys.argv = ["vet_images"]
+            with (
+                patch(
+                    "planet_ruler.benchmarks.vet_images._find_benchmark_dir",
+                    return_value=tmp_path,
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images.discover_pairs",
+                    return_value=pairs,
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images.vet_image",
+                    side_effect=[
+                        _fake_vet_result("img1", "PASS"),
+                        _fake_vet_result("img2", "WARN"),
+                    ],
+                ),
+            ):
+                main()
+        finally:
+            sys.argv = old
+        out = capsys.readouterr().out
+        assert "img1" in out or "Vetting 2" in out
+
+    def test_no_pairs_with_image_filter_prints_filter(self, tmp_path, capsys):
+        import sys
+        from unittest.mock import patch
+
+        from planet_ruler.benchmarks.vet_images import main
+
+        old = sys.argv
+        try:
+            sys.argv = ["vet_images", "--image", "missing_img"]
+            with (
+                patch(
+                    "planet_ruler.benchmarks.vet_images._find_benchmark_dir",
+                    return_value=tmp_path,
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images.discover_pairs",
+                    return_value=[],
+                ),
+                pytest.raises(SystemExit),
+            ):
+                main()
+        finally:
+            sys.argv = old
+        err = capsys.readouterr().err
+        assert "missing_img" in err
+
+    def test_final_scan_two_step_mutual_exclusion(self, tmp_path):
+        import sys
+        from unittest.mock import patch
+
+        from planet_ruler.benchmarks.vet_images import main
+
+        old = sys.argv
+        try:
+            sys.argv = ["vet_images", "--final-scan", "--two-step"]
+            with (
+                patch(
+                    "planet_ruler.benchmarks.vet_images._find_benchmark_dir",
+                    return_value=tmp_path,
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images.discover_pairs",
+                    return_value=self._pairs(tmp_path),
+                ),
+                pytest.raises(SystemExit),
+            ):
+                main()
+        finally:
+            sys.argv = old
+
+    def test_update_exif_path_with_pass_and_fail(self, tmp_path, capsys):
+        import sys
+        from unittest.mock import patch
+
+        from planet_ruler.benchmarks.vet_images import main, VetResult
+
+        pairs = self._pairs(tmp_path)
+        pass_result = _fake_vet_result("img1", "PASS", h_km=10.0)
+        fail_result = VetResult(
+            image_name="img2",
+            annotation_file="img2_limb_points.json",
+            fitted_altitude_km=None,
+            gps_altitude_km=None,
+            fitted_radius_km=None,
+            radius_error_pct=None,
+            convergence="error: bad",
+            runtime_s=0.1,
+            verdict="FAIL",
+            notes="error",
+        )
+        # Add a second pair for img2
+        img2 = tmp_path / "img2.jpg"
+        img2.write_bytes(b"x")
+        ann2 = tmp_path / "img2_limb_points.json"
+        ann2.write_text("{}")
+        pairs2 = pairs + [(img2, ann2)]
+
+        old = sys.argv
+        try:
+            sys.argv = ["vet_images", "--two-step", "--update-exif"]
+            with (
+                patch(
+                    "planet_ruler.benchmarks.vet_images._find_benchmark_dir",
+                    return_value=tmp_path,
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images.discover_pairs",
+                    return_value=pairs2,
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images.vet_image",
+                    side_effect=[pass_result, fail_result],
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images._update_exif_altitude"
+                ) as mock_update,
+            ):
+                main()
+        finally:
+            sys.argv = old
+
+        # PASS result should have EXIF updated, FAIL should be skipped
+        assert mock_update.call_count == 1
+
+    def test_update_exif_skips_synth_images(self, tmp_path, capsys):
+        import sys
+        from unittest.mock import patch
+
+        from planet_ruler.benchmarks.vet_images import main
+
+        synth_result = _fake_vet_result("synth_iphone_13_h10km_clean", "PASS")
+        img = tmp_path / "synth_iphone_13_h10km_clean.jpg"
+        img.write_bytes(b"x")
+        ann = tmp_path / "synth_iphone_13_h10km_clean_limb_points.json"
+        ann.write_text("{}")
+        pairs = [(img, ann)]
+
+        old = sys.argv
+        try:
+            sys.argv = ["vet_images", "--two-step", "--update-exif"]
+            with (
+                patch(
+                    "planet_ruler.benchmarks.vet_images._find_benchmark_dir",
+                    return_value=tmp_path,
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images.discover_pairs",
+                    return_value=pairs,
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images.vet_image",
+                    return_value=synth_result,
+                ),
+                patch(
+                    "planet_ruler.benchmarks.vet_images._update_exif_altitude"
+                ) as mock_update,
+            ):
+                main()
+        finally:
+            sys.argv = old
+
+        # synth_ images should NOT have EXIF updated
+        mock_update.assert_not_called()
+        out = capsys.readouterr().out
+        assert "synth" in out or "Skipped" in out
+
+
+# ---------------------------------------------------------------------------
+# vet_images — discover_pairs edge cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestDiscoverPairsEdgeCases:
+    def test_image_missing_pair_skipped(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import discover_pairs
+
+        ann_dir = tmp_path / "annotations"
+        ann_dir.mkdir()
+        images_dir = tmp_path / "images"
+        images_dir.mkdir()
+        # Annotation exists but no matching image
+        (ann_dir / "orphan_limb_points.json").write_text("{}")
+
+        pairs = discover_pairs(tmp_path)
+        assert pairs == []
+
+    def test_example_json_skipped(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import discover_pairs
+
+        ann_dir = tmp_path / "annotations"
+        ann_dir.mkdir()
+        images_dir = tmp_path / "images"
+        images_dir.mkdir()
+        (ann_dir / "example.json").write_text("{}")
+
+        pairs = discover_pairs(tmp_path)
+        assert pairs == []
+
+    def test_both_annotation_dirs_searched(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import discover_pairs
+
+        images_dir = tmp_path / "images"
+        images_dir.mkdir()
+        ann_dir = tmp_path / "annotations"
+        ann_dir.mkdir()
+        # Put annotation in annotations/ and image in images/
+        (ann_dir / "testimg_limb_points.json").write_text("{}")
+        (images_dir / "testimg.jpg").write_bytes(b"x")
+
+        pairs = discover_pairs(tmp_path)
+        assert len(pairs) == 1
+
+    def test_no_duplicate_stems(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import discover_pairs
+
+        images_dir = tmp_path / "images"
+        images_dir.mkdir()
+        ann_dir = tmp_path / "annotations"
+        ann_dir.mkdir()
+        # Same stem in both annotation dirs
+        (ann_dir / "img_limb_points.json").write_text("{}")
+        (images_dir / "img_limb_points.json").write_text("{}")
+        (images_dir / "img.jpg").write_bytes(b"x")
+
+        pairs = discover_pairs(tmp_path)
+        # Should only appear once (deduplication by seen_stems)
+        assert len(pairs) == 1
+
+
+# ---------------------------------------------------------------------------
+# vet_images — _load_annotation_as_target edge case
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestLoadAnnotationEdgeCases:
+    def test_invalid_format_raises(self, tmp_path):
+        from planet_ruler.benchmarks.vet_images import _load_annotation_as_target
+
+        path = tmp_path / "bad.json"
+        path.write_text('{"image_path": "x.jpg", "unknown_key": []}')
+        with pytest.raises(ValueError):
+            _load_annotation_as_target(path, 200)
+
+
+# ---------------------------------------------------------------------------
 # BenchmarkRunner — _make_grid_scenario_name (additional cases)
 # ---------------------------------------------------------------------------
 
