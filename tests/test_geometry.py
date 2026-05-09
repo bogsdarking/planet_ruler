@@ -24,6 +24,8 @@ from planet_ruler.geometry import (
     intrinsic_transform,
     extrinsic_transform,
     limb_arc,
+    _scale_limits,
+    _scale_parameters_for_resolution as _scale_params,
 )
 from planet_ruler.fit import estimate_radius_via_sagitta, SagittaFitter
 
@@ -784,6 +786,100 @@ class TestSagittaEstimatorExtensions:
         result = fitter.fit()
         r_fitted = result["updated_init"]["r"]
         assert abs(r_fitted - r_true) / r_true < 0.01
+
+
+class TestLimbArcEdgeCases:
+    """Tests for limb_arc proxy/out-of-FOV paths and all_in_front handling."""
+
+    _BASE = dict(r=6_371_000, h=10_000, f=0.050, w=0.036)
+
+    def test_limb_in_fov_returns_array_of_correct_length(self):
+        arc = limb_arc(n_pix_x=200, n_pix_y=150, theta_z=np.pi, **self._BASE)
+        assert len(arc) == 200
+
+    def test_limb_out_of_fov_returns_proxy_flat_line(self):
+        # theta_x=pi/2 tilts camera straight down — limb won't land in FOV
+        arc = limb_arc(
+            n_pix_x=200, n_pix_y=150, theta_x=np.pi / 2, theta_z=0.0, **self._BASE
+        )
+        assert len(arc) == 200
+        # proxy line is constant (sign * y_proxy)
+        assert np.ptp(arc) < 1e-6
+
+    def test_limb_all_in_front_deduplicated(self):
+        # High altitude means entire limb circle is in front of camera
+        arc = limb_arc(
+            n_pix_x=400,
+            n_pix_y=300,
+            h=6_000_000,
+            theta_z=np.pi,
+            **{k: v for k, v in self._BASE.items() if k != "h"},
+        )
+        assert len(arc) == 400
+
+    def test_return_full_gives_2d_array(self):
+        result = limb_arc(
+            n_pix_x=100, n_pix_y=80, theta_z=np.pi, return_full=True, **self._BASE
+        )
+        assert result.ndim == 2
+        assert result.shape[1] == 2
+
+    def test_proxy_sign_is_continuous_near_boundary(self):
+        # Rotating theta_z through zero crosses the out-of-FOV boundary;
+        # the proxy value should not have a discontinuous jump.
+        values = []
+        for tz in np.linspace(-0.1, 0.1, 11):
+            arc = limb_arc(n_pix_x=100, n_pix_y=80, theta_z=tz, **self._BASE)
+            values.append(arc[50])
+        diffs = np.abs(np.diff(values))
+        assert np.all(diffs < 200), "Proxy limb has discontinuous jump near FOV edge"
+
+
+class TestScaleHelpers:
+    """Tests for _scale_params and _scale_limits pixel-space rescaling."""
+
+    def test_scale_params_halves_pixel_keys(self):
+        params = {"n_pix_x": 4000, "n_pix_y": 3000, "x0": 2000, "y0": 1500, "f": 0.05}
+        scaled = _scale_params(params, 0.5)
+        assert scaled["n_pix_x"] == 2000
+        assert scaled["n_pix_y"] == 1500
+        assert scaled["x0"] == 1000
+        assert scaled["y0"] == 750
+        assert scaled["f"] == 0.05  # non-pixel key unchanged
+
+    def test_scale_params_doubles_pixel_keys(self):
+        params = {"n_pix_x": 100, "n_pix_y": 80, "x0": 50, "y0": 40}
+        scaled = _scale_params(params, 2.0)
+        assert scaled["n_pix_x"] == 200
+        assert scaled["n_pix_y"] == 160
+
+    def test_scale_params_missing_keys_ignored(self):
+        params = {"r": 6_371_000, "h": 10_000}
+        scaled = _scale_params(params, 0.5)
+        assert scaled == params
+
+    def test_scale_params_does_not_mutate_original(self):
+        params = {"n_pix_x": 1000, "n_pix_y": 800}
+        _scale_params(params, 0.5)
+        assert params["n_pix_x"] == 1000
+
+    def test_scale_limits_halves_pixel_bounds(self):
+        limits = {"n_pix_x": [0, 4000], "n_pix_y": [0, 3000], "r": [1e6, 1e7]}
+        scaled = _scale_limits(limits, 0.5)
+        assert scaled["n_pix_x"] == [0, 2000]
+        assert scaled["n_pix_y"] == [0, 1500]
+        assert scaled["r"] == [1e6, 1e7]  # non-pixel key unchanged
+
+    def test_scale_limits_doubles_pixel_bounds(self):
+        limits = {"x0": [400, 600], "y0": [300, 500]}
+        scaled = _scale_limits(limits, 2.0)
+        assert scaled["x0"] == [800, 1200]
+        assert scaled["y0"] == [600, 1000]
+
+    def test_scale_limits_does_not_mutate_original(self):
+        limits = {"n_pix_x": [0, 1000]}
+        _scale_limits(limits, 0.5)
+        assert limits["n_pix_x"] == [0, 1000]
 
 
 if __name__ == "__main__":

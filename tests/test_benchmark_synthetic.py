@@ -253,3 +253,192 @@ class TestWriteAnnotation:
             path, tmp_path / "img.jpg", 400, 300, [[10.0, 200.0]]
         )
         assert result == path
+
+
+# ---------------------------------------------------------------------------
+# generate_canonical_dataset
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestGenerateCanonicalDataset:
+    def test_generates_expected_number_of_cases(self, tmp_path):
+        from planet_ruler.benchmarks.synthetic import generate_canonical_dataset
+
+        results = generate_canonical_dataset(tmp_path)
+        # 3 cameras × 5 altitude/noise cases = 15 scenarios
+        assert len(results) == 15
+
+    def test_creates_images_and_annotations(self, tmp_path):
+        from planet_ruler.benchmarks.synthetic import generate_canonical_dataset
+
+        generate_canonical_dataset(tmp_path)
+        images = list((tmp_path / "images").glob("*.jpg"))
+        annots = list((tmp_path / "annotations").glob("*_limb_points.json"))
+        assert len(images) == 15
+        assert len(annots) == 15
+
+    def test_annotations_moved_to_annotations_dir(self, tmp_path):
+        from planet_ruler.benchmarks.synthetic import generate_canonical_dataset
+
+        generate_canonical_dataset(tmp_path)
+        # annotations should NOT be in images/
+        stray = list((tmp_path / "images").glob("*_limb_points.json"))
+        assert stray == []
+
+    def test_annotation_image_path_updated(self, tmp_path):
+        import json as json_mod
+
+        from planet_ruler.benchmarks.synthetic import generate_canonical_dataset
+
+        results = generate_canonical_dataset(tmp_path)
+        annot_path = results[0]["annotation_path"]
+        with open(annot_path) as f:
+            data = json_mod.load(f)
+        # image_path in annotation should point to the images/ subdirectory
+        assert "images" in data["image_path"]
+
+
+# ---------------------------------------------------------------------------
+# CLI — _parse_args and main
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestParseArgs:
+    def test_single_subcommand_parses_h(self):
+        from planet_ruler.benchmarks.synthetic import _parse_args
+
+        args = _parse_args.__wrapped__ if hasattr(_parse_args, "__wrapped__") else None
+        import sys
+
+        old = sys.argv
+        try:
+            sys.argv = ["synthetic", "single", "--h", "10000"]
+            from planet_ruler.benchmarks.synthetic import _parse_args as pa
+
+            result = pa()
+            assert result.command == "single"
+            assert result.h == 10000.0
+        finally:
+            sys.argv = old
+
+    def test_single_defaults(self):
+        import sys
+
+        from planet_ruler.benchmarks.synthetic import _parse_args
+
+        old = sys.argv
+        try:
+            sys.argv = ["synthetic", "single", "--h", "5000"]
+            result = _parse_args()
+            assert result.r == 6371000.0
+            assert result.noise_sigma == 0.0
+            assert result.seed == 0
+            assert result.n_points == 11
+        finally:
+            sys.argv = old
+
+    def test_canonical_subcommand_requires_output_dir(self):
+        import sys
+
+        from planet_ruler.benchmarks.synthetic import _parse_args
+
+        old = sys.argv
+        try:
+            sys.argv = ["synthetic", "canonical", "--output-dir", "/tmp/out"]
+            result = _parse_args()
+            assert result.command == "canonical"
+        finally:
+            sys.argv = old
+
+    def test_no_subcommand_gives_none_command(self):
+        import sys
+
+        from planet_ruler.benchmarks.synthetic import _parse_args
+
+        old = sys.argv
+        try:
+            sys.argv = ["synthetic"]
+            result = _parse_args()
+            assert result.command is None
+        finally:
+            sys.argv = old
+
+
+@pytest.mark.unit
+class TestMainFunction:
+    def test_main_single_no_output(self, capsys):
+        import sys
+
+        from planet_ruler.benchmarks.synthetic import main
+
+        old = sys.argv
+        try:
+            sys.argv = ["synthetic", "single", "--h", "10000", "--n-points", "5"]
+            main()
+        finally:
+            sys.argv = old
+        out = capsys.readouterr().out
+        assert "Generated" in out
+        assert "limb points" in out
+
+    def test_main_single_with_output_dir(self, tmp_path, capsys):
+        import sys
+
+        from planet_ruler.benchmarks.synthetic import main
+
+        old = sys.argv
+        try:
+            sys.argv = [
+                "synthetic",
+                "single",
+                "--h",
+                "8000",
+                "--n-points",
+                "5",
+                "--output-dir",
+                str(tmp_path),
+                "--name",
+                "test_out",
+            ]
+            main()
+        finally:
+            sys.argv = old
+        assert (tmp_path / "test_out.jpg").exists()
+        out = capsys.readouterr().out
+        assert "Image:" in out
+
+    def test_main_no_subcommand_prints_help(self, capsys):
+        import sys
+
+        from planet_ruler.benchmarks.synthetic import main
+
+        old = sys.argv
+        try:
+            sys.argv = ["synthetic"]
+            main()
+        finally:
+            sys.argv = old
+        out = capsys.readouterr().out
+        assert "subcommand" in out
+
+    def test_main_canonical(self, tmp_path, capsys):
+        import sys
+
+        from planet_ruler.benchmarks.synthetic import main
+
+        old = sys.argv
+        try:
+            sys.argv = [
+                "synthetic",
+                "canonical",
+                "--output-dir",
+                str(tmp_path),
+            ]
+            main()
+        finally:
+            sys.argv = old
+        out = capsys.readouterr().out
+        assert "Done" in out
+        assert "cases" in out
