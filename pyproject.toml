@@ -103,6 +103,9 @@ Documentation = "https://bogsdarking.github.io/planet_ruler/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["planet_ruler"]
+exclude = [
+    "planet_ruler/benchmarks",
+]
 
 [tool.hatch.build.targets.sdist]
 exclude = [
