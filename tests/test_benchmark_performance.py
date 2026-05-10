@@ -42,7 +42,7 @@ from planet_ruler.geometry import (
     intrinsic_transform,
     extrinsic_transform,
 )
-from planet_ruler.fit import CostFunction, unpack_parameters, pack_parameters
+from planet_ruler.fit import L2CostFunction, unpack_parameters, pack_parameters
 from planet_ruler.image import gradient_break, smooth_limb, MaskSegmenter
 from planet_ruler.observation import LimbObservation, PlanetObservation
 from planet_ruler.camera import (
@@ -197,7 +197,7 @@ class TestFitBenchmarks:
             noise = np.random.normal(0, params.get("noise", 1), n_points)
             return observed + noise
 
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=observed,
             function=dummy_function,
             free_parameters=["radius", "altitude", "noise"],
@@ -220,7 +220,7 @@ class TestFitBenchmarks:
             results = {}
             init_params = {"param1": 1.0}
             for loss_type in ["l1", "l2", "log-l1"]:
-                cost_func = CostFunction(
+                cost_func = L2CostFunction(
                     target=observed,
                     function=lambda **p: predicted,
                     free_parameters=["param1"],
@@ -525,6 +525,7 @@ class TestIntegratedWorkflowBenchmarks:
 class TestCameraParameterBenchmarks:
     """Benchmark tests for camera parameter extraction pipeline."""
 
+    @pytest.mark.real_data
     def test_extract_exif_benchmark(self, benchmark):
         """Benchmark EXIF data extraction from image files."""
         # Use a test image from the demo directory
@@ -536,6 +537,7 @@ class TestCameraParameterBenchmarks:
         result = benchmark(extract_exif_data)
         assert result is not None
 
+    @pytest.mark.real_data
     def test_extract_camera_parameters_benchmark(self, benchmark):
         """Benchmark complete camera parameter extraction workflow."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
@@ -548,6 +550,7 @@ class TestCameraParameterBenchmarks:
         assert "image_width_px" in result
         assert "image_height_px" in result
 
+    @pytest.mark.real_data
     def test_camera_model_detection_benchmark(self, benchmark):
         """Benchmark camera model detection from EXIF."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
@@ -559,6 +562,7 @@ class TestCameraParameterBenchmarks:
         result = benchmark(detect_camera_model)
         # Result may be None for test images without camera info
 
+    @pytest.mark.real_data
     def test_focal_length_extraction_benchmark(self, benchmark):
         """Benchmark focal length extraction from EXIF."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
@@ -569,6 +573,7 @@ class TestCameraParameterBenchmarks:
 
         benchmark(extract_focal_length)
 
+    @pytest.mark.real_data
     def test_gps_altitude_extraction_benchmark(self, benchmark):
         """Benchmark GPS altitude extraction from EXIF."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
@@ -582,6 +587,7 @@ class TestCameraParameterBenchmarks:
 class TestConfigurationBenchmarks:
     """Benchmark tests for configuration generation and validation."""
 
+    @pytest.mark.real_data
     def test_create_config_from_image_benchmark(self, benchmark):
         """Benchmark automatic configuration generation from image."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
@@ -591,8 +597,6 @@ class TestConfigurationBenchmarks:
                 image_path=image_path,
                 altitude_m=10000,
                 planet="earth",
-                perturbation_factor=0.5,
-                seed=0,
             )
 
         result = benchmark(create_config)
@@ -600,6 +604,7 @@ class TestConfigurationBenchmarks:
         assert "init_parameter_values" in result
         assert "parameter_limits" in result
 
+    @pytest.mark.real_data
     def test_config_validation_benchmark(self, benchmark):
         """Benchmark configuration validation workflow."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
@@ -607,7 +612,6 @@ class TestConfigurationBenchmarks:
             image_path=image_path,
             altitude_m=10000,
             planet="earth",
-            seed=0,
         )
 
         def validate_config():
@@ -631,6 +635,7 @@ class TestLimbDetectionBenchmarks:
         return obs
 
     @pytest.mark.slow
+    @pytest.mark.real_data
     def test_gradient_field_detection_benchmark(
         self, benchmark, test_observation_for_detection
     ):
@@ -640,12 +645,11 @@ class TestLimbDetectionBenchmarks:
 
         def run_gradient_field():
             # Use a minimal fitting to benchmark the gradient field approach
-            obs.fit_limb(
-                loss_function="gradient_field",
+            obs.fit_gradient(
                 minimizer="dual-annealing",
-                max_iter=150,  # More iterations for robust analysis
+                max_iter=150,
                 verbose=False,
-                resolution_stages=[2, 1],  # Quick multi-resolution
+                resolution_stages=[2, 1],
                 image_smoothing=2.0,
                 kernel_smoothing=8.0,
             )
@@ -667,6 +671,7 @@ class TestLimbDetectionBenchmarks:
         # (using fewer iterations than a real analysis would)
 
     @pytest.mark.slow
+    @pytest.mark.real_data
     def test_manual_limb_detection_benchmark(
         self, benchmark, test_observation_for_detection
     ):
@@ -712,7 +717,7 @@ class TestLimbDetectionBenchmarks:
             obs.register_limb(limb_target)
 
             # Fit using L1 loss (standard for manual detection)
-            obs.fit_limb(
+            obs.fit_arc(
                 loss_function="l1",
                 minimizer="differential-evolution",
                 max_iter=300,
@@ -844,6 +849,7 @@ class TestFullPipelineBenchmarks:
     """Benchmark tests for complete end-to-end workflows."""
 
     @pytest.mark.slow
+    @pytest.mark.real_data
     def test_full_pipeline_earth_benchmark(self, benchmark):
         """Benchmark complete Earth measurement pipeline."""
         image_path = "demo/images/50644513538_56228a2027_o.jpg"
@@ -857,7 +863,6 @@ class TestFullPipelineBenchmarks:
                 image_path=image_path,
                 altitude_m=418_000,
                 planet="earth",
-                seed=0,
             )
 
             # Step 3: Validate configuration
@@ -867,15 +872,14 @@ class TestFullPipelineBenchmarks:
             obs = LimbObservation(image_filepath=image_path, fit_config=config)
 
             # Step 5: Quick gradient-field fit (for speed)
-            obs.fit_limb(
-                loss_function="gradient_field",
+            obs.fit_gradient(
                 minimizer="differential-evolution",
                 minimizer_preset="scipy-default",
                 max_iter=300,
                 verbose=False,
                 resolution_stages=[8, 4],
-                image_smoothing=2.0,  # Remove high-frequency image artifacts
-                kernel_smoothing=8.0,  # Smooth gradient field for stability
+                image_smoothing=2.0,
+                kernel_smoothing=8.0,
                 prefer_direction=None,
                 seed=0,
             )
@@ -909,6 +913,7 @@ class TestFullPipelineBenchmarks:
                 UserWarning,
             )
 
+    @pytest.mark.real_data
     def test_configuration_generation_workflow_benchmark(self, benchmark):
         """Benchmark the workflow from image to ready-to-fit configuration."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
@@ -919,7 +924,7 @@ class TestFullPipelineBenchmarks:
 
             # Generate configuration
             config = create_config_from_image(
-                image_path=image_path, altitude_m=10000, planet="earth", seed=0
+                image_path=image_path, altitude_m=10000, planet="earth"
             )
 
             # Validate configuration
@@ -931,6 +936,7 @@ class TestFullPipelineBenchmarks:
         assert result is not None
         assert "init_parameter_values" in result
 
+    @pytest.mark.real_data
     def test_observation_creation_and_setup_benchmark(self, benchmark):
         """Benchmark observation setup workflow."""
         image_path = "demo/images/2013-08-05_22-42-14_Wikimania.jpg"
@@ -939,7 +945,6 @@ class TestFullPipelineBenchmarks:
             image_path=image_path,
             altitude_m=10000,
             planet="earth",
-            seed=0,
         )
 
         def obs_setup_workflow():

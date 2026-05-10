@@ -4,7 +4,7 @@ Performance Benchmarks
 Planet Ruler includes comprehensive performance benchmarking to track execution speeds and identify optimization opportunities.
 
 Benchmark Overview
------------------
+------------------
 
 The benchmark suite measures performance across 21 critical functions, covering:
 
@@ -48,10 +48,10 @@ Detailed Benchmark Options
    pytest --benchmark-only --benchmark-memory
 
 Performance Results
-------------------
+-------------------
 
 Core Geometry Functions
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 **Fast Mathematical Operations (< 100 ns):**
 
@@ -108,7 +108,7 @@ Core Geometry Functions
      - 833K ops/sec
 
 Image Processing Functions
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Image Operations (millisecond scale):**
 
@@ -214,10 +214,10 @@ Optimization and Fitting
      - < 1 MB
 
 Scaling Analysis
----------------
+----------------
 
 Image Size Performance
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 Performance scaling with image resolution:
 
@@ -245,7 +245,7 @@ Performance scaling with image resolution:
 * **4000×2400**: 742.3 ms (4.0× slower, near-linear scaling)
 
 Parameter Count Scaling
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Optimization performance vs. number of free parameters:
 
@@ -271,10 +271,10 @@ Optimization performance vs. number of free parameters:
      - 0.015
 
 Memory Usage Analysis
---------------------
+---------------------
 
 Memory Profiling
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
@@ -295,10 +295,10 @@ Memory Profiling
 * **Plotting/visualization**: +25 MB per figure
 
 Performance Optimization Tips
-----------------------------
+-----------------------------
 
 Image Processing Optimization
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 1. **Reduce resolution for development:**
 
@@ -324,7 +324,7 @@ Image Processing Optimization
           results = list(executor.map(process_image, image_list))
 
 Parameter Fitting Optimization
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 1. **Reduce population size for development:**
 
@@ -347,7 +347,7 @@ Parameter Fitting Optimization
       init_params = {"r": 6371000, "h": 418000}  # Close to expected
 
 Memory Optimization
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 1. **Process images sequentially for large datasets:**
 
@@ -371,13 +371,13 @@ Memory Optimization
    .. code-block:: python
    
       # Reduce segmentation resolution
-      obs.detect_limb(method="segmentation", points_per_side=16)
+      obs.detect_limb(detection_method="segmentation", points_per_side=16)
 
 Benchmarking Custom Code
------------------------
+------------------------
 
 Adding New Benchmarks
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -393,7 +393,7 @@ Adding New Benchmarks
        assert result.shape == (1000,)
 
 Benchmark Fixtures
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -408,7 +408,7 @@ Benchmark Fixtures
        return LimbObservation("demo/earth.jpg", "config/earth_iss_1.yaml")
 
 Comparative Benchmarking
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -418,15 +418,15 @@ Comparative Benchmarking
        obs = LimbObservation("test_image.jpg", "config.yaml")
        
        if method == "segmentation":
-           benchmark(obs.detect_limb, method="segmentation")
+           benchmark(obs.detect_limb, detection_method="segmentation")
        else:
-           benchmark(obs.detect_limb, method="gradient-break", window_length=21)
+           benchmark(obs.detect_limb, detection_method="gradient-break", window_length=21)
 
 Performance Regression Testing
 ------------------------------
 
 Baseline Management
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
@@ -440,7 +440,7 @@ Baseline Management
    pytest --benchmark-only --benchmark-compare-fail=max:10%
 
 CI/CD Integration
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 .. code-block:: yaml
 
@@ -484,7 +484,7 @@ Line Profiling
    kernprof -l -v planet_ruler/geometry.py
 
 Memory Profiling
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -501,7 +501,7 @@ Performance Best Practices
 --------------------------
 
 Development Guidelines
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 1. **Benchmark new features**: Add benchmarks for performance-critical code
 2. **Monitor regression**: Use CI/CD to catch performance degradation
@@ -510,7 +510,7 @@ Development Guidelines
 5. **Document performance**: Include timing expectations in docstrings
 
 Optimization Priorities
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 **High Impact:**
 
@@ -531,34 +531,34 @@ Optimization Priorities
 * Small data structure operations
 
 Hardware Considerations
-----------------------
+-----------------------
 
 CPU Performance
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 * **Single-threaded**: Most geometry and fitting operations
 * **Multi-threaded**: Image processing can benefit from parallel execution
 * **Memory bound**: Large image operations limited by RAM bandwidth
 
 GPU Acceleration
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 * **Segmentation**: Segment Anything benefits significantly from GPU
 * **PyTorch operations**: Some coordinate transforms could use GPU tensors
 * **Memory considerations**: GPU memory limits for large images
 
 Storage Performance  
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 * **SSD recommended**: Faster image loading and processing
 * **Network storage**: Can be bottleneck for large image datasets
 * **Compression**: JPEG vs PNG trade-off between size and loading speed
 
 Benchmark Interpretation
------------------------
+------------------------
 
 Understanding Results
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 * **Mean vs Median**: Use median for skewed distributions
 * **Standard deviation**: Indicates measurement reliability
@@ -566,7 +566,7 @@ Understanding Results
 * **Operations per second**: Intuitive throughput metric
 
 Statistical Significance
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 * **Multiple runs**: Benchmarks run multiple iterations for statistical validity
 * **Warmup rounds**: JIT compilation and cache effects
@@ -581,7 +581,7 @@ Performance Targets
 * **Scalability**: Linear or sub-linear scaling with data size
 
 Contributing Performance Improvements
------------------------------------
+-------------------------------------
 
 When optimizing Planet Ruler:
 

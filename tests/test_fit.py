@@ -22,7 +22,8 @@ from unittest.mock import MagicMock, Mock
 from planet_ruler.fit import (
     unpack_parameters,
     pack_parameters,
-    CostFunction,
+    L2CostFunction,
+    GradientFieldCostFunction,
     calculate_parameter_uncertainty,
     format_parameter_result,
     _validate_fit_results,
@@ -105,7 +106,7 @@ class TestParameterHandling:
 
 
 class TestCostFunction:
-    """Test the CostFunction optimization wrapper class"""
+    """Test the L2CostFunction optimization wrapper class"""
 
     @pytest.fixture
     def simple_target(self):
@@ -124,8 +125,8 @@ class TestCostFunction:
 
     @pytest.fixture
     def cost_func_basic(self, simple_target, simple_function):
-        """Basic CostFunction instance for testing"""
-        return CostFunction(
+        """Basic L2CostFunction instance for testing"""
+        return L2CostFunction(
             target=simple_target,
             function=simple_function,
             free_parameters=["m", "b"],
@@ -134,7 +135,7 @@ class TestCostFunction:
 
     def test_cost_function_initialization(self, simple_target, simple_function):
         """Test CostFunction initialization"""
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=simple_target,
             function=simple_function,
             free_parameters=["m", "b"],
@@ -202,7 +203,7 @@ class TestCostFunction:
 
     def test_cost_l1_loss(self, simple_target, simple_function):
         """Test L1 (absolute) loss function"""
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=simple_target,
             function=simple_function,
             free_parameters=["m", "b"],
@@ -220,7 +221,7 @@ class TestCostFunction:
 
     def test_cost_log_l1_loss(self, simple_target, simple_function):
         """Test log-L1 loss function"""
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=simple_target,
             function=simple_function,
             free_parameters=["m", "b"],
@@ -237,7 +238,7 @@ class TestCostFunction:
     def test_cost_invalid_loss_function(self, simple_target, simple_function):
         """Test that invalid loss function raises ValueError during initialization"""
         with pytest.raises(ValueError, match="Unrecognized loss function"):
-            CostFunction(
+            L2CostFunction(
                 target=simple_target,
                 function=simple_function,
                 free_parameters=["m", "b"],
@@ -249,7 +250,7 @@ class TestCostFunction:
         """Test cost function handling of NaN values"""
         target_with_nan = np.array([1.0, np.nan, 3.0, 4.0, 5.0])
 
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=target_with_nan,
             function=simple_function,
             free_parameters=["m", "b"],
@@ -275,7 +276,7 @@ class TestCostFunctionIntegration:
         def quadratic_func(a=1.0, b=1.0, c=1.0, **kwargs):
             return a * x_values**2 + b * x_values + c
 
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=target,
             function=quadratic_func,
             free_parameters=["a", "b", "c"],
@@ -302,7 +303,7 @@ class TestCostFunctionIntegration:
         def multi_horizon_func(r=6371000, **kwargs):
             return np.array([np.sqrt(h**2 + 2 * h * r) for h in heights])
 
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=targets,
             function=multi_horizon_func,
             free_parameters=["r"],
@@ -338,7 +339,7 @@ class TestCostFunctionIntegration:
 
         target = np.array([6.4, 10.5, 51.0])  # Approximate expected values
 
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=target,
             function=complex_func,
             free_parameters=param_names[:3],  # Only fit first 3 parameters
@@ -804,7 +805,7 @@ class TestFormatParameterResult:
 
 
 class TestGradientFieldCostFunction:
-    """Test CostFunction with gradient field loss functions"""
+    """Test GradientFieldCostFunction with gradient field loss functions"""
 
     @pytest.fixture
     def test_image(self):
@@ -834,7 +835,7 @@ class TestGradientFieldCostFunction:
 
     def test_gradient_field_initialization(self, test_image, simple_horizon_function):
         """Test CostFunction initialization with gradient_field loss"""
-        cost_func = CostFunction(
+        cost_func = GradientFieldCostFunction(
             target=test_image,
             function=simple_horizon_function,
             free_parameters=["y_center"],
@@ -875,7 +876,7 @@ class TestGradientFieldCostFunction:
         self, test_image, simple_horizon_function
     ):
         """Test CostFunction initialization with gradient_field_simple loss"""
-        cost_func = CostFunction(
+        cost_func = GradientFieldCostFunction(
             target=test_image,
             function=simple_horizon_function,
             free_parameters=["y_center"],
@@ -892,7 +893,7 @@ class TestGradientFieldCostFunction:
         self, test_image, simple_horizon_function
     ):
         """Test gradient field cost with valid parameters"""
-        cost_func = CostFunction(
+        cost_func = GradientFieldCostFunction(
             target=test_image,
             function=simple_horizon_function,
             free_parameters=["y_center"],
@@ -912,7 +913,7 @@ class TestGradientFieldCostFunction:
         self, test_image, simple_horizon_function
     ):
         """Test gradient field simple cost with valid parameters"""
-        cost_func = CostFunction(
+        cost_func = GradientFieldCostFunction(
             target=test_image,
             function=simple_horizon_function,
             free_parameters=["y_center"],
@@ -936,7 +937,7 @@ class TestGradientFieldCostFunction:
         def bad_function(**kwargs):
             return np.full(150, np.nan)
 
-        cost_func = CostFunction(
+        cost_func = GradientFieldCostFunction(
             target=test_image,
             function=bad_function,
             free_parameters=[],
@@ -955,7 +956,7 @@ class TestGradientFieldCostFunction:
         def bad_function(**kwargs):
             return np.full(150, np.inf)
 
-        cost_func = CostFunction(
+        cost_func = GradientFieldCostFunction(
             target=test_image,
             function=bad_function,
             free_parameters=[],
@@ -975,7 +976,7 @@ class TestGradientFieldCostFunction:
             # Return y-coordinates way outside image bounds
             return np.full(150, -50.0)
 
-        cost_func = CostFunction(
+        cost_func = GradientFieldCostFunction(
             target=test_image,
             function=out_of_bounds_function,
             free_parameters=[],
@@ -995,7 +996,7 @@ class TestGradientFieldCostFunction:
         def out_of_bounds_function(**kwargs):
             return np.full(150, 150.0)  # Way above image height
 
-        cost_func = CostFunction(
+        cost_func = GradientFieldCostFunction(
             target=test_image,
             function=out_of_bounds_function,
             free_parameters=[],
@@ -1018,7 +1019,7 @@ class TestGradientFieldCostFunction:
             y_coords[75:] = -10.0  # Second half out of bounds
             return y_coords
 
-        cost_func = CostFunction(
+        cost_func = GradientFieldCostFunction(
             target=test_image,
             function=partial_function,
             free_parameters=[],
@@ -1042,7 +1043,7 @@ class TestGradientFieldCostFunction:
             y_coords[:in_bound_count] = 50.0  # In bounds
             return y_coords
 
-        cost_func = CostFunction(
+        cost_func = GradientFieldCostFunction(
             target=test_image,
             function=boundary_function,
             free_parameters=[],
@@ -1058,7 +1059,7 @@ class TestGradientFieldCostFunction:
 
     def test_gradient_field_evaluate_method(self, test_image, simple_horizon_function):
         """Test that evaluate method works with gradient field cost functions"""
-        cost_func = CostFunction(
+        cost_func = GradientFieldCostFunction(
             target=test_image,
             function=simple_horizon_function,
             free_parameters=["y_center"],
@@ -1077,7 +1078,7 @@ class TestGradientFieldCostFunction:
 
 
 class TestCostFunctionErrorHandling:
-    """Test error handling in CostFunction"""
+    """Test error handling in L2CostFunction"""
 
     @pytest.fixture
     def simple_target_and_function(self):
@@ -1093,7 +1094,7 @@ class TestCostFunctionErrorHandling:
         target, func = simple_target_and_function
 
         # Create cost function with valid loss function first
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=target,
             function=func,
             free_parameters=["a"],
@@ -1208,7 +1209,7 @@ class TestUnpackDiffEvolPosteriors:
 
 
 class TestCostFunctionEdgeCases:
-    """Test edge cases and boundary conditions for CostFunction"""
+    """Test edge cases and boundary conditions for L2CostFunction"""
 
     def test_cost_function_with_zero_length_target(self):
         """Test cost function with empty target array"""
@@ -1217,7 +1218,7 @@ class TestCostFunctionEdgeCases:
         def empty_func(**kwargs):
             return np.array([])
 
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=target,
             function=empty_func,
             free_parameters=[],
@@ -1236,7 +1237,7 @@ class TestCostFunctionEdgeCases:
         def nan_func(**kwargs):
             return np.array([1.0, 2.0, 3.0])
 
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=target,
             function=nan_func,
             free_parameters=[],
@@ -1255,7 +1256,7 @@ class TestCostFunctionEdgeCases:
         def perfect_func(**kwargs):
             return np.array([1.0, 2.0, 3.0])  # Perfect match
 
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=target,
             function=perfect_func,
             free_parameters=[],
@@ -1274,7 +1275,7 @@ class TestCostFunctionEdgeCases:
         def bad_func(**kwargs):
             return np.array([1000.0, 2000.0])  # Large errors
 
-        cost_func = CostFunction(
+        cost_func = L2CostFunction(
             target=target,
             function=bad_func,
             free_parameters=[],
@@ -1448,6 +1449,117 @@ class TestFitValidation:
             warnings.simplefilter("always")
             _validate_fit_results(obs)
             # Should work without crashing, though no warnings expected
+
+
+# ---------------------------------------------------------------------------
+# GradientFieldCostFunction — prefer_direction paths
+# ---------------------------------------------------------------------------
+
+
+class TestPreferDirection:
+    """Cover the prefer_direction='down' and invalid branches in CostFunction."""
+
+    def _image_and_fn(self):
+        image = np.zeros((80, 100), dtype=np.uint8)
+        image[40:, :] = 200
+
+        def horizon(**kwargs):
+            return np.full(100, 40.0)
+
+        return image, horizon
+
+    def test_prefer_down_returns_finite_cost(self):
+        image, horizon = self._image_and_fn()
+        cost_func = GradientFieldCostFunction(
+            target=image,
+            function=horizon,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="gradient_field",
+            prefer_direction="down",
+        )
+        assert np.isfinite(cost_func.cost({}))
+
+    def test_prefer_none_uses_abs(self):
+        image, horizon = self._image_and_fn()
+        cost_func = GradientFieldCostFunction(
+            target=image,
+            function=horizon,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="gradient_field",
+            prefer_direction=None,
+        )
+        assert np.isfinite(cost_func.cost({}))
+
+    def test_invalid_prefer_direction_raises(self):
+        image, _ = self._image_and_fn()
+
+        def horizon(**kwargs):
+            return np.full(100, 40.0)
+
+        cost_func = GradientFieldCostFunction(
+            target=image,
+            function=horizon,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="gradient_field",
+            prefer_direction="sideways",
+        )
+        with pytest.raises(ValueError, match="prefer_direction"):
+            cost_func.cost({})
+
+
+# ---------------------------------------------------------------------------
+# LimbFitter — scipy-minimize minimizer path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestLimbFitterSciPyMinimize:
+    """Cover the scipy-minimize dispatch in LimbFitter.fit() (lines 506-523)."""
+
+    def _make_fitter(self, minimizer, minimizer_kwargs=None, **extra):
+        from planet_ruler.fit import LimbFitter
+
+        n_pix_x, n_pix_y = 80, 60
+        # l2 loss: target is a 1-D limb array; n_pix_x/y must be in init_params
+        target = np.full(n_pix_x, n_pix_y / 2)
+        return LimbFitter(
+            target=target,
+            free_parameters=["r"],
+            init_parameter_values={
+                "r": 6_371_000,
+                "h": 10_000,
+                "f": 0.050,
+                "w": 0.036,
+                "theta_x": 0.0,
+                "theta_y": 0.0,
+                "theta_z": np.pi,
+                "n_pix_x": n_pix_x,
+                "n_pix_y": n_pix_y,
+                "x0": n_pix_x / 2,
+                "y0": n_pix_y / 2,
+            },
+            parameter_limits={"r": [5_000_000, 8_000_000]},
+            loss_function="l2",
+            minimizer=minimizer,
+            minimizer_kwargs=minimizer_kwargs or {},
+            max_iter=5,
+            seed=0,
+            **extra,
+        )
+
+    def test_scipy_minimize_runs_and_returns_result(self):
+        fitter = self._make_fitter("scipy-minimize")
+        result = fitter.fit()
+        assert "best_parameters" in result
+        assert "r" in result["best_parameters"]
+
+    def test_scipy_minimize_n_restarts(self):
+        fitter = self._make_fitter("scipy-minimize", minimizer_kwargs={"n_restarts": 2})
+        result = fitter.fit()
+        assert result["best_parameters"] is not None
 
 
 if __name__ == "__main__":

@@ -1,0 +1,42 @@
+{
+  "_comment": "Example annotation format for Planet Ruler benchmarks",
+  "_usage": "Place in benchmarks/annotations/ with name matching image (e.g., image_name.json)",
+  
+  "limb_points": {
+    "_comment": "Manual limb annotation points (pixel coordinates)",
+    "points": [
+      [100, 500],
+      [200, 450],
+      [300, 430],
+      [400, 425],
+      [500, 430],
+      [600, 450],
+      [700, 500]
+    ],
+    "format": "[[x1, y1], [x2, y2], ...]",
+    "coordinate_system": "image pixels, origin at top-left"
+  },
+  
+  "crop_region": {
+    "_comment": "Crop region to remove obstructions (e.g., aircraft wings)",
+    "x_min": 0,
+    "x_max": 4000,
+    "y_min": 800,
+    "y_max": 3000,
+    "format": "Bounding box in image coordinates"
+  },
+  
+  "segmentation_mask": {
+    "_comment": "Binary segmentation mask (optional, if using ML method)",
+    "mask_file": "annotations/image_name_mask.png",
+    "format": "Binary image (0=background, 255=planet)"
+  },
+  
+  "metadata": {
+    "_comment": "Optional metadata about the annotation",
+    "annotator": "human",
+    "annotation_date": "2025-01-15",
+    "quality": "high",
+    "notes": "Clear horizon, minimal atmospheric distortion"
+  }
+}

@@ -4,10 +4,10 @@ Contributing
 We welcome contributions to Planet Ruler! This guide will help you get started with developing, testing, and submitting improvements.
 
 Getting Started
---------------
+---------------
 
 Development Setup
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 1. **Fork and clone the repository:**
 
@@ -36,7 +36,7 @@ Development Setup
       pre-commit install
 
 Development Dependencies
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 The development environment includes:
 
@@ -52,7 +52,7 @@ This installs:
 * **Optional**: segment-anything, torch (for advanced features)
 
 Code Standards
--------------
+--------------
 
 Code Style
 ~~~~~~~~~~
@@ -76,7 +76,7 @@ Planet Ruler follows PEP 8 with these specifications:
    black --check planet_ruler/ tests/
 
 Type Checking
-~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 Use type hints and run mypy for type checking:
 
@@ -104,14 +104,14 @@ Use type hints and run mypy for type checking:
        # Implementation
 
 Docstring Style
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Use Google-style docstrings with mathematical notation support:
 
 .. code-block:: python
 
    def limb_camera_angle(r: float, h: float) -> float:
-       """
+""""""""""""""""""""""""""""""""""""""""""""""""""""""
        Calculate limb angle as seen from camera.
        
        The limb angle is determined by the geometry of observation
@@ -139,13 +139,13 @@ Use Google-style docstrings with mathematical notation support:
            >>> angle = limb_camera_angle(6371000, 418000)
            >>> print(f"Limb angle: {angle:.3f} rad")
            Limb angle: 1.354 rad
-       """
+""""""""""""""""""""""""""""""""
 
 Testing Guidelines
------------------
+------------------
 
 Test Categories
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Write tests in the appropriate category:
 
@@ -155,7 +155,7 @@ Write tests in the appropriate category:
 4. **Benchmarks**: Performance tests for critical functions
 
 Test Writing
-~~~~~~~~~~~
+~~~~~~~~~~~~
 
 **File organization:**
 
@@ -197,8 +197,9 @@ Test Writing
 
    def test_complete_earth_workflow_produces_reasonable_radius():
        """Test complete Earth analysis workflow."""
+       from planet_ruler.uncertainty import calculate_parameter_uncertainty
        observation = obs.LimbObservation("demo/earth.jpg", "config/earth_iss_1.yaml")
-       observation.detect_limb(method="segmentation")
+       observation.detect_limb(detection_method="segmentation")
        observation.fit_limb()
        
        radius_result = calculate_parameter_uncertainty(observation, "r", scale_factor=1000)
@@ -221,7 +222,7 @@ Test Writing
        assert h2 > h1, "Horizon distance should increase with altitude"
 
 Running Tests
-~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 .. code-block:: bash
 
@@ -237,7 +238,7 @@ Running Tests
    pytest --benchmark-only tests/
 
 Performance Considerations
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When adding features that may impact performance:
 
@@ -255,10 +256,10 @@ When adding features that may impact performance:
        assert result is not None
 
 Pull Request Process
--------------------
+--------------------
 
 Before Submitting
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 1. **Run the full test suite:**
 
@@ -287,7 +288,7 @@ Before Submitting
       make html
 
 Pull Request Guidelines
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 **PR Title Format:**
 
@@ -324,7 +325,7 @@ Pull Request Guidelines
    - [ ] Type hints added for public APIs
 
 Code Review Process
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 All pull requests require:
 
@@ -335,7 +336,7 @@ All pull requests require:
 5. **Performance**: No significant performance regressions
 
 Common Review Feedback
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 * **Add type hints**: All public functions need type annotations
 * **Improve docstrings**: Include examples and parameter descriptions
@@ -344,10 +345,10 @@ Common Review Feedback
 * **Performance impact**: Profile and benchmark performance-critical changes
 
 Feature Development
-------------------
+-------------------
 
 Adding New Functions
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 1. **Plan the API**: Consider function signature, parameters, return types
 2. **Write tests first**: TDD approach with failing tests
@@ -366,7 +367,7 @@ Adding New Functions
    
    # 2. Implement function
    def new_calculation(param1: float, param2: float) -> float:
-       """
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
        Calculate new geometric property.
        
        Args:
@@ -375,7 +376,7 @@ Adding New Functions
        
        Returns:
            Calculated value in appropriate units.
-       """
+"""""""""""""""""""""""""""""""""""""""""""""""""
        return math.sqrt(param1**2 + param2**2)
    
    # 3. Add benchmark
@@ -384,7 +385,7 @@ Adding New Functions
        assert result > 0
 
 Adding New Modules
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 For substantial new functionality:
 
@@ -395,10 +396,10 @@ For substantial new functionality:
 5. **Update dependencies**: Add to pyproject.toml if needed
 
 Documentation
-------------
+-------------
 
 Documentation Structure
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Planet Ruler uses Sphinx with reStructuredText:
 
@@ -417,7 +418,7 @@ Planet Ruler uses Sphinx with reStructuredText:
    └── contributing.rst    # This file
 
 Building Documentation
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
@@ -432,7 +433,7 @@ Building Documentation
    open _build/html/index.html
 
 Documentation Requirements
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * **All public APIs**: Must have comprehensive docstrings
 * **Examples**: Include usage examples in docstrings
@@ -442,7 +443,7 @@ Documentation Requirements
 .. code-block:: python
 
    def example_function(param: float) -> float:
-       """
+"""""""""""""""""""""""""""""""""""""""""""""""
        Example function demonstrating documentation standards.
        
        This function calculates something important using the formula:
@@ -466,13 +467,13 @@ Documentation Requirements
            >>> result = example_function(10.0)
            >>> print(f"Result: {result:.2f}")
            Result: 7.07
-       """
+"""""""""""""""""""""""
 
 Release Process
---------------
+---------------
 
 Version Numbering
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 Planet Ruler uses semantic versioning (SemVer):
 
@@ -499,10 +500,10 @@ Before releasing a new version:
    git push origin v1.1.0
 
 Communication Guidelines
------------------------
+------------------------
 
 Issue Reporting
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 When reporting bugs or requesting features:
 
@@ -529,11 +530,11 @@ When reporting bugs or requesting features:
    
    **Environment**
    - OS: [e.g. Ubuntu 20.04]
-   - Python: [e.g. 3.9.7]
+   - Python: [e.g. 3.10.14]
    - Planet Ruler: [e.g. 1.0.0]
 
 Discussion Etiquette
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 * **Be respectful**: Constructive feedback and professional communication
 * **Stay on topic**: Keep discussions focused on the issue at hand
@@ -541,7 +542,7 @@ Discussion Etiquette
 * **Be patient**: Maintainers contribute in their spare time
 
 Recognition
-----------
+-----------
 
 Contributors are recognized in:
 
@@ -550,7 +551,7 @@ Contributors are recognized in:
 * **Documentation**: Author attribution for significant additions
 
 Types of Contributions
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 All contributions are valued:
 
@@ -561,7 +562,7 @@ All contributions are valued:
 * **Feature requests**: Ideas for improvements and new functionality
 
 Getting Help
------------
+------------
 
 If you need help contributing:
 
@@ -571,10 +572,10 @@ If you need help contributing:
 * **Community**: Connect with other contributors
 
 Development Tools
-----------------
+-----------------
 
 Recommended IDE Setup
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 **VS Code configuration (.vscode/settings.json):**
 
@@ -596,7 +597,7 @@ Recommended IDE Setup
 * Enable type checking with mypy plugin
 
 Debugging Tips
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -610,7 +611,7 @@ Debugging Tips
    python -m cProfile -o profile.stats script.py
 
 Git Workflow
-~~~~~~~~~~~
+~~~~~~~~~~~~
 
 .. code-block:: bash
 

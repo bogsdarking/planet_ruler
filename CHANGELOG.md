@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-05-07
+
+### Added
+
+- Ability to handle phones with multiple cameras (infer which via EXIF aperture tag).
+- Cropping tool (`planet_ruler.crop.TkImageCropper`) that allows subselection of images while preserving camera properties.
+- Initial suite of test imagery for benchmarking and calibration. Stored in Git LFS -- retrieve via `git lfs install; git lfs pull`.
+- Extended codebase for performing suites of benchmark testing. See new .py files under planet_ruler/benchmarks, example configs under planet_ruler/benchmarks/configs, and a basic notebook for evaluation, planet_ruler/benchmarks/visualize.ipynb.
+- More cameras/parameters to the database.
+- A new tutorial that derives the minimum viable altitude for detecting limb curvature as a function of camera resolution (see notebooks/minimum_altitude_demo.ipynb).
+- Parameter limit presets (tight, balanced, loose) for create_config_from_image.
+- New minimizer hooks for l-bfgs-b and shgo.
+- An entirely new method for limb meaurement based on fitting the sagitta (pixel distance between the top and bottom of the horizon), rather than the arc itself.
+
+### Changed
+
+- The fit_limb() function has been refactored to accept a fit_stages argument that specifies a 
+list of methods that chain into one another. For example one could run `[{"method": "sagitta"}, 
+{"method": "arc"}]` and the code will find new initial conditions and bounds based on the sagitta method that are fed into the arc fitter for an overall faster and more reliable answer. Play with combinations to see what works best!
+- The old fit_limb() methods for gradient-field and l2, etc. losses have been split up into individual functions that only require the kwargs for their respective methods: fit_arc(), fit_gradient(), and fit_sagitta().
+- Individual method functions do not link independently to the display dashboard -- dashboard is now a fit_limb (staged) tool only.
+- Parameter limits are now set initially via preset combinations of tolerance, rather than as a flat fraction.
+- Minimizer presets now lead to different optimized parameters depending on which detection method is being employed.
+- User can now control where manual annotations are saved.
+- Python versions below 3.10 are no longer supported.
+
+### Fixed
+
+- Small speedup to gradient-field eval function by caching the mean rather than recomputing
+- Restored a missing image referenced in the README
+- Large speedup to gradient-field detection by removing an unused full-resolution field calculation
+- Faster fitting on manual annotation by only calculating the limb at labeled points
+- Parameter initialization is now randomized from within bounds rather than limited after init, which caused bunching.
+- Many API fixes in the documentation
+
 ## [1.7.0] - 2025-12-13
 
 ### Added

@@ -318,17 +318,19 @@ class TestFitDashboard:
 
 
 class TestDashboardKwargsIntegration:
-    """Tests for dashboard_kwargs passthrough to fit_limb."""
+    """Tests for verbose / dashboard passthrough to fit_arc."""
 
-    def test_kwargs_passthrough(self):
-        """Test that dashboard_kwargs are properly passed through."""
+    def test_verbose_passthrough(self):
+        """fit_arc and fit_gradient expose a verbose parameter."""
         from planet_ruler import LimbObservation
         import inspect
 
-        # Check fit_limb signature
-        sig = inspect.signature(LimbObservation.fit_limb)
-        assert "dashboard_kwargs" in sig.parameters
-        assert sig.parameters["dashboard_kwargs"].default is None
+        sig_arc = inspect.signature(LimbObservation.fit_arc)
+        assert "verbose" in sig_arc.parameters
+        assert sig_arc.parameters["verbose"].default is False
+
+        sig_grad = inspect.signature(LimbObservation.fit_gradient)
+        assert "verbose" in sig_grad.parameters
 
     def test_kwargs_applied_to_dashboard(self):
         """Test that kwargs are applied when creating dashboard."""
