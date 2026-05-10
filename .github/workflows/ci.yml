@@ -154,6 +154,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    env:
+      GIT_LFS_SKIP_SMUDGE: "1"
 
     steps:
     - name: Checkout repository
@@ -191,8 +193,8 @@ jobs:
           .benchmarks/
           benchmark-histogram.svg
 
-    - name: Clean working tree for branch switch
-      run: git reset --hard HEAD
+    - name: Check working tree before branch switch
+      run: git status
 
     - name: Store benchmark result
       uses: benchmark-action/github-action-benchmark@v1
