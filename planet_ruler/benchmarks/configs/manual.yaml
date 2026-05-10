@@ -1,0 +1,198 @@
+# Planet Ruler – Real-Image Manual Annotation Grid
+#
+# Real-image companion to manual_synth_grid.yaml.
+# Applies the same parameter axes to the 6 vetted real cropped images.
+#
+# Design informed by synth grid results:
+#   - BH dropped (unreliable on real images; slow)
+#   - f/w: either both free or neither (mixed f-only / w-only dropped)
+#   - h_limits_pct fixed at ±15 % (matches perturbation prior; no sweep)
+#   - Sagitta: n_sigma ∈ {1.0, 2.0}, bias_correct=True, uncertainty=both only
+#
+# Images (vetting status):
+#   PASS  : didsss (2.6 %), heinz (4.2 %), life (4.1 %)
+#   WARN  : claiton (19.7 %), farhan (13.1 %), juliana (13.3 %)
+#
+# Axes:
+#   minimizer × preset:
+#     scipy-minimize           × {fast, balanced, robust, super_robust} = 4
+#     differential-evolution   × {fast, balanced, robust}               = 3
+#                                                                        ─
+#                                                                        7
+#   free_parameters    – 2 sets per h-mode (see anchors below)
+#   r_limits_km        – 5 tightness levels (±5 % … rocky-planet)
+#   h_limits_pct       – fixed at 0.15 (single level)
+#   sagitta n_sigma    – 1.0, 2.0
+#
+# Base scenarios per image:
+#   free-h  non-sagitta: 7 × 2 × 5 × 1    =  70
+#   fixed-h non-sagitta: 7 × 2 × 5         =  70
+#   sagitta warm-start : 7 × 2 × 1 × 2     =  28
+#   sagitta-only       : 2 × 2             =   4
+#                                         ────
+#                                          172 per image
+#   × 6 images × 6 aug variants           = 6 192 total optimizer runs
+
+grid:
+  images:
+    - pexels-farhan-naqui-2243423-29393135_exif_cropped
+    - pexels-didsss-14753328_exif_cropped
+    - pexels-heinz-reisenhofer-2155138929-33976726_exif_cropped
+    - pexels-life-5291836_exif_cropped
+    - pexels-claiton-17217951_exif_cropped
+    - pexels-juliana-crillanovick-10474342-10510843_exif_cropped
+
+  annotation_file_pattern: "{image}_limb_points.json"
+
+  fixed:
+    detection_method: manual
+    planet_name: Earth
+    expected_radius: 6371000
+    uncertainty_radius: 10000
+    perturb_params: [r, h]
+    perturbation_factor:
+      r: 1.0    # full uniform stress-test of r bounds
+      h: 0.15   # small perturbation — GPS altitude is a meaningful prior
+    augmentation:
+      n_variants: 5
+      noise_sigma: 2.0
+      seed: 0
+
+  # Reusable anchors -------------------------------------------------------
+  _free_params: &FREE_PARAMS
+    - [r, h, theta_x, theta_y, theta_z]
+    - [r, h, theta_x, theta_y, theta_z, w, f]
+
+  _free_params_fixed_h: &FREE_PARAMS_FIXED_H
+    - [r, theta_x, theta_y, theta_z]
+    - [r, theta_x, theta_y, theta_z, w, f]
+
+  _r_limits: &R_LIMITS
+    - [6053, 6690]    # ±5 %  of Earth r — strong prior
+    - [5734, 7009]    # ±10 %
+    - [5097, 7645]    # ±20 %
+    - [3186, 9557]    # ±50 %
+    - [2000, 14000]   # rocky-planet range — maximum freedom
+
+  _h_limits: &H_LIMITS
+    - 0.15            # ±15 % of GPS h — matched to perturbation prior
+
+  param_grid:
+
+    # ── scipy-minimize (L-BFGS-B multi-start) — free-h ──────────────────
+    - minimizer: scipy-minimize
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_params:
+        max_iter: 500
+      free_parameters: *FREE_PARAMS
+      r_limits_km: *R_LIMITS
+      h_limits_pct: *H_LIMITS
+
+    # ── Differential Evolution — free-h ─────────────────────────────────
+    - minimizer: differential-evolution
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+      fit_params:
+        max_iter: 10000
+      free_parameters: *FREE_PARAMS
+      r_limits_km: *R_LIMITS
+      h_limits_pct: *H_LIMITS
+
+    # ── Fixed-h sub-grid (h pinned to GPS altitude) ──────────────────────
+    # perturb_params overrides the fixed section — only r is perturbed.
+    - minimizer: scipy-minimize
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_params:
+        max_iter: 500
+      free_parameters: *FREE_PARAMS_FIXED_H
+      r_limits_km: *R_LIMITS
+      perturb_params: [r]
+
+    - minimizer: differential-evolution
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+      fit_params:
+        max_iter: 10000
+      free_parameters: *FREE_PARAMS_FIXED_H
+      r_limits_km: *R_LIMITS
+      perturb_params: [r]
+
+    # ── Sagitta warm-start — scipy-minimize ──────────────────────────────
+    # sagitta estimates r and tightens bounds; arc optimizer refines.
+    - minimizer: scipy-minimize
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_params:
+        max_iter: 500
+      fit_stages: [{method: sagitta, n_sigma: 1.0, bias_correct: true, uncertainty: both}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    - minimizer: scipy-minimize
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+        - super_robust
+      fit_params:
+        max_iter: 500
+      fit_stages: [{method: sagitta, n_sigma: 2.0, bias_correct: true, uncertainty: both}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    # ── Sagitta warm-start — differential-evolution ──────────────────────
+    - minimizer: differential-evolution
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+      fit_params:
+        max_iter: 10000
+      fit_stages: [{method: sagitta, n_sigma: 1.0, bias_correct: true, uncertainty: both}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    - minimizer: differential-evolution
+      minimizer_preset:
+        - fast
+        - balanced
+        - robust
+      fit_params:
+        max_iter: 10000
+      fit_stages: [{method: sagitta, n_sigma: 2.0, bias_correct: true, uncertainty: both}, {method: arc}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+      h_limits_pct: *H_LIMITS
+
+    # ── Sagitta-only: geometric estimate with no optimizer ───────────────
+    # Evaluation uses only the r point estimate.
+    - fit_stages: [{method: sagitta, n_sigma: 1.0, bias_correct: true, uncertainty: both}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+
+    - fit_stages: [{method: sagitta, n_sigma: 2.0, bias_correct: true, uncertainty: both}]
+      free_parameters: *FREE_PARAMS
+      r_limits_km: [[2000, 14000]]
+
+thresholds:
+  max_time: 3600.0
+  max_relative_error: 0.20
+  min_success_rate: 0.20

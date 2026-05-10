@@ -443,5 +443,273 @@ class TestManualDetectionWorkflows:
             os.unlink(config_path)
 
 
+# ---------------------------------------------------------------------------
+# Auto-config path, parameter overrides, output / save-plots
+# ---------------------------------------------------------------------------
+
+
+def _mock_obs():
+    obs = MagicMock()
+    obs.radius_km = 6371.0
+    obs.radius_uncertainty = 50.0
+    obs.altitude_km = 10.5
+    del obs.focal_length_mm  # not all obs have this attr; avoid AttributeError
+    obs.best_parameters = {"r": 6371000.0, "h": 10500.0}
+    obs.detect_limb.return_value = obs
+    obs.fit_limb.return_value = obs
+    return obs
+
+
+def _valid_auto_config():
+    return {
+        "free_parameters": ["r", "h"],
+        "init_parameter_values": {
+            "r": 6371000,
+            "h": 10000,
+            "f": 0.05,
+            "w": 0.036,
+            "theta_x": 0.0,
+            "theta_y": 0.0,
+            "theta_z": 3.14,
+        },
+        "parameter_limits": {
+            "r": [1e6, 1e8],
+            "h": [5000, 20000],
+            "f": [0.01, 0.1],
+            "w": [0.01, 0.1],
+            "theta_x": [-1, 1],
+            "theta_y": [-1, 1],
+            "theta_z": [0, 7],
+        },
+        "camera_info": {"camera_model": "iPhone 13", "confidence": "high"},
+    }
+
+
+def _base_args(tmp_path=None):
+    args = MagicMock()
+    args.auto_config = False
+    args.camera_config = "config.yaml"
+    args.image = "photo.jpg"
+    args.altitude = None
+    args.planet = "earth"
+    args.detection_method = "manual"
+    args.loss_function = "l2"
+    args.max_iterations = 100
+    args.minimizer_preset = "balanced"
+    args.warm_start = False
+    args.verbose = False
+    args.kernel_smoothing = 5.0
+    args.dashboard = False
+    args.multi_resolution = None
+    args.image_smoothing = None
+    args.focal_length = None
+    args.sensor_width = None
+    args.field_of_view = None
+    args.output = None
+    args.plot = False
+    args.save_plots = None
+    return args
+
+
+@patch("planet_ruler.cli.pr")
+@patch("planet_ruler.cli.create_config_from_image")
+@patch("os.path.exists", return_value=True)
+class TestAutoConfigPath:
+    def test_auto_config_success(self, _exists, mock_create, mock_pr, capsys):
+        mock_create.return_value = _valid_auto_config()
+        mock_pr.LimbObservation.return_value = _mock_obs()
+
+        args = _base_args()
+        args.auto_config = True
+        args.altitude = 10000.0
+
+        result = cli.measure_command(args)
+        assert result == 0
+        out = capsys.readouterr().out
+        assert "planetary radius" in out
+
+    def test_auto_config_no_altitude_returns_error(
+        self, _exists, mock_create, mock_pr, capsys
+    ):
+        args = _base_args()
+        args.auto_config = True
+        args.altitude = None
+
+        result = cli.measure_command(args)
+        assert result == 1
+        err = capsys.readouterr().err
+        assert "--altitude" in err
+
+    def test_auto_config_value_error_returns_error(
+        self, _exists, mock_create, mock_pr, capsys
+    ):
+        mock_create.side_effect = ValueError("no EXIF")
+        args = _base_args()
+        args.auto_config = True
+        args.altitude = 10000.0
+
+        result = cli.measure_command(args)
+        assert result == 1
+
+    def test_auto_config_unexpected_error_returns_error(
+        self, _exists, mock_create, mock_pr, capsys
+    ):
+        mock_create.side_effect = RuntimeError("boom")
+        args = _base_args()
+        args.auto_config = True
+        args.altitude = 10000.0
+
+        result = cli.measure_command(args)
+        assert result == 1
+
+
+@patch("planet_ruler.cli.pr")
+@patch("planet_ruler.cli.load_config")
+@patch("os.path.exists", return_value=True)
+class TestParameterOverrides:
+    def _run(self, mock_pr, config_override=None):
+        obs = _mock_obs()
+        mock_pr.LimbObservation.return_value = obs
+        config = config_override or {"init_parameter_values": {}, "free_parameters": []}
+        return obs, config
+
+    def test_altitude_override_updates_h(self, _exists, mock_load, mock_pr, capsys):
+        config = {"init_parameter_values": {"h": 5000.0}, "free_parameters": []}
+        mock_load.return_value = config
+        obs = _mock_obs()
+        mock_pr.LimbObservation.return_value = obs
+
+        args = _base_args()
+        args.altitude = 10.0  # < 1000 → treated as km → * 1000
+
+        cli.measure_command(args)
+        assert config["init_parameter_values"]["h"] == pytest.approx(10000.0)
+
+    def test_focal_length_override(self, _exists, mock_load, mock_pr, capsys):
+        config = {"init_parameter_values": {"f": 0.05}, "free_parameters": []}
+        mock_load.return_value = config
+        obs = _mock_obs()
+        mock_pr.LimbObservation.return_value = obs
+
+        args = _base_args()
+        args.focal_length = 50.0  # mm → /1000 = 0.05 m
+
+        cli.measure_command(args)
+        assert config["init_parameter_values"]["f"] == pytest.approx(0.05)
+
+    def test_sensor_width_override(self, _exists, mock_load, mock_pr, capsys):
+        config = {"init_parameter_values": {"w": 0.036}, "free_parameters": []}
+        mock_load.return_value = config
+        obs = _mock_obs()
+        mock_pr.LimbObservation.return_value = obs
+
+        args = _base_args()
+        args.sensor_width = 36.0  # mm → /1000 = 0.036 m
+
+        cli.measure_command(args)
+        assert config["init_parameter_values"]["w"] == pytest.approx(0.036)
+
+    def test_fov_override(self, _exists, mock_load, mock_pr, capsys):
+        config = {"init_parameter_values": {}, "free_parameters": []}
+        mock_load.return_value = config
+        obs = _mock_obs()
+        mock_pr.LimbObservation.return_value = obs
+
+        args = _base_args()
+        args.field_of_view = 60.0  # degrees
+
+        cli.measure_command(args)
+        expected = 60.0 * 3.14159 / 180
+        assert config["init_parameter_values"]["fov"] == pytest.approx(
+            expected, rel=1e-4
+        )
+
+
+@patch("planet_ruler.cli.pr")
+@patch("planet_ruler.cli.load_config")
+@patch("os.path.exists", return_value=True)
+class TestOutputAndSavePlots:
+    def test_output_json_saved(self, _exists, mock_load, mock_pr, tmp_path, capsys):
+        mock_load.return_value = {"init_parameter_values": {}, "free_parameters": []}
+        obs = _mock_obs()
+        mock_pr.LimbObservation.return_value = obs
+
+        out_file = tmp_path / "results.json"
+        args = _base_args()
+        args.output = str(out_file)
+
+        result = cli.measure_command(args)
+        assert result == 0
+        assert out_file.exists()
+        with open(out_file) as f:
+            data = json.load(f)
+        assert "radius_km" in data
+
+    def test_save_plots_creates_file(
+        self, _exists, mock_load, mock_pr, tmp_path, capsys
+    ):
+        mock_load.return_value = {"init_parameter_values": {}, "free_parameters": []}
+        obs = _mock_obs()
+        mock_pr.LimbObservation.return_value = obs
+
+        plots_dir = str(tmp_path / "plots")
+        args = _base_args()
+        args.save_plots = plots_dir
+        args.image = "photo.jpg"
+
+        # plt is imported locally inside the if-branch; patch the global module
+        with (
+            patch("matplotlib.pyplot.savefig") as mock_save,
+            patch("matplotlib.pyplot.close"),
+        ):
+            result = cli.measure_command(args)
+        assert result == 0
+        mock_save.assert_called_once()
+
+
+@patch("planet_ruler.cli.pr")
+@patch("planet_ruler.cli.load_config")
+@patch("os.path.exists", return_value=True)
+class TestMultiResolutionParsing:
+    def test_auto_multi_resolution(self, _exists, mock_load, mock_pr, capsys):
+        mock_load.return_value = {"init_parameter_values": {}, "free_parameters": []}
+        obs = _mock_obs()
+        mock_pr.LimbObservation.return_value = obs
+
+        args = _base_args()
+        args.multi_resolution = "auto"
+
+        result = cli.measure_command(args)
+        assert result == 0
+        _, kwargs = obs.fit_limb.call_args
+        assert kwargs.get("resolution_stages") == "auto"
+
+    def test_numeric_multi_resolution(self, _exists, mock_load, mock_pr, capsys):
+        mock_load.return_value = {"init_parameter_values": {}, "free_parameters": []}
+        obs = _mock_obs()
+        mock_pr.LimbObservation.return_value = obs
+
+        args = _base_args()
+        args.multi_resolution = "4,2,1"
+
+        result = cli.measure_command(args)
+        assert result == 0
+        _, kwargs = obs.fit_limb.call_args
+        assert kwargs.get("resolution_stages") == [4, 2, 1]
+
+    def test_invalid_multi_resolution_returns_error(
+        self, _exists, mock_load, mock_pr, capsys
+    ):
+        mock_load.return_value = {"init_parameter_values": {}, "free_parameters": []}
+        obs = _mock_obs()
+        mock_pr.LimbObservation.return_value = obs
+
+        args = _base_args()
+        args.multi_resolution = "bad,input"
+
+        result = cli.measure_command(args)
+        assert result == 1
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

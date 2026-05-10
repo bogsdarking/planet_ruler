@@ -13,17 +13,30 @@
 # limitations under the License.
 
 from __future__ import annotations
+from abc import ABC, abstractmethod
 from typing import Optional
 import numpy as np
 import pandas as pd
 import math
 import warnings
+from scipy.optimize import differential_evolution, minimize, minimize_scalar
 from planet_ruler.image import (
     bidirectional_gradient_blur,
     bilinear_interpolate,
     gradient_field,
 )
+from planet_ruler.geometry import _r_from_K, limb_arc_sagitta, limb_arc
 from typing import Callable
+import logging
+
+logger = logging.getLogger(__name__)
+
+_PARALLEL_MINIMIZERS = frozenset({"differential-evolution", "shgo"})
+
+
+# ============================================================================
+# PARAMETER PACKING
+# ============================================================================
 
 
 def unpack_parameters(params: list, template: list) -> dict:
@@ -54,351 +67,275 @@ def pack_parameters(params: dict, template: dict) -> list:
     return [params[key] if key in params else template[key] for key in template]
 
 
-class CostFunction:
-    """
-    Wrapper to simplify interface with the minimization at hand.
+# ============================================================================
+# FITTER INTERFACE
+# ============================================================================
 
-    Args:
-        target (np.ndarray): True value(s), e.g., the actual limb position.
-                            For gradient_field loss, this should be the image.
-        function (Callable): Function mapping parameters to target of interest.
-        free_parameters (list): List of free parameter names.
-        init_parameter_values (dict): Initial values for named parameters.
-        loss_function (str): Type of loss function, must be one of
-                            ['l2', 'l1', 'log-l1', 'gradient_field'].
-        kernel_smoothing: For gradient_field - initial blur for gradient direction
-            estimation. Makes the gradient field smoother for directional sampling.
-        directional_smoothing: For gradient_field - sampling distance along gradients
-        directional_decay_rate: For gradient_field - exponential decay for samples
-        prefer_direction: For gradient_field - prefer 'up' or 'down' gradients
-            where 'up' means dark-sky/bright-planet and v.v.
-            (None = no preference, choose best gradient regardless of direction)
+
+class BaseFitter(ABC):
+    """Common interface for planet-ruler fitting strategies.
+
+    Each subclass encapsulates one strategy and returns a stage-result dict
+    from .fit().  The dict always contains:
+
+      updated_init   – {param: value} updates to warm-start the next stage
+      updated_limits – {param: [lo, hi]} tighter bounds for the next stage
+      status         – "ok" | "flat_arc" | "too_few_points" | "error"
+      warnings       – list[str]
     """
+
+    @abstractmethod
+    def fit(self) -> dict: ...
+
+
+# ============================================================================
+# COST FUNCTIONS
+# ============================================================================
+
+
+class BaseCostFunction:
+    """Shared evaluation logic for all cost function variants."""
 
     def __init__(
         self,
         target: np.ndarray,
         function: Callable,
         free_parameters: list,
-        init_parameter_values,
-        loss_function="l2",
-        kernel_smoothing=5.0,
-        directional_smoothing=30,
-        directional_decay_rate=0.15,
-        prefer_direction: Optional[str] = None,
+        init_parameter_values: dict,
     ):
         self.function = function
         self.free_parameters = free_parameters
         self.init_parameter_values = init_parameter_values
+
+    def evaluate(self, params: np.ndarray | dict) -> np.ndarray:
+        """Compute prediction given parameters.
+
+        For sparse manual annotation (is_sparse=True), only computes at
+        annotated x-coordinates stored in self.x.
+        """
+        kwargs = self.init_parameter_values.copy()
+        if isinstance(params, np.ndarray):
+            kwargs.update(unpack_parameters(params.tolist(), self.free_parameters))
+        else:
+            kwargs.update(params)
+        if getattr(self, "is_sparse", False):
+            kwargs["x_coords"] = self.x
+        return self.function(**kwargs)
+
+
+class L2CostFunction(BaseCostFunction):
+    """Cost function for l2, l1, and log-l1 loss against a detected limb."""
+
+    def __init__(
+        self,
+        target: np.ndarray,
+        function: Callable,
+        free_parameters: list,
+        init_parameter_values: dict,
+        loss_function: str = "l2",
+    ):
+        _VALID = {"l2", "l1", "log-l1"}
+        if loss_function not in _VALID:
+            raise ValueError(f"Unrecognized loss function: {loss_function!r}")
+        super().__init__(target, function, free_parameters, init_parameter_values)
         self.loss_function = loss_function
-        self.prefer_direction = prefer_direction
-
-        # For traditional loss functions, target is the detected limb
-        if loss_function in ["l2", "l1", "log-l1"]:
-            self.x = np.arange(len(target))
-            self.target = target
-
-        # For gradient field loss, target is the image
-        elif (
-            loss_function == "gradient_field"
-            or loss_function == "gradient_field_simple"
-        ):
-            self.target = None
-            self.x = np.arange(target.shape[1])  # Image width
-
-            # Use the new standalone gradient_field function
-            grad_data = gradient_field(
-                target,
-                kernel_smoothing=kernel_smoothing,
-                directional_smoothing=directional_smoothing,
-                directional_decay_rate=directional_decay_rate,
+        valid_mask = ~np.isnan(target)
+        self.x = np.where(valid_mask)[0]
+        self.target = target[valid_mask]
+        self.is_sparse = np.sum(valid_mask) < len(target)
+        if self.is_sparse:
+            logger.info(
+                f"Sparse annotation detected: {np.sum(valid_mask)}/{len(target)} pixels "
+                f"annotated ({100*np.sum(valid_mask)/len(target):.1f}%) - using optimized computation"
             )
 
-            # Store the gradient field components as instance variables
-            self.grad_mag = grad_data["grad_mag"]
-            self.grad_angle = grad_data["grad_angle"]
-            self.grad_x = grad_data["grad_x"]
-            self.grad_y = grad_data["grad_y"]
-            self.grad_sin = grad_data["grad_sin"]
-            self.grad_cos = grad_data["grad_cos"]
-            self.grad_mag_dx = grad_data["grad_mag_dx"]
-            self.grad_mag_dy = grad_data["grad_mag_dy"]
-            self.grad_sin_dx = grad_data["grad_sin_dx"]
-            self.grad_sin_dy = grad_data["grad_sin_dy"]
-            self.grad_cos_dx = grad_data["grad_cos_dx"]
-            self.grad_cos_dy = grad_data["grad_cos_dy"]
-            self.image_height = grad_data["image_height"]
-            self.image_width = grad_data["image_width"]
+    def cost(self, params: np.ndarray | dict) -> float:
+        y = self.evaluate(params)
+        if self.is_sparse and y is not None and len(y) != len(self.target):
+            y = y[self.x]
+        if self.loss_function == "l2":
+            return np.mean((y - self.target) ** 2)
+        elif self.loss_function == "l1":
+            return np.mean(np.abs(y - self.target))
+        elif self.loss_function == "log-l1":
+            abs_diff = np.abs(y - self.target)
+            return np.mean([math.log(float(v) + 1) for v in abs_diff.flatten()])
+        raise ValueError(f"Unrecognized loss function: {self.loss_function}")
 
-        else:
-            raise ValueError(f"Unrecognized loss function: {loss_function}")
+
+class GradientFieldCostFunction(BaseCostFunction):
+    """Cost function using gradient field flux alignment."""
+
+    def __init__(
+        self,
+        target: np.ndarray,
+        function: Callable,
+        free_parameters: list,
+        init_parameter_values: dict,
+        loss_function: str = "gradient_field",
+        kernel_smoothing: float = 5.0,
+        directional_smoothing: int = 30,
+        directional_decay_rate: float = 0.15,
+        prefer_direction: Optional[str] = None,
+    ):
+        super().__init__(target, function, free_parameters, init_parameter_values)
+        self.loss_function = loss_function
+        self.prefer_direction = prefer_direction
+        self.x = np.arange(target.shape[1])
+        self.target = None
+
+        grad_data = gradient_field(
+            target,
+            kernel_smoothing=kernel_smoothing,
+            directional_smoothing=directional_smoothing,
+            directional_decay_rate=directional_decay_rate,
+        )
+        self.grad_mag = grad_data["grad_mag"]
+        self.mean_grad_mag = np.mean(self.grad_mag)
+        self.grad_angle = grad_data["grad_angle"]
+        self.grad_x = grad_data["grad_x"]
+        self.grad_y = grad_data["grad_y"]
+        self.grad_sin = grad_data["grad_sin"]
+        self.grad_cos = grad_data["grad_cos"]
+        self.grad_mag_dx = grad_data["grad_mag_dx"]
+        self.grad_mag_dy = grad_data["grad_mag_dy"]
+        self.grad_sin_dx = grad_data["grad_sin_dx"]
+        self.grad_sin_dy = grad_data["grad_sin_dy"]
+        self.grad_cos_dx = grad_data["grad_cos_dx"]
+        self.grad_cos_dy = grad_data["grad_cos_dy"]
+        self.image_height = grad_data["image_height"]
+        self.image_width = grad_data["image_width"]
 
     def cost(self, params: np.ndarray | dict) -> float:
-        """
-        Compute prediction and use desired metric to reduce difference
-        from truth to a cost. AKA loss function.
-
-        Args:
-            params (np.ndarray | dict): Parameter values, either packed
-                into array or as dict.
-
-        Returns:
-            cost (float): Cost given parameters.
-        """
-
-        if self.loss_function == "gradient_field":
-            return self._gradient_field_cost(params)
-        elif self.loss_function == "gradient_field_simple":
+        if self.loss_function == "gradient_field_simple":
             return self._gradient_field_cost_simple(params)
-
-        # Traditional loss functions
-        y = self.evaluate(params)
-
-        if self.loss_function == "l2":
-            cost = np.nanmean(pow(y - self.target, 2))
-        elif self.loss_function == "l1":
-            abs_diff = abs(y - self.target)
-            cost = np.nanmean(abs_diff)
-        elif self.loss_function == "log-l1":
-            abs_diff = abs(y - self.target)
-            cost = np.nanmean([math.log(float(x) + 1) for x in abs_diff.flatten()])
-        else:
-            raise ValueError("Unrecognized loss function.")
-
-        return cost
+        return self._gradient_field_cost(params)
 
     def _gradient_field_cost_simple(
         self, params: np.ndarray | dict, y_coords: np.ndarray = None
     ) -> float:
-        """
-        Simplified gradient field cost using signed flux method.
-
-        Key differences from full version:
-        - Hard boundary penalty (no blending)
-        - Simpler out-of-bounds handling
-        - Same core signed flux computation
-
-        The signed flux naturally discriminates:
-        - Coherent edges (limb): gradients aligned → large |flux|
-        - Incoherent features (striations): mixed gradients → cancellation → small |flux|
-        """
         if y_coords is None:
-            # Get predicted horizon curve
             y_coords = self.evaluate(params)
-
-        # Handle invalid coordinates
         if np.any(np.isnan(y_coords)) or np.any(np.isinf(y_coords)):
             return 1e10
 
-        # Check what fraction is in bounds
         in_bounds = (y_coords >= 0) & (y_coords < self.image_height)
         fraction_in_bounds = np.mean(in_bounds)
-
-        # HARD BOUNDARY: Need at least 30% in frame
         if fraction_in_bounds < 0.3:
-            # Simple distance penalty
             center_y = self.image_height / 2
             mean_dist = np.mean(np.abs(y_coords - center_y))
             return 5.0 + mean_dist / self.image_height
 
-        # ONLY process in-bounds pixels
         x_in = self.x[in_bounds]
         y_in = y_coords[in_bounds]
-
-        # Compute curve normal direction at in-bounds points
         dy_dx_full = np.gradient(y_coords)
         dy_dx = dy_dx_full[in_bounds]
 
-        # Tangent vector: (1, dy/dx)
         tangent_x = np.ones_like(dy_dx)
         tangent_y = dy_dx
         tangent_mag = np.sqrt(tangent_x**2 + tangent_y**2)
-
-        # Normalize tangent
         tangent_x_unit = tangent_x / tangent_mag
         tangent_y_unit = tangent_y / tangent_mag
-
-        # Normal: rotate tangent 90° CCW: (x,y) → (-y, x)
         normal_x_unit = -tangent_y_unit
         normal_y_unit = tangent_x_unit
-
         normal_angle = np.arctan2(normal_y_unit, normal_x_unit)
 
-        # Integer indices and fractional offsets
         ix = x_in.astype(int)
         iy_float = y_in.copy()
-        iy = iy_float.astype(int)
-
+        iy = np.clip(iy_float.astype(int), 0, self.image_height - 1)
+        ix = np.clip(ix, 0, self.image_width - 1)
         fx = x_in - ix
         fy = iy_float - iy
 
-        # Clip to valid range
-        iy = np.clip(iy, 0, self.image_height - 1)
-        ix = np.clip(ix, 0, self.image_width - 1)
-
-        # Taylor expansion interpolation
         mag = (
             self.grad_mag[iy, ix]
             + fx * self.grad_mag_dx[iy, ix]
             + fy * self.grad_mag_dy[iy, ix]
         )
-
         sin_val = (
             self.grad_sin[iy, ix]
             + fx * self.grad_sin_dx[iy, ix]
             + fy * self.grad_sin_dy[iy, ix]
         )
-
         cos_val = (
             self.grad_cos[iy, ix]
             + fx * self.grad_cos_dx[iy, ix]
             + fy * self.grad_cos_dy[iy, ix]
         )
-
         angle = np.arctan2(sin_val, cos_val)
-
-        # Compute SIGNED flux perpendicular to curve
-        # gradient · normal = mag × cos(angle_difference)
         angle_diff = np.arctan2(
             np.sin(angle - normal_angle), np.cos(angle - normal_angle)
         )
-
-        # Signed contributions - coherent gradients sum, incoherent cancel
         flux_contribution = mag * np.cos(angle_diff)
-
-        # Net flux (can be positive or negative)
         net_flux = np.sum(flux_contribution)
-
-        # Normalize by arc length
         ds = np.sqrt(1 + dy_dx**2)
         arc_length = np.sum(ds)
         flux_density = net_flux / (arc_length + 1e-10)
-
-        # Normalize by typical gradient magnitude (contrast-invariant)
-        typical_mag = np.mean(self.grad_mag)
-        normalized_flux = flux_density / (typical_mag + 1e-10)
-
-        # Cost = negative absolute flux
-        # Maximize |flux| = prefer coherent gradients
-        # Penalize weak/canceling flux = incoherent features
-        cost = 1.0 - np.abs(normalized_flux)
-
-        return cost
+        normalized_flux = flux_density / (self.mean_grad_mag + 1e-10)
+        return 1.0 - np.abs(normalized_flux)
 
     def _gradient_field_cost(
         self, params: np.ndarray | dict, y_coords: np.ndarray = None
     ) -> float:
-        """
-        Gradient field cost based on flux through the limb curve.
-
-        Computes the total "flow" of gradient field through the proposed limb,
-        where each pixel contributes based on:
-        - Gradient strength (stronger = more contribution)
-        - Alignment with curve normal (perpendicular = full contribution)
-
-        This naturally prefers strong, well-aligned gradients without arbitrary thresholds.
-        """
         if y_coords is None:
-            # Get predicted horizon curve (sub-pixel precision!)
             y_coords = self.evaluate(params)
-
-        # Handle invalid coordinates
         if np.any(np.isnan(y_coords)) or np.any(np.isinf(y_coords)):
             return 1e10
 
-        # Determine which pixels are in bounds
         in_bounds = (y_coords >= 0) & (y_coords < self.image_height)
         fraction_in_bounds = np.mean(in_bounds)
-
-        # Require minimum fraction in frame
         if fraction_in_bounds < 0.3:
-            # Distance penalty for out-of-frame
             center_y = self.image_height / 2
             mean_dist = np.mean(np.abs(y_coords - center_y))
             return 5.0 + mean_dist / self.image_height
 
-        # ONLY process in-bounds pixels from here on
         x_in = self.x[in_bounds]
         y_in = y_coords[in_bounds]
-
-        # Compute curve normal direction at in-bounds points
         dy_dx_full = np.gradient(y_coords)
         dy_dx = dy_dx_full[in_bounds]
 
-        # Tangent vector: (1, dy/dx)
         tangent_x = np.ones_like(dy_dx)
         tangent_y = dy_dx
         tangent_mag = np.sqrt(tangent_x**2 + tangent_y**2)
-
-        # Normalize tangent
         tangent_x_unit = tangent_x / tangent_mag
         tangent_y_unit = tangent_y / tangent_mag
-
-        # Normal: rotate tangent 90° CCW: (x,y) → (-y, x)
         normal_x_unit = -tangent_y_unit
         normal_y_unit = tangent_x_unit
-
         normal_angle = np.arctan2(normal_y_unit, normal_x_unit)
 
-        # Integer indices and fractional offsets (in-bounds only)
         ix = x_in.astype(int)
         iy_float = y_in.copy()
-        iy = iy_float.astype(int)
-
+        iy = np.clip(iy_float.astype(int), 0, self.image_height - 1)
+        ix = np.clip(ix, 0, self.image_width - 1)
         fx = x_in - ix
         fy = iy_float - iy
 
-        # Clip to valid range (should already be valid, but safety check)
-        iy = np.clip(iy, 0, self.image_height - 1)
-        ix = np.clip(ix, 0, self.image_width - 1)
-
-        # Taylor expansion interpolation
         mag = (
             self.grad_mag[iy, ix]
             + fx * self.grad_mag_dx[iy, ix]
             + fy * self.grad_mag_dy[iy, ix]
         )
-
         sin_val = (
             self.grad_sin[iy, ix]
             + fx * self.grad_sin_dx[iy, ix]
             + fy * self.grad_sin_dy[iy, ix]
         )
-
         cos_val = (
             self.grad_cos[iy, ix]
             + fx * self.grad_cos_dx[iy, ix]
             + fy * self.grad_cos_dy[iy, ix]
         )
-
         angle = np.arctan2(sin_val, cos_val)
-
-        # Compute flux perpendicular to curve
-        # gradient · normal = mag × cos(angle_difference)
         angle_diff = np.arctan2(
             np.sin(angle - normal_angle), np.cos(angle - normal_angle)
         )
-
-        # SIGNED flux: positive and negative contributions can cancel
-        # - Coherent gradients (all same direction) → large |flux|
-        # - Incoherent gradients (random directions) → cancellation → small |flux|
         flux_contribution = mag * np.cos(angle_diff)
-
-        # Net flux (can be positive or negative)
         net_flux = np.sum(flux_contribution)
-
-        # Normalize by arc length
         ds = np.sqrt(1 + dy_dx**2)
         arc_length = np.sum(ds)
         flux_density = net_flux / (arc_length + 1e-10)
+        normalized_flux = flux_density / (self.mean_grad_mag + 1e-10)
 
-        # Normalize by typical gradient magnitude (contrast-invariant)
-        typical_mag = np.mean(self.grad_mag)
-        normalized_flux = flux_density / (typical_mag + 1e-10)
-
-        # Cost = negative absolute flux (unless direction preferred)
-        # Maximize |flux| = prefer coherent gradients in either direction
-        # Penalize weak/canceling flux = incoherent features
         if self.prefer_direction is not None:
             if self.prefer_direction == "up":
                 normalized_flux *= -1
@@ -411,30 +348,621 @@ class CostFunction:
         else:
             normalized_flux = np.abs(normalized_flux)
 
-        cost = 1.0 - normalized_flux
+        return 1.0 - normalized_flux
 
-        return cost
 
-    def evaluate(self, params: np.ndarray | dict) -> np.ndarray:
-        """
-        Compute prediction given parameters.
+# ============================================================================
+# LIMB FITTER
+# ============================================================================
 
-        Args:
-            params (np.ndarray | dict): Parameter values, either packed
-                into array or as dict.
 
-        Returns:
-            prediction (np.ndarray): Prediction value(s).
-        """
-        kwargs = self.init_parameter_values.copy()
-        if type(params) == np.ndarray:
-            kwargs.update(unpack_parameters(params.tolist(), self.free_parameters))
+class LimbFitter(BaseFitter):
+    """Image-space fitter using a pixel-level cost function and a scipy minimizer.
+
+    Accepts one target (image for gradient_field, limb array for l2/l1/log-l1)
+    at a fixed resolution. The caller is responsible for downsampling and
+    parameter scaling before instantiation.
+
+    minimizer_kwargs must already have preset values resolved by the caller.
+    """
+
+    def __init__(
+        self,
+        target: np.ndarray,
+        free_parameters: list,
+        init_parameter_values: dict,
+        parameter_limits: dict,
+        loss_function: str,
+        minimizer: str,
+        minimizer_kwargs: dict,
+        max_iter: int = 15000,
+        seed: int = 0,
+        verbose: bool = False,
+        kernel_smoothing: float = 5.0,
+        directional_smoothing: int = 50,
+        directional_decay_rate: float = 0.15,
+        prefer_direction=None,
+        n_jobs: int = 1,
+    ):
+        self.target = target
+        self.free_parameters = free_parameters
+        self.init_parameter_values = init_parameter_values
+        self.parameter_limits = parameter_limits
+        self.loss_function = loss_function
+        self.minimizer = minimizer
+        self.minimizer_kwargs = dict(minimizer_kwargs) if minimizer_kwargs else {}
+        self.max_iter = max_iter
+        self.seed = seed
+        self.verbose = verbose
+        self.kernel_smoothing = kernel_smoothing
+        self.directional_smoothing = directional_smoothing
+        self.directional_decay_rate = directional_decay_rate
+        self.prefer_direction = prefer_direction
+        self.n_jobs = n_jobs
+
+    def fit(self) -> dict:
+        working_parameters = dict(self.init_parameter_values)
+
+        # For gradient_field, infer pixel params from image dimensions
+        if "gradient_field" in self.loss_function and self.target.ndim >= 2:
+            working_parameters.update(
+                {
+                    "n_pix_x": self.target.shape[1],
+                    "n_pix_y": self.target.shape[0],
+                    "x0": int(self.target.shape[1] * 0.5),
+                    "y0": int(self.target.shape[0] * 0.5),
+                }
+            )
+
+        if self.loss_function in ("l2", "l1", "log-l1"):
+            cost_fn = L2CostFunction(
+                target=self.target,
+                function=limb_arc,
+                free_parameters=self.free_parameters,
+                init_parameter_values=working_parameters,
+                loss_function=self.loss_function,
+            )
         else:
-            kwargs.update(params)
+            cost_fn = GradientFieldCostFunction(
+                target=self.target,
+                function=limb_arc,
+                free_parameters=self.free_parameters,
+                init_parameter_values=working_parameters,
+                loss_function=self.loss_function,
+                kernel_smoothing=self.kernel_smoothing,
+                directional_smoothing=self.directional_smoothing,
+                directional_decay_rate=self.directional_decay_rate,
+                prefer_direction=self.prefer_direction,
+            )
 
-        y = self.function(**kwargs)
+        bounds = [self.parameter_limits[key] for key in self.free_parameters]
+        x0 = [working_parameters[key] for key in self.free_parameters]
 
-        return y
+        x0_clamped = []
+        for val, (lo, hi) in zip(x0, bounds):
+            epsilon = 1e-9 * (hi - lo)
+            clamped = max(lo + epsilon, min(hi - epsilon, val))
+            if clamped != val:
+                warnings.warn(
+                    f"Initial parameter {val} clamped to [{lo}, {hi}]", UserWarning
+                )
+            x0_clamped.append(clamped)
+        x0 = x0_clamped
+
+        config = dict(self.minimizer_kwargs)
+
+        if self.n_jobs != 1 and self.minimizer not in _PARALLEL_MINIMIZERS:
+            warnings.warn(
+                f"n_jobs={self.n_jobs} has no effect for minimizer "
+                f"{self.minimizer!r}. Only "
+                f"{sorted(_PARALLEL_MINIMIZERS)} support parallel workers.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        if self.minimizer == "differential-evolution":
+            workers = config.pop("workers", self.n_jobs)
+            fit_results = differential_evolution(
+                cost_fn.cost,
+                bounds,
+                x0=x0,
+                maxiter=self.max_iter,
+                seed=self.seed,
+                disp=self.verbose,
+                workers=workers,
+                **config,
+            )
+
+        elif self.minimizer == "basinhopping":
+            from scipy.optimize import basinhopping
+
+            local_maxiter = config.pop("local_maxiter", 100)
+            minimizer_kwargs_local = {
+                "method": "L-BFGS-B",
+                "bounds": bounds,
+                "options": {"maxiter": local_maxiter, "ftol": 1e-6},
+            }
+
+            class BoundsChecker:
+                def __init__(self, bounds):
+                    self.bounds = bounds
+
+                def __call__(self, **kwargs):
+                    x = kwargs["x_new"]
+                    return all(l <= xi <= u for xi, (l, u) in zip(x, self.bounds))
+
+            fit_results = basinhopping(
+                cost_fn.cost,
+                x0,
+                minimizer_kwargs=minimizer_kwargs_local,
+                accept_test=BoundsChecker(bounds),
+                seed=self.seed,
+                disp=self.verbose,
+                interval=20,
+                **config,
+            )
+
+        elif self.minimizer == "scipy-minimize":
+            method = config.pop("method", "L-BFGS-B")
+            n_restarts = config.pop("n_restarts", 1)
+            rng = np.random.default_rng(self.seed)
+            lo = np.array([b[0] for b in bounds])
+            hi = np.array([b[1] for b in bounds])
+            best_result = None
+            for i in range(n_restarts):
+                x_start = x0 if i == 0 else rng.uniform(lo, hi).tolist()
+                res = minimize(
+                    cost_fn.cost,
+                    x_start,
+                    method=method,
+                    bounds=bounds,
+                    options={"maxiter": self.max_iter, **config},
+                )
+                if best_result is None or res.fun < best_result.fun:
+                    best_result = res
+            fit_results = best_result
+
+        elif self.minimizer == "dual-annealing":
+            from scipy.optimize import dual_annealing
+
+            fit_results = dual_annealing(
+                cost_fn.cost,
+                bounds=bounds,
+                x0=x0,
+                maxiter=self.max_iter,
+                seed=self.seed,
+                **config,
+            )
+
+        elif self.minimizer == "shgo":
+            from scipy.optimize import shgo
+
+            n = config.pop("n", 64)
+            iters = config.pop("iters", 1)
+            workers = config.pop("workers", self.n_jobs)
+            fit_results = shgo(
+                cost_fn.cost,
+                bounds=bounds,
+                n=n,
+                iters=iters,
+                workers=workers,
+                options={"maxiter": self.max_iter, **config},
+            )
+
+        else:
+            raise ValueError(f"Unknown minimizer: {self.minimizer}")
+
+        best_params = unpack_parameters(fit_results.x, self.free_parameters)
+        working_parameters.update(best_params)
+        updated_init = {k: v for k, v in best_params.items()}
+
+        return {
+            "best_parameters": working_parameters,
+            "fit_results": fit_results,
+            "updated_init": updated_init,
+            "updated_limits": {},
+            "status": "ok",
+            "warnings": [],
+        }
+
+
+# ============================================================================
+# SAGITTA ESTIMATOR
+# ============================================================================
+
+
+def estimate_radius_via_sagitta(
+    limb: np.ndarray,
+    h: float,
+    f_px: float,
+    x0: Optional[float] = None,
+    y0: Optional[float] = None,
+    sigma_px: "float | str" = "auto",
+    n_sigma: float = 1.0,
+    bias_correct: bool = False,
+    uncertainty: str = "ols",
+) -> dict:
+    """Estimate planetary radius from a sparse limb arc using OLS on the sagitta.
+
+    Fits K = r / sqrt(h*(2r+h)) by regressing observed sagittae against the
+    exact hyperbola model A(u) = sqrt(f_px^2 + u^2) - f_px.
+
+    Args:
+        limb: 1-D array of length n_pix_x; NaN where not annotated.
+        h: Observer altitude in metres.
+        f_px: Focal length in pixels.
+        x0: Optional override for apex x-coordinate (auto-detected if None).
+        y0: Image vertical centre in pixels, required for bias_correct=True.
+        sigma_px: Annotation noise in pixels, or "auto" to derive from RMS residuals.
+        n_sigma: Bound width in sigma units.
+        bias_correct: If True and y0 is provided, correct for camera tilt bias using
+            the apex y-offset to estimate theta_x, then refine kappa via 1-D minimization.
+        uncertainty: "ols" | "jackknife" | "both".  Controls which K_sigma drives bounds.
+
+    Returns:
+        dict with keys: r, r_low, r_high, r_sigma, K, K_sigma, K_sigma_jack,
+            n_points, residual_rms, arc_angle_deg, x_apex, y_apex,
+            theta_x_est, status, warnings.
+    """
+    nan_r = float("nan")
+    base = dict(
+        r=nan_r,
+        r_low=nan_r,
+        r_high=nan_r,
+        r_sigma=nan_r,
+        K=nan_r,
+        K_sigma=nan_r,
+        K_sigma_jack=nan_r,
+        n_points=0,
+        residual_rms=nan_r,
+        arc_angle_deg=nan_r,
+        x_apex=nan_r,
+        y_apex=nan_r,
+        theta_x_est=nan_r,
+        status="",
+        warnings=[],
+    )
+
+    # --- Extract valid points ---
+    xs = np.where(~np.isnan(limb))[0].astype(float)
+    ys = limb[~np.isnan(limb)].astype(float)
+    n = len(xs)
+    base["n_points"] = n
+    if n < 4:
+        base["status"] = "too_few_points"
+        return base
+
+    # --- Apex ---
+    ix_apex = int(np.argmin(ys))
+    y_apex = ys[ix_apex]
+    if x0 is not None:
+        x_apex = float(x0)
+    elif 0 < ix_apex < n - 1:
+        # Sub-pixel apex via 3-point quadratic interpolation so that a
+        # continuous minimum falling between two samples is located correctly.
+        h_lo = xs[ix_apex - 1] - xs[ix_apex]
+        h_hi = xs[ix_apex + 1] - xs[ix_apex]
+        d_lo = ys[ix_apex - 1] - ys[ix_apex]
+        d_hi = ys[ix_apex + 1] - ys[ix_apex]
+        denom = h_lo * h_hi * (h_lo - h_hi)
+        if abs(denom) > 0:
+            a_q = (d_lo * h_hi - d_hi * h_lo) / denom
+            b_q = (d_hi * h_lo**2 - d_lo * h_hi**2) / denom
+            if abs(a_q) > 0:
+                x_interp = xs[ix_apex] - b_q / (2.0 * a_q)
+                x_apex = (
+                    float(x_interp)
+                    if xs[ix_apex - 1] <= x_interp <= xs[ix_apex + 1]
+                    else xs[ix_apex]
+                )
+            else:
+                x_apex = xs[ix_apex]
+        else:
+            x_apex = xs[ix_apex]
+    else:
+        x_apex = xs[ix_apex]
+    base["x_apex"] = float(x_apex)
+    base["y_apex"] = float(y_apex)
+
+    # Centred coordinates
+    u = xs - x_apex  # horizontal offset from apex
+    s = ys - y_apex  # sagitta from apex (≥ 0)
+    A = np.sqrt(f_px**2 + u**2) - f_px  # exact hyperbola basis at theta_x=0
+
+    if np.max(A) < 1e-6:
+        base["status"] = "flat_arc"
+        return base
+
+    # --- OLS: s = s0 + (1/K)*A ---
+    X = np.column_stack([np.ones(n), A])
+    coeffs, _, _, _ = np.linalg.lstsq(X, s, rcond=None)
+    s0_est, c_est = coeffs
+
+    if abs(c_est) < 1e-8:
+        base["status"] = "flat_arc"
+        return base
+
+    K_est = 1.0 / abs(c_est)
+
+    residuals = s - X @ coeffs
+    residual_rms = float(np.sqrt(np.mean(residuals**2)))
+    base["residual_rms"] = residual_rms
+
+    sigma_s = float(sigma_px) if sigma_px != "auto" else residual_rms
+
+    # OLS uncertainty of c_est
+    A_centered = A - A.mean()
+    A_var = float(np.sum(A_centered**2))
+    if A_var < 1e-12:
+        base["status"] = "flat_arc"
+        return base
+    c_sigma = sigma_s / np.sqrt(A_var)
+    K_sigma_ols = K_est**2 * c_sigma  # propagation: d(1/c)/dc = -K^2
+
+    # --- Arc angle ---
+    phi_lo = np.arctan(u.min() / f_px)
+    phi_hi = np.arctan(u.max() / f_px)
+    base["arc_angle_deg"] = float((phi_hi - phi_lo) * 180.0 / np.pi)
+
+    # --- Jackknife ---
+    K_sigma_jack = nan_r
+    if uncertainty in ("jackknife", "both"):
+        K_loo = np.empty(n)
+        for i in range(n):
+            mask = np.ones(n, dtype=bool)
+            mask[i] = False
+            X_loo = np.column_stack([np.ones(n - 1), A[mask]])
+            c_loo = np.linalg.lstsq(X_loo, s[mask], rcond=None)[0][1]
+            K_loo[i] = 1.0 / abs(c_loo) if abs(c_loo) > 1e-12 else nan_r
+        valid = K_loo[np.isfinite(K_loo)]
+        if len(valid) >= 2:
+            K_sigma_jack = float(
+                np.sqrt((n - 1) / n * np.sum((valid - valid.mean()) ** 2))
+            )
+
+    K_sigma = K_sigma_ols
+    if uncertainty == "jackknife" and np.isfinite(K_sigma_jack):
+        K_sigma = K_sigma_jack
+    elif uncertainty == "both" and np.isfinite(K_sigma_jack):
+        K_sigma = max(K_sigma_ols, K_sigma_jack)
+
+    # --- Bias correction ---
+    theta_x_est = nan_r
+    if bias_correct:
+        if y0 is None:
+            base["warnings"].append(
+                "bias_correct=True requires y0; skipping bias correction."
+            )
+        else:
+            delta_y = float(y_apex - y0)
+            theta_x_est = float(np.arctan(delta_y / f_px))
+
+            def _cost_kappa(log_kappa: float) -> float:
+                kap = np.exp(log_kappa)
+                r_t = _r_from_K(1.0 / kap, h)
+                s_pred = np.array(
+                    [limb_arc_sagitta(float(ui), theta_x_est, f_px, r_t, h) for ui in u]
+                )
+                s0_opt = float(np.mean(s - s_pred))
+                return float(np.sum((s - s0_opt - s_pred) ** 2))
+
+            try:
+                log_kappa_est = -np.log(max(K_est, 1e-12))
+                res_bc = minimize_scalar(
+                    _cost_kappa,
+                    bounds=(log_kappa_est - 3.0, log_kappa_est + 3.0),
+                    method="bounded",
+                )
+                K_est = 1.0 / float(np.exp(res_bc.x))
+                # Recompute K_sigma with updated K_est (same c_sigma)
+                K_sigma = K_est**2 * c_sigma
+                if uncertainty == "jackknife" and np.isfinite(K_sigma_jack):
+                    K_sigma = K_sigma_jack
+                elif uncertainty == "both" and np.isfinite(K_sigma_jack):
+                    K_sigma = max(K_sigma, K_sigma_jack)
+            except Exception as exc:
+                base["warnings"].append(f"bias_correct minimisation failed: {exc}")
+
+    # --- Radius and bounds ---
+    r = float(_r_from_K(K_est, h))
+    K_low = max(K_est - n_sigma * K_sigma, 1e-12)
+    K_high = K_est + n_sigma * K_sigma
+    r_low = float(_r_from_K(K_low, h))
+    r_high = float(_r_from_K(K_high, h))
+    r_sigma = (r_high - r_low) / (2.0 * n_sigma)
+
+    base.update(
+        dict(
+            r=r,
+            r_low=r_low,
+            r_high=r_high,
+            r_sigma=r_sigma,
+            K=float(K_est),
+            K_sigma=float(K_sigma),
+            K_sigma_jack=float(K_sigma_jack) if np.isfinite(K_sigma_jack) else nan_r,
+            theta_x_est=float(theta_x_est) if np.isfinite(theta_x_est) else nan_r,
+            status="ok",
+        )
+    )
+    return base
+
+
+class SagittaFitter(BaseFitter):
+    """2-D optimizer over (kappa, theta_x) using the exact projected-sagitta formula.
+
+    Accurate to < 0.05 km for all tested camera tilts.  Fits only r and theta_x;
+    other free_parameters are handled by a subsequent LimbFitter stage.
+    """
+
+    def __init__(
+        self,
+        limb: np.ndarray,
+        h: float,
+        f_px: float,
+        y0: float,
+        free_parameters: list,
+        init_parameter_values: dict,
+        parameter_limits: dict,
+        sigma_px: "float | str" = "auto",
+        n_sigma: float = 1.0,
+        uncertainty: str = "jackknife",
+        bias_correct: bool = False,
+    ):
+        self.limb = limb
+        self.h = h
+        self.f_px = f_px
+        self.y0 = y0
+        self.free_parameters = free_parameters
+        self.init_parameter_values = init_parameter_values
+        self.parameter_limits = parameter_limits
+        self.sigma_px = sigma_px
+        self.n_sigma = n_sigma
+        self.uncertainty = uncertainty
+        self.bias_correct = bias_correct
+
+    def fit(self) -> dict:
+        warn: list[str] = []
+
+        # Step 1: OLS initial guess (uncertainty="ols" — cheapest; we only need K and theta_x_est)
+        est = estimate_radius_via_sagitta(
+            self.limb,
+            h=self.h,
+            f_px=self.f_px,
+            y0=self.y0,
+            sigma_px=self.sigma_px,
+            n_sigma=self.n_sigma,
+            bias_correct=self.bias_correct,
+            uncertainty="ols",
+        )
+        warn.extend(est["warnings"])
+
+        if est["status"] == "too_few_points":
+            return {
+                "updated_init": {},
+                "updated_limits": {},
+                "status": "too_few_points",
+                "warnings": warn,
+            }
+
+        xs = np.where(~np.isnan(self.limb))[0].astype(float)
+        ys = self.limb[~np.isnan(self.limb)].astype(float)
+        u = xs - float(est["x_apex"])
+        s = ys - float(est["y_apex"])
+
+        K0 = float(est["K"]) if np.isfinite(est["K"]) else 100.0
+        tx0 = float(est["theta_x_est"]) if np.isfinite(est["theta_x_est"]) else 0.0
+        log_kappa0 = np.log(1.0 / max(K0, 1e-12))
+
+        tx_lo, tx_hi = self.parameter_limits.get("theta_x", [-np.pi, np.pi])
+        log_kappa_bounds = (-3.0, 3.0)
+        tx_bounds = (float(tx_lo), float(tx_hi))
+
+        # Step 2: 2-D L-BFGS-B over [log_kappa, theta_x]
+        def cost_2d(params: np.ndarray) -> float:
+            log_kap, tx = params
+            r_t = _r_from_K(1.0 / np.exp(log_kap), self.h)
+            s_pred = np.array(
+                [limb_arc_sagitta(float(ui), tx, self.f_px, r_t, self.h) for ui in u]
+            )
+            s0 = float(np.mean(s - s_pred))
+            return float(np.sum((s - s0 - s_pred) ** 2))
+
+        try:
+            res2d = minimize(
+                cost_2d,
+                x0=[log_kappa0, tx0],
+                method="L-BFGS-B",
+                bounds=[log_kappa_bounds, tx_bounds],
+                options={"maxiter": 500, "ftol": 1e-12},
+            )
+            K_opt = 1.0 / float(np.exp(res2d.x[0]))
+            theta_x_opt = float(res2d.x[1])
+        except Exception as exc:
+            warn.append(f"SagittaFitter 2-D minimisation failed: {exc}")
+            K_opt = K0
+            theta_x_opt = tx0
+
+        r_opt = float(_r_from_K(K_opt, self.h))
+
+        # Step 3: uncertainty bounds — jackknife (theta_x fixed) or OLS fallback
+        K_sigma_ols = float(est.get("K_sigma", 0.0))
+        K_sigma_jack = float("nan")
+
+        if self.uncertainty in ("jackknife", "both"):
+            n = len(u)
+            K_loo = np.empty(n)
+            for i in range(n):
+                mask = np.ones(n, dtype=bool)
+                mask[i] = False
+                u_loo, s_loo = u[mask], s[mask]
+
+                def cost_1d(log_kap: float) -> float:
+                    r_t = _r_from_K(1.0 / np.exp(log_kap), self.h)
+                    s_pred = np.array(
+                        [
+                            limb_arc_sagitta(
+                                float(ui), theta_x_opt, self.f_px, r_t, self.h
+                            )
+                            for ui in u_loo
+                        ]
+                    )
+                    s0 = float(np.mean(s_loo - s_pred))
+                    return float(np.sum((s_loo - s0 - s_pred) ** 2))
+
+                try:
+                    res1d = minimize_scalar(
+                        cost_1d, bounds=(-3.0, 3.0), method="bounded"
+                    )
+                    K_loo[i] = 1.0 / float(np.exp(res1d.x))
+                except Exception:
+                    K_loo[i] = K_opt
+
+            valid = K_loo[np.isfinite(K_loo)]
+            if len(valid) >= 2:
+                K_sigma_jack = float(
+                    np.sqrt((n - 1) / n * np.sum((valid - valid.mean()) ** 2))
+                )
+
+        if self.uncertainty == "ols":
+            K_sigma = K_sigma_ols
+        elif self.uncertainty == "jackknife":
+            K_sigma = K_sigma_jack if np.isfinite(K_sigma_jack) else K_sigma_ols
+        else:  # "both" — independent sources, combine in quadrature
+            K_sigma = (
+                float(np.sqrt(K_sigma_ols**2 + K_sigma_jack**2))
+                if np.isfinite(K_sigma_jack)
+                else K_sigma_ols
+            )
+
+        K_low = max(K_opt - self.n_sigma * K_sigma, 1e-12)
+        K_high = K_opt + self.n_sigma * K_sigma
+        r_low = float(_r_from_K(K_low, self.h))
+        r_high = float(_r_from_K(K_high, self.h))
+
+        extra_fp = [p for p in self.free_parameters if p not in ("r", "theta_x")]
+        if extra_fp:
+            warn.append(
+                f"SagittaFitter does not fit: {extra_fp}. "
+                "Pass a subsequent LimbFitter stage to fit these parameters."
+            )
+
+        return {
+            "r": r_opt,
+            "r_low": r_low,
+            "r_high": r_high,
+            "theta_x_est": theta_x_opt,
+            "theta_x_sigma": float("nan"),
+            "K_sigma_jack": K_sigma_jack,
+            "updated_init": {"r": r_opt, "theta_x": theta_x_opt},
+            "updated_limits": {"r": [r_low, r_high]},
+            "status": "ok",
+            "warnings": warn,
+        }
+
+
+# ============================================================================
+# UNCERTAINTY AND DIAGNOSTICS
+# ============================================================================
 
 
 def calculate_parameter_uncertainty(
@@ -511,7 +1039,6 @@ def calculate_parameter_uncertainty(
                 "Differential evolution posteriors not available in fit_results"
             )
 
-        # Use unpack_diff_evol_posteriors from same module
         population_df = unpack_diff_evol_posteriors(observation)
 
         if parameter not in population_df.columns:
@@ -521,7 +1048,6 @@ def calculate_parameter_uncertainty(
 
         param_samples = population_df[parameter] / scale_factor
 
-        # Calculate uncertainty based on type
         if uncertainty_type == "std":
             uncertainty = param_samples.std()
         elif uncertainty_type == "ptp":
@@ -529,7 +1055,6 @@ def calculate_parameter_uncertainty(
         elif uncertainty_type == "iqr":
             uncertainty = param_samples.quantile(0.75) - param_samples.quantile(0.25)
         elif uncertainty_type == "ci":
-            # Return 95% confidence interval
             lower = param_samples.quantile(0.025)
             upper = param_samples.quantile(0.975)
             uncertainty = {"lower": lower, "upper": upper, "width": upper - lower}
@@ -539,13 +1064,11 @@ def calculate_parameter_uncertainty(
         raw_data = param_samples.values
 
     elif method == "bootstrap":
-        # Future implementation for bootstrap uncertainty
         raise NotImplementedError(
             "Bootstrap uncertainty calculation not yet implemented"
         )
 
     elif method == "hessian":
-        # Future implementation for Hessian-based uncertainty
         raise NotImplementedError(
             "Hessian-based uncertainty calculation not yet implemented"
         )
@@ -588,7 +1111,6 @@ def format_parameter_result(uncertainty_result: dict, units: str = "") -> str:
         uncertainty_type_name = {"std": "±", "ptp": "range ±", "iqr": "IQR ±"}.get(
             uncertainty_result.get("type", "std"), "±"
         )
-
         return f"{param} = {value:.1f} {uncertainty_type_name}{uncertainty:.1f} {units}"
 
 
@@ -630,23 +1152,19 @@ def _validate_fit_results(observation):
     Args:
         observation: LimbObservation object with best_parameters from fitting
     """
-    # Skip validation if no fit results are available
     if (
         not hasattr(observation, "best_parameters")
         or observation.best_parameters is None
     ):
         return
 
-    # Extract altitude and radius if available
     h = observation.best_parameters.get("h")
     r = observation.best_parameters.get("r")
 
-    # Skip if essential parameters are missing
     if h is None or r is None:
         return
 
-    # Individual parameter warnings
-    if h < 1000:  # Less than 1 km altitude
+    if h < 1000:
         warnings.warn(
             f"Fitted altitude ({h:.0f} m) is very low. At such low altitudes, "
             "planetary curvature is difficult to detect and the fit may be unreliable. "
@@ -655,7 +1173,7 @@ def _validate_fit_results(observation):
             stacklevel=3,
         )
 
-    if r < 1000000:  # Less than 1000 km radius
+    if r < 1000000:
         warnings.warn(
             f"Fitted radius ({r/1000:.0f} km) is very small. This suggests the "
             "optimization may have difficulty detecting planetary curvature in your data. "
@@ -664,7 +1182,7 @@ def _validate_fit_results(observation):
             stacklevel=3,
         )
 
-    if r > 100000000:  # Greater than 100,000 km radius
+    if r > 100000000:
         warnings.warn(
             f"Fitted radius ({r/1000:.0f} km) is very large. This may indicate "
             "calibration issues or that the observed curvature is too subtle to measure "
@@ -673,8 +1191,7 @@ def _validate_fit_results(observation):
             stacklevel=3,
         )
 
-    # Combined problematic conditions (less strict thresholds)
-    if h < 5000 and r > 50000000:  # 5 km altitude + 50,000 km radius
+    if h < 5000 and r > 50000000:
         warnings.warn(
             f"Combination of relatively low altitude ({h/1000:.1f} km) and large radius "
             f"({r/1000:.0f} km) suggests the data may be insufficient to reliably detect "

@@ -1,9 +1,9 @@
 This tutorial shows how to calculate Earth's radius using a horizon photograph with known altitude and camera parameters via the default interactive manual annotation method.
 
 Prerequisites
-~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
-* Python 3.8+ with Planet Ruler installed (no additional dependencies needed)
+* Python 3.10+ with Planet Ruler installed (no additional dependencies needed)
 * A horizon photograph (we'll use the demo Earth image)
 * Basic knowledge of the observation altitude
 
@@ -17,7 +17,8 @@ Step 1: Setup and Imports
 
    import planet_ruler.observation as obs
    import planet_ruler.geometry as geom
-   from planet_ruler.fit import calculate_parameter_uncertainty, format_parameter_result
+   from planet_ruler.uncertainty import calculate_parameter_uncertainty
+   from planet_ruler.fit import format_parameter_result
    import matplotlib.pyplot as plt
 
 Step 2: Load Configuration and Image
@@ -82,28 +83,30 @@ Now we optimize the planetary radius to match the observed horizon curvature:
 .. code-block:: python
 
    # Perform the fit
-   observation.fit_limb(
+   observation.fit_arc(
        minimizer="differential-evolution",
        seed=42  # For reproducible results
    )
-   
+
    print("Fit completed successfully!")
    print(f"Fitted parameters: {observation.best_parameters}")
 
 **Monitoring Progress with Dashboard:**
 
-For long optimizations, enable the live progress dashboard:
+For long optimizations, enable the live progress dashboard via ``fit_limb``
+with an explicit stages list:
 
 .. code-block:: python
 
    # Enable dashboard for real-time monitoring
    observation.fit_limb(
-       method="differential-evolution",
+       stages=[{"method": "arc", "minimizer": "differential-evolution"}],
        dashboard=True  # Shows live progress
    )
-   
+
    # Configure dashboard display
    observation.fit_limb(
+       stages=[{"method": "arc"}],
        dashboard=True,
        dashboard_kwargs={
            'width': 80,         # Wider display
@@ -119,8 +122,21 @@ The dashboard shows:
 - Warnings and optimization hints
 - Adaptive refresh rate (fast during descent, slow at convergence)
 
+.. tip::
+   **Faster convergence with staged fitting**: chain a quick sagitta estimate
+   into the arc fit to narrow the search space automatically:
+
+   .. code-block:: python
+
+      observation.fit_limb(
+          stages=[
+              {"method": "sagitta"},
+              {"method": "arc", "minimizer": "differential-evolution"},
+          ]
+      )
+
 Step 5: Calculate Uncertainty
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Planet Ruler provides multiple uncertainty estimation methods:
 
@@ -178,7 +194,7 @@ Planet Ruler provides multiple uncertainty estimation methods:
        print(f"{int(cl*100)}% CI: ± {result['uncertainty']:.1f} km")
 
 Step 6: Validate Results
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 Compare your results with the known Earth radius:
 

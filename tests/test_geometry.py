@@ -24,7 +24,10 @@ from planet_ruler.geometry import (
     intrinsic_transform,
     extrinsic_transform,
     limb_arc,
+    _scale_limits,
+    _scale_parameters_for_resolution as _scale_params,
 )
+from planet_ruler.fit import estimate_radius_via_sagitta, SagittaFitter
 
 
 class TestBasicGeometry:
@@ -415,6 +418,468 @@ class TestIntegration:
         # (curvature might not be visible depending on FOV)
         variation = np.max(result) - np.min(result)
         assert variation >= 0  # Sanity check
+
+
+def _make_synthetic_limb(
+    r=6_371_000,
+    h=10_000,
+    f=0.026,
+    w=0.0173,
+    W=4000,
+    H=3000,
+    n_points=12,
+    noise_std=0.0,
+    seed=42,
+):
+    """
+    Generate a sparse limb array by sampling a synthetic arc at n_points
+    evenly spaced columns (avoiding the outermost 10% to stay well within FOV).
+    """
+    theta_x = limb_camera_angle(r, h)
+    y_arc = limb_arc(
+        r=r,
+        n_pix_x=W,
+        n_pix_y=H,
+        h=h,
+        f=f,
+        w=w,
+        x0=W // 2,
+        y0=H // 2,
+        theta_x=theta_x,
+        theta_y=0,
+        theta_z=np.pi,
+    )
+    rng = np.random.default_rng(seed)
+    margin = W // 10
+    xs = np.linspace(margin, W - margin - 1, n_points, dtype=int)
+    limb = np.full(W, np.nan)
+    for x in xs:
+        limb[x] = y_arc[x] + rng.normal(0, noise_std)
+    return limb
+
+
+class TestEstimateRadiusFromLimbArc:
+    """Tests for estimate_radius_via_sagitta."""
+
+    # --- accuracy across altitudes ---
+
+    @pytest.mark.parametrize("h", [1_000, 10_000, 50_000])
+    def test_clean_arc_within_5_percent(self, h):
+        r_true = 6_371_000
+        limb = _make_synthetic_limb(r=r_true, h=h, noise_std=0.0)
+        f, w, W = 0.026, 0.0173, 4000
+        f_px = f * W / w
+        est = estimate_radius_via_sagitta(limb, h=h, f_px=f_px, sigma_px=1.0)
+        assert est["status"] == "ok"
+        assert abs(est["r"] - r_true) / r_true < 0.05
+
+    def test_3sigma_bounds_contain_truth_under_noise(self):
+        """3-sigma bounds (sigma_px = true noise) must bracket r_true."""
+        r_true = 6_371_000
+        h = 10_000
+        noise_std = 1.0
+        limb = _make_synthetic_limb(r=r_true, h=h, noise_std=noise_std, seed=42)
+        f, w, W = 0.026, 0.0173, 4000
+        f_px = f * W / w
+        est = estimate_radius_via_sagitta(
+            limb, h=h, f_px=f_px, sigma_px=noise_std, n_sigma=3.0
+        )
+        assert est["status"] == "ok"
+        assert est["r_low"] <= r_true <= est["r_high"]
+
+    # --- bounds sanity ---
+
+    def test_bounds_bracket_estimate(self):
+        limb = _make_synthetic_limb()
+        f_px = 0.026 * 4000 / 0.0173
+        est = estimate_radius_via_sagitta(limb, h=10_000, f_px=f_px, sigma_px=1.0)
+        assert est["r_low"] < est["r"] < est["r_high"]
+
+    def test_wider_sigma_gives_wider_bounds(self):
+        limb = _make_synthetic_limb()
+        f_px = 0.026 * 4000 / 0.0173
+        narrow = estimate_radius_via_sagitta(limb, h=10_000, f_px=f_px, sigma_px=1.0)
+        wide = estimate_radius_via_sagitta(limb, h=10_000, f_px=f_px, sigma_px=5.0)
+        narrow_width = narrow["r_high"] - narrow["r_low"]
+        wide_width = wide["r_high"] - wide["r_low"]
+        assert wide_width > narrow_width
+
+    # --- n_sigma scaling ---
+
+    def test_n_sigma_scales_auto_bounds(self):
+        limb = _make_synthetic_limb()
+        f_px = 0.026 * 4000 / 0.0173
+        one = estimate_radius_via_sagitta(
+            limb, h=10_000, f_px=f_px, sigma_px="auto", n_sigma=1.0
+        )
+        two = estimate_radius_via_sagitta(
+            limb, h=10_000, f_px=f_px, sigma_px="auto", n_sigma=2.0
+        )
+        assert (two["r_high"] - two["r_low"]) > (one["r_high"] - one["r_low"])
+
+    def test_n_sigma_scales_bounds_for_explicit_sigma(self):
+        """n_sigma widens bounds even when sigma_px is an explicit float."""
+        limb = _make_synthetic_limb()
+        f_px = 0.026 * 4000 / 0.0173
+        a = estimate_radius_via_sagitta(
+            limb, h=10_000, f_px=f_px, sigma_px=2.0, n_sigma=1.0
+        )
+        b = estimate_radius_via_sagitta(
+            limb, h=10_000, f_px=f_px, sigma_px=2.0, n_sigma=3.0
+        )
+        # Point estimate and 1-sigma K_sigma are unchanged; bounds widen
+        assert np.isclose(a["r"], b["r"])
+        assert np.isclose(a["K_sigma"], b["K_sigma"])
+        assert (b["r_high"] - b["r_low"]) > (a["r_high"] - a["r_low"])
+
+    # --- auto sigma ---
+
+    def test_auto_sigma_uses_residual_rms(self):
+        limb = _make_synthetic_limb(noise_std=2.0)
+        f_px = 0.026 * 4000 / 0.0173
+        est = estimate_radius_via_sagitta(limb, h=10_000, f_px=f_px, sigma_px="auto")
+        assert est["status"] == "ok"
+        assert est["residual_rms"] > 0
+        # K_sigma = K_est * rms / sqrt(sum(s_i^2)) — must be finite and positive
+        assert np.isfinite(est["K_sigma"])
+        assert est["K_sigma"] > 0
+
+    # --- failure modes ---
+
+    def test_too_few_points(self):
+        limb = np.full(4000, np.nan)
+        limb[100] = 500.0
+        limb[200] = 502.0
+        limb[300] = 503.0  # only 3 points
+        f_px = 0.026 * 4000 / 0.0173
+        est = estimate_radius_via_sagitta(limb, h=10_000, f_px=f_px)
+        assert est["status"] == "too_few_points"
+        assert np.isnan(est["r"])
+
+    def test_flat_arc_parabola(self):
+        limb = np.full(400, np.nan)
+        xs = np.linspace(40, 360, 10, dtype=int)
+        for x in xs:
+            limb[x] = 200.0  # perfectly flat line
+        f_px = 0.026 * 400 / 0.0173
+        est = estimate_radius_via_sagitta(limb, h=10_000, f_px=f_px, sigma_px=1.0)
+        assert est["status"] == "flat_arc"
+
+    # --- return dict completeness ---
+
+    def test_return_dict_keys(self):
+        limb = _make_synthetic_limb()
+        f_px = 0.026 * 4000 / 0.0173
+        est = estimate_radius_via_sagitta(limb, h=10_000, f_px=f_px)
+        expected_keys = {
+            "r",
+            "r_low",
+            "r_high",
+            "r_sigma",
+            "K",
+            "K_sigma",
+            "K_sigma_jack",
+            "n_points",
+            "residual_rms",
+            "arc_angle_deg",
+            "x_apex",
+            "y_apex",
+            "theta_x_est",
+            "status",
+            "warnings",
+        }
+        assert expected_keys == set(est.keys())
+
+    def test_n_points_matches_annotated(self):
+        limb = _make_synthetic_limb(n_points=8)
+        f_px = 0.026 * 4000 / 0.0173
+        est = estimate_radius_via_sagitta(limb, h=10_000, f_px=f_px)
+        assert est["n_points"] == 8
+
+    # --- hyperbola model accuracy ---
+
+    def test_hyperbola_horizontal_camera_zero_bias(self):
+        """theta_x=0: hyperbola fit is exact → bias < 0.01% on a clean arc.
+
+        At theta_x=0 the arc is s = kappa*A(u), so the OLS s = s0 - c*A(u)
+        recovers c = -kappa exactly and K = 1/|c| has zero residual.  This
+        test uses the synth-benchmark camera (f=5.1mm, w=7.6mm) where the
+        old chordspan formula gave -48.7 km bias at theta_x=0 due to the
+        wide-angle (L/f_px≈0.56) parabola approximation error.
+        """
+        r_true = 6_371_000
+        h = 10_000
+        f_mm, w_mm = 5.1, 7.6
+        n_pix_x = 4000
+        f_px = f_mm / w_mm * n_pix_x
+        x_coords = np.linspace(n_pix_x // 8, n_pix_x * 7 // 8, 11)
+        y_arc = limb_arc(
+            r=r_true,
+            n_pix_x=n_pix_x,
+            n_pix_y=3000,
+            h=h,
+            f=f_mm * 1e-3,
+            w=w_mm * 1e-3,
+            x0=n_pix_x / 2,
+            y0=1500,
+            theta_x=0,
+            theta_z=np.pi,
+            x_coords=x_coords,
+        )
+        limb = np.full(n_pix_x, np.nan)
+        for xi, yi in zip(x_coords.astype(int), y_arc):
+            limb[xi] = yi
+        est = estimate_radius_via_sagitta(limb, h=h, f_px=f_px, sigma_px=1.0)
+        assert est["status"] == "ok"
+        assert abs(est["r"] - r_true) / r_true < 1e-4  # < 0.01% ≈ 600 m
+
+    def test_hyperbola_at_dip_angle(self):
+        """theta_x = dip angle: hyperbola fit gives < 0.1% error on clean arc.
+
+        Synth images are generated at theta_x = limb_camera_angle(r, h) = alpha.
+        The projected limb is algebraically a hyperbola at this angle (the true
+        parabolic boundary is at arctan(K) = pi/2 - alpha ≈ 87°, not alpha).
+        The hyperbola model has a small sin²(alpha)/K² systematic (~2-3 km).
+        """
+        r_true = 6_371_000
+        h = 10_000
+        f_mm, w_mm = 5.1, 7.6
+        n_pix_x = 4000
+        f_px = f_mm / w_mm * n_pix_x
+        theta_x = limb_camera_angle(r_true, h)
+        x_coords = np.linspace(n_pix_x // 8, n_pix_x * 7 // 8, 11)
+        y_arc = limb_arc(
+            r=r_true,
+            n_pix_x=n_pix_x,
+            n_pix_y=3000,
+            h=h,
+            f=f_mm * 1e-3,
+            w=w_mm * 1e-3,
+            x0=n_pix_x / 2,
+            y0=1500,
+            theta_x=theta_x,
+            theta_z=np.pi,
+            x_coords=x_coords,
+        )
+        limb = np.full(n_pix_x, np.nan)
+        for xi, yi in zip(x_coords.astype(int), y_arc):
+            limb[xi] = yi
+        est = estimate_radius_via_sagitta(limb, h=h, f_px=f_px, sigma_px=1.0)
+        assert est["status"] == "ok"
+        assert abs(est["r"] - r_true) / r_true < 0.001  # < 0.1% ≈ 6 km
+
+
+class TestSagittaEstimatorExtensions:
+    """Tests for bias correction, jackknife, and SagittaFitter."""
+
+    def test_bias_correct_reduces_error(self):
+        """Bias correction via y0 reduces error when theta_x exceeds the
+        theta_x=0 OLS approximation."""
+        r_true = 6_371_000
+        h = 10_000
+        f, w, W, H = 0.026, 0.0173, 4000, 3000
+        f_px = f * W / w
+        theta_x = 0.1  # ~5.7° — large enough that OLS has residual bias
+
+        y_full = limb_arc(
+            r=r_true,
+            n_pix_x=W,
+            n_pix_y=H,
+            h=h,
+            f=f,
+            w=w,
+            x0=W // 2,
+            y0=H // 2,
+            theta_x=theta_x,
+            theta_z=np.pi,
+        )
+        margin = W // 10
+        limb = np.full(W, np.nan)
+        for xi in np.linspace(margin, W - margin - 1, 20, dtype=int):
+            limb[xi] = y_full[xi]
+
+        y0 = H / 2.0
+        est_raw = estimate_radius_via_sagitta(limb, h=h, f_px=f_px, sigma_px=1.0)
+        est_bc = estimate_radius_via_sagitta(
+            limb, h=h, f_px=f_px, sigma_px=1.0, y0=y0, bias_correct=True
+        )
+        err_raw = abs(est_raw["r"] - r_true)
+        err_bc = abs(est_bc["r"] - r_true)
+        assert err_bc < err_raw
+
+    def test_bias_correct_skipped_without_y0(self):
+        """bias_correct=True without y0 should not raise, just skip correction."""
+        limb = _make_synthetic_limb()
+        f_px = 0.026 * 4000 / 0.0173
+        est = estimate_radius_via_sagitta(
+            limb, h=10_000, f_px=f_px, bias_correct=True  # no y0
+        )
+        assert est["status"] == "ok"
+
+    def test_jackknife_sigma_for_noisy_arc(self):
+        """Jackknife sigma is finite and positive for a noisy arc."""
+        limb = _make_synthetic_limb(n_points=20, noise_std=3.0)
+        f_px = 0.026 * 4000 / 0.0173
+        est = estimate_radius_via_sagitta(
+            limb, h=10_000, f_px=f_px, uncertainty="jackknife"
+        )
+        assert np.isfinite(est["K_sigma_jack"])
+        assert est["K_sigma_jack"] > 0
+
+    def test_sagitta_fitter_dip_angle(self):
+        """SagittaFitter recovers radius within 1% at a 5° dip angle."""
+        r_true = 6_371_000
+        h = 10_000
+        f = 0.026
+        w = 0.0173
+        n_pix_x = 4000
+        f_px = f / w * n_pix_x
+        theta_x = 0.087  # ~5°
+
+        x_coords = np.linspace(0, n_pix_x - 1, 60).astype(float)
+        y_arc = limb_arc(
+            r=r_true,
+            n_pix_x=n_pix_x,
+            n_pix_y=3000,
+            h=h,
+            f=f,
+            w=w,
+            theta_x=theta_x,
+            theta_z=np.pi,
+            x_coords=x_coords,
+        )
+        limb = np.full(n_pix_x, np.nan)
+        for xi, yi in zip(x_coords.astype(int), y_arc):
+            limb[xi] = yi
+
+        init_vals = {
+            "r": 7_000_000,
+            "h": h,
+            "f": f,
+            "w": w,
+            "theta_x": 0.0,
+            "theta_y": 0.0,
+            "theta_z": np.pi,
+        }
+        limits = {
+            "r": [2_000_000, 14_000_000],
+            "h": [5_000, 20_000],
+            "f": [0.01, 0.1],
+            "w": [0.005, 0.05],
+            "theta_x": [-0.3, 0.3],
+            "theta_y": [-0.3, 0.3],
+            "theta_z": [-np.pi, np.pi],
+        }
+
+        fitter = SagittaFitter(
+            limb=limb,
+            h=h,
+            f_px=f_px,
+            y0=3000 / 2.0,
+            free_parameters=["r", "theta_x"],
+            init_parameter_values=init_vals,
+            parameter_limits=limits,
+            sigma_px="auto",
+            n_sigma=2.0,
+            uncertainty="ols",
+        )
+        result = fitter.fit()
+        r_fitted = result["updated_init"]["r"]
+        assert abs(r_fitted - r_true) / r_true < 0.01
+
+
+class TestLimbArcEdgeCases:
+    """Tests for limb_arc proxy/out-of-FOV paths and all_in_front handling."""
+
+    _BASE = dict(r=6_371_000, h=10_000, f=0.050, w=0.036)
+
+    def test_limb_in_fov_returns_array_of_correct_length(self):
+        arc = limb_arc(n_pix_x=200, n_pix_y=150, theta_z=np.pi, **self._BASE)
+        assert len(arc) == 200
+
+    def test_limb_out_of_fov_returns_proxy_flat_line(self):
+        # theta_x=pi/2 tilts camera straight down — limb won't land in FOV
+        arc = limb_arc(
+            n_pix_x=200, n_pix_y=150, theta_x=np.pi / 2, theta_z=0.0, **self._BASE
+        )
+        assert len(arc) == 200
+        # proxy line is constant (sign * y_proxy)
+        assert np.ptp(arc) < 1e-6
+
+    def test_limb_all_in_front_deduplicated(self):
+        # High altitude means entire limb circle is in front of camera
+        arc = limb_arc(
+            n_pix_x=400,
+            n_pix_y=300,
+            h=6_000_000,
+            theta_z=np.pi,
+            **{k: v for k, v in self._BASE.items() if k != "h"},
+        )
+        assert len(arc) == 400
+
+    def test_return_full_gives_2d_array(self):
+        result = limb_arc(
+            n_pix_x=100, n_pix_y=80, theta_z=np.pi, return_full=True, **self._BASE
+        )
+        assert result.ndim == 2
+        assert result.shape[1] == 2
+
+    def test_proxy_sign_is_continuous_near_boundary(self):
+        # Rotating theta_z through zero crosses the out-of-FOV boundary;
+        # the proxy value should not have a discontinuous jump.
+        values = []
+        for tz in np.linspace(-0.1, 0.1, 11):
+            arc = limb_arc(n_pix_x=100, n_pix_y=80, theta_z=tz, **self._BASE)
+            values.append(arc[50])
+        diffs = np.abs(np.diff(values))
+        assert np.all(diffs < 200), "Proxy limb has discontinuous jump near FOV edge"
+
+
+class TestScaleHelpers:
+    """Tests for _scale_params and _scale_limits pixel-space rescaling."""
+
+    def test_scale_params_halves_pixel_keys(self):
+        params = {"n_pix_x": 4000, "n_pix_y": 3000, "x0": 2000, "y0": 1500, "f": 0.05}
+        scaled = _scale_params(params, 0.5)
+        assert scaled["n_pix_x"] == 2000
+        assert scaled["n_pix_y"] == 1500
+        assert scaled["x0"] == 1000
+        assert scaled["y0"] == 750
+        assert scaled["f"] == 0.05  # non-pixel key unchanged
+
+    def test_scale_params_doubles_pixel_keys(self):
+        params = {"n_pix_x": 100, "n_pix_y": 80, "x0": 50, "y0": 40}
+        scaled = _scale_params(params, 2.0)
+        assert scaled["n_pix_x"] == 200
+        assert scaled["n_pix_y"] == 160
+
+    def test_scale_params_missing_keys_ignored(self):
+        params = {"r": 6_371_000, "h": 10_000}
+        scaled = _scale_params(params, 0.5)
+        assert scaled == params
+
+    def test_scale_params_does_not_mutate_original(self):
+        params = {"n_pix_x": 1000, "n_pix_y": 800}
+        _scale_params(params, 0.5)
+        assert params["n_pix_x"] == 1000
+
+    def test_scale_limits_halves_pixel_bounds(self):
+        limits = {"n_pix_x": [0, 4000], "n_pix_y": [0, 3000], "r": [1e6, 1e7]}
+        scaled = _scale_limits(limits, 0.5)
+        assert scaled["n_pix_x"] == [0, 2000]
+        assert scaled["n_pix_y"] == [0, 1500]
+        assert scaled["r"] == [1e6, 1e7]  # non-pixel key unchanged
+
+    def test_scale_limits_doubles_pixel_bounds(self):
+        limits = {"x0": [400, 600], "y0": [300, 500]}
+        scaled = _scale_limits(limits, 2.0)
+        assert scaled["x0"] == [800, 1200]
+        assert scaled["y0"] == [600, 1000]
+
+    def test_scale_limits_does_not_mutate_original(self):
+        limits = {"n_pix_x": [0, 1000]}
+        _scale_limits(limits, 0.5)
+        assert limits["n_pix_x"] == [0, 1000]
 
 
 if __name__ == "__main__":

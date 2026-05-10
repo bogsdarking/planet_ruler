@@ -12,7 +12,7 @@ planet_ruler
    planet_ruler
 
 Core Modules
------------
+------------
 
 .. autosummary::
    :toctree: generated/
@@ -31,7 +31,7 @@ Core Modules
    planet_ruler.demo
 
 Geometry Module
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Mathematical functions for planetary geometry calculations.
 
@@ -41,7 +41,7 @@ Mathematical functions for planetary geometry calculations.
    :show-inheritance:
 
 Image Processing Module
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Computer vision and image analysis functions.
 
@@ -51,7 +51,7 @@ Computer vision and image analysis functions.
    :show-inheritance:
 
 Observation Module
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 High-level observation classes and workflows.
 
@@ -61,7 +61,7 @@ High-level observation classes and workflows.
    :show-inheritance:
 
 Annotation Module
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 Interactive manual limb detection and annotation.
 
@@ -71,7 +71,7 @@ Interactive manual limb detection and annotation.
    :show-inheritance:
 
 Camera Module
-~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 Automatic camera parameter extraction from EXIF data.
 
@@ -81,7 +81,7 @@ Automatic camera parameter extraction from EXIF data.
    :show-inheritance:
 
 Fitting Module
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 Parameter optimization and cost function handling.
 
@@ -91,7 +91,7 @@ Parameter optimization and cost function handling.
    :show-inheritance:
 
 Uncertainty Module
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Parameter uncertainty estimation using multiple methods.
 
@@ -101,7 +101,7 @@ Parameter uncertainty estimation using multiple methods.
    :show-inheritance:
 
 Plotting Module
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Visualization and plotting functions.
 
@@ -111,7 +111,7 @@ Visualization and plotting functions.
    :show-inheritance:
 
 Validation Module
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 Configuration validation and consistency checking.
 
@@ -121,7 +121,7 @@ Configuration validation and consistency checking.
    :show-inheritance:
 
 Command-Line Interface
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 CLI tools for command-line access to planet_ruler.
 
@@ -131,7 +131,7 @@ CLI tools for command-line access to planet_ruler.
    :show-inheritance:
 
 Demo Module
-~~~~~~~~~~
+~~~~~~~~~~~
 
 Example scenarios and configuration management.
 
