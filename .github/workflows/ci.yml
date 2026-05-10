@@ -191,6 +191,9 @@ jobs:
           .benchmarks/
           benchmark-histogram.svg
 
+    - name: Clean working tree for branch switch
+      run: git reset --hard HEAD
+
     - name: Store benchmark result
       uses: benchmark-action/github-action-benchmark@v1
       if: github.ref == 'refs/heads/main'
