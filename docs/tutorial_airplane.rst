@@ -150,7 +150,10 @@ If you can't get exact altitude, use these typical values:
      - 11,278 - 12,497
 
 .. warning::
-   Altitude uncertainty of ±2,000 feet typically adds 5-10% error to your final radius measurement. Try to be as accurate as possible, but don't worry if you can only estimate.
+   **Altitude is the dominant error source.** At cruise altitude (~10 km), the inferred radius
+   amplifies altitude uncertainty by roughly R/h ≈ 637×. A ±2,000 ft (±610 m) uncertainty adds
+   ~6% to your radius measurement; GPS altitude (~30 m) reduces this below 0.5%. Altitude
+   accuracy matters more than image quality or annotation precision—get it as precisely as you can.
 
 Part 4: Analysis with Planet Ruler
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

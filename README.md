@@ -532,9 +532,19 @@ obs.plot()                                  # Show results with uncertainty
 ## Limitations & Best Practices
 
 ### **Accuracy Expectations**
-- **Typical accuracy**: ~20%
-- **Best case**: ~15% with optimal conditions and camera calibration (so far!)
-- **Factors affecting precision**: Image quality, horizon clarity, altitude, camera specs
+
+For Earth photographed from an aircraft, **altitude is the dominant error source**. The inferred
+radius amplifies altitude uncertainty by roughly R/h (~637× at 10 km cruise altitude):
+
+| Altitude source | Typical precision | Radius error |
+| --- | --- | --- |
+| GPS (phone or aircraft) | ~30 m | < 0.5% |
+| Aircraft display / app | ~300–600 m | ~3–6% |
+| Estimated from flight info | ~600–2000 m | ~6–20% |
+
+Annotation quality and camera parameter accuracy are secondary contributors (~1–5% each with
+careful technique). The benchmark examples in this README use images without GPS telemetry; their
+errors reflect estimated-altitude quality, not the limits of the method.
 
 ### **Technical Limitations**
 - **Optimization challenges**: Complex parameter space → potential local minima (mitigated by multi-resolution optimization)

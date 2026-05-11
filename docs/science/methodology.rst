@@ -70,13 +70,18 @@ resolution, helping avoid local minima in the cost landscape.
 Uncertainty Quantification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Measurement uncertainty arises from pixel discretization, camera parameter uncertainty, and 
-atmospheric effects. Bootstrap resampling provides empirical confidence intervals: we repeatedly 
-resample the observed horizon points with replacement, refit the model to each bootstrap sample, 
-and examine the distribution of fitted parameters. The standard deviation of this distribution 
-estimates parameter uncertainty.
+For Earth measurements from aircraft, **altitude uncertainty dominates**. Because the arc curvature
+constrains the ratio :math:`R/(R+h)` rather than :math:`R` directly, altitude error is amplified
+by :math:`R/h` when converting to radius (see :doc:`geometry_basics`). At 10 km cruise altitude
+this factor is ~637: a 600 m altitude uncertainty adds ~6% radius error, while GPS precision
+of ~30 m contributes under 0.5%. Secondary contributors are annotation quality and camera parameter
+accuracy, typically 1–5% each.
 
-Alternatively, the Hessian matrix (second derivatives of the cost function at the solution) provides 
-an approximate covariance matrix for the parameters, yielding uncertainty estimates from the optimization 
-geometry itself. Both methods typically agree within a factor of two and provide order-of-magnitude 
-uncertainty characterization.
+Algorithmic uncertainty—arising from local minima, pixel discretization, and numerical precision—is
+estimated by two complementary methods. Bootstrap resampling repeatedly resamples the observed
+horizon points with replacement, refits the model to each sample, and reports the standard deviation
+of the resulting parameter distribution. Alternatively, the Hessian matrix (second derivatives of
+the cost function at the solution) yields an approximate parameter covariance matrix directly from
+the optimization geometry. Both methods typically agree within a factor of two and capture
+optimizer-level uncertainty, but they do not account for the altitude or camera-parameter terms
+above, which must be propagated separately.

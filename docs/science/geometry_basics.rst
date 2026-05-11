@@ -49,7 +49,42 @@ This sagitta scales as :math:`s \propto \sqrt{h}` for a fixed field of view—do
 increases the sagitta by only :math:`\sqrt{2} \approx 1.4\times`. This square-root scaling means 
 that high altitude provides only modest improvements in measurement precision compared to moderate altitude.
 
-The key insight is that the limb arc's shape encodes the observer's altitude :math:`h` through the 
-relationship between :math:`R`, :math:`h`, and the observed angular geometry. By measuring the arc's 
-curvature in an image with known camera parameters, we can infer :math:`h` (if :math:`R` is known) 
+The key insight is that the limb arc's shape encodes the observer's altitude :math:`h` through the
+relationship between :math:`R`, :math:`h`, and the observed angular geometry. By measuring the arc's
+curvature in an image with known camera parameters, we can infer :math:`h` (if :math:`R` is known)
 or :math:`R` (if :math:`h` is known).
+
+Parameter Identifiability and the R–h Degeneracy
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The arc curvature constrains the ratio :math:`R/(R+h)`, not :math:`R` and :math:`h` independently.
+Any pair :math:`(R', h')` satisfying the same ratio produces an identical limb arc in the image.
+Freeing both parameters simultaneously therefore creates a degenerate ridge in the optimization
+landscape: the optimizer can trade off radius against altitude without changing the predicted arc
+shape. This is why altitude must be supplied from an external source—GPS, barometric sensor, or
+flight telemetry—rather than inferred from the image alongside radius.
+
+When altitude :math:`h` is known, the sensitivity of the inferred radius to altitude uncertainty
+follows directly from differentiating :math:`R = \rho h\,/\,(1 - \rho)` where
+:math:`\rho = R/(R+h)`:
+
+.. math::
+
+   \frac{dR}{dh} = \frac{R}{h}
+
+The amplification factor :math:`R/h` is large at aircraft altitudes. At :math:`h = 10` km, a 1 km
+error in altitude propagates to a ~637 km (~10%) error in the inferred radius. However, civilian GPS
+altitude is accurate to roughly 10–30 m, which propagates to only 6–19 km (~0.1–0.3%)—well within
+useful measurement bounds.
+
+Three independent sources contribute to overall radius uncertainty:
+
+- **Altitude** (:math:`\sigma_h`): :math:`\sigma_R \approx (R/h)\,\sigma_h`. Reduced by better GPS
+  or barometric sensing. Typically dominates with good annotations.
+
+- **Annotation noise** (:math:`\sigma_\alpha`): uncertainty in the fitted arc position, driven by
+  the number and precision of horizon points. Reduced by denser or automated annotation.
+
+- **Camera parameters** (:math:`\sigma_{f/w}`): errors in focal length or sensor width shift the
+  pixel-to-angle mapping, biasing the inferred curvature. Reduced by camera calibration;
+  usually 1–2% for smartphones with accurate EXIF metadata.
