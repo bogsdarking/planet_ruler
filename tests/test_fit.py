@@ -1562,5 +1562,131 @@ class TestLimbFitterSciPyMinimize:
         assert result["best_parameters"] is not None
 
 
+# ============================================================================
+# CHORD-RELATIVE SAGITTA PENALTY
+# ============================================================================
+
+
+@pytest.mark.unit
+class TestChordSagittaPenalty:
+    """Unit tests for _chord_sagitta_penalty and its integration into L2CostFunction.
+
+    Image-coordinate convention (y increases downward):
+      ∩-shaped arc  (centre has smaller y than chord) = correct  = no penalty.
+      ∪-shaped arc  (centre has larger  y than chord) = inverted = penalty fires.
+    """
+
+    def _penalty(self, y, x, scale=100.0):
+        from planet_ruler.fit import _chord_sagitta_penalty
+
+        return _chord_sagitta_penalty(
+            np.asarray(y, float), np.asarray(x, float), scale=scale
+        )
+
+    def test_correct_arc_zero_penalty(self):
+        """∩-shaped arc (centre has smaller y than chord) must produce zero penalty."""
+        x = np.arange(11, dtype=float)
+        # Arc peaks toward the top of the image: centre (x=5) has y=0 (smallest);
+        # endpoints have y=2.5.  Correct ∩ shape — no penalty.
+        y = 0.1 * (x - 5.0) ** 2
+        assert self._penalty(y, x) == 0.0
+
+    def test_inverted_arc_positive_penalty(self):
+        """∪-shaped arc (centre has larger y than chord) must produce a positive penalty."""
+        x = np.arange(11, dtype=float)
+        # Arc sags toward the bottom of the image: centre (x=5) has y=2.5 (largest);
+        # endpoints have y=0.  Inverted ∪ shape — penalty fires.
+        y = -0.1 * (x - 5.0) ** 2 + 2.5
+        assert self._penalty(y, x) > 0.0
+
+    def test_proxy_mode_flat_arc(self):
+        """A near-constant arc (out-of-FOV proxy mode) must return 1e6."""
+        x = np.arange(10, dtype=float)
+        y = np.full(10, 50.0)
+        assert self._penalty(y, x) == 1e6
+
+    def test_fewer_than_three_points(self):
+        """Guard: fewer than 3 points must return 0 without raising."""
+        assert self._penalty([1.0, 2.0], [0.0, 5.0]) == 0.0
+
+    def test_penalty_scales_with_scale_param(self):
+        """Penalty magnitude must scale linearly with the scale parameter."""
+        x = np.arange(11, dtype=float)
+        y = -0.1 * (x - 5.0) ** 2 + 2.5  # inverted ∪ arc
+        p1 = self._penalty(y, x, scale=100.0)
+        p2 = self._penalty(y, x, scale=200.0)
+        assert p2 > 0.0
+        assert np.isclose(p2 / p1, 2.0, rtol=1e-9)
+
+    def test_l2_cost_adds_penalty_for_inverted_arc(self):
+        """L2CostFunction.cost() must be > 0 when the prediction is a perfect ∪ arc.
+
+        Target == prediction (zero L2 residuals) but ∪-shaped, so only the
+        penalty drives the total cost above zero.
+        """
+        x_full = np.arange(11, dtype=float)
+        y_target = -0.1 * (x_full - 5.0) ** 2 + 2.5  # ∪ shape (inverted)
+
+        def inverted_arc(**kwargs):
+            return y_target.copy()
+
+        cost_fn = L2CostFunction(
+            target=y_target,
+            function=inverted_arc,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="l2",
+            concavity_penalty=True,
+        )
+        assert cost_fn.cost({}) > 0.0
+
+    def test_l2_cost_penalty_disabled(self):
+        """When concavity_penalty=False, a perfect-fit ∪ arc must have cost == 0."""
+        x_full = np.arange(11, dtype=float)
+        y_target = -0.1 * (x_full - 5.0) ** 2 + 2.5  # ∪ shape (inverted)
+
+        def inverted_arc(**kwargs):
+            return y_target.copy()
+
+        cost_fn = L2CostFunction(
+            target=y_target,
+            function=inverted_arc,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="l2",
+            concavity_penalty=False,
+        )
+        assert np.isclose(cost_fn.cost({}), 0.0, atol=1e-10)
+
+    def test_l2_cost_custom_scale(self):
+        """concavity_penalty_scale is reflected in the cost value."""
+        x_full = np.arange(11, dtype=float)
+        y_target = -0.1 * (x_full - 5.0) ** 2 + 2.5  # ∪ shape (inverted)
+
+        def inverted_arc(**kwargs):
+            return y_target.copy()
+
+        cost_fn_100 = L2CostFunction(
+            target=y_target,
+            function=inverted_arc,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="l2",
+            concavity_penalty=True,
+            concavity_penalty_scale=100.0,
+        )
+        cost_fn_200 = L2CostFunction(
+            target=y_target,
+            function=inverted_arc,
+            free_parameters=[],
+            init_parameter_values={},
+            loss_function="l2",
+            concavity_penalty=True,
+            concavity_penalty_scale=200.0,
+        )
+        # Both have zero raw L2 (perfect fit), so cost ratio == scale ratio.
+        assert cost_fn_200.cost({}) > cost_fn_100.cost({}) > 0.0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
