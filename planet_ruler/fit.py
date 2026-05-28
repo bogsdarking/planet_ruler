@@ -25,7 +25,12 @@ from planet_ruler.image import (
     bilinear_interpolate,
     gradient_field,
 )
-from planet_ruler.geometry import _r_from_K, limb_arc_sagitta, limb_arc, limb_camera_angle
+from planet_ruler.geometry import (
+    _r_from_K,
+    limb_arc_sagitta,
+    limb_arc,
+    limb_camera_angle,
+)
 from typing import Callable
 import logging
 
@@ -168,7 +173,9 @@ class L2CostFunction(BaseCostFunction):
             l2 = float(np.mean((y - self.target) ** 2))
             penalty = (
                 _chord_sagitta_penalty(
-                    y, self.x, self.concavity_penalty_scale,
+                    y,
+                    self.x,
+                    self.concavity_penalty_scale,
                     invert=self._invert_concavity,
                 )
                 if self.concavity_penalty
@@ -250,7 +257,7 @@ def _chord_sagitta_penalty(
     xs = x[order]
     ys = y[order]
 
-    x_l, y_l = float(xs[0]),  float(ys[0])
+    x_l, y_l = float(xs[0]), float(ys[0])
     x_r, y_r = float(xs[-1]), float(ys[-1])
     dx = x_r - x_l
     if dx < 1e-6:
@@ -270,7 +277,7 @@ def _chord_sagitta_penalty(
         # Expected arc is ∩-shaped (theta_z ≈ π): penalise ∪ (sum_raw > 0).
         if sum_raw <= 0.0:
             return 0.0
-    return scale * float(np.mean(d ** 2))
+    return scale * float(np.mean(d**2))
 
 
 class GradientFieldCostFunction(BaseCostFunction):
@@ -987,8 +994,10 @@ class SagittaFitter(BaseFitter):
             r_t = _r_from_K(1.0 / np.exp(log_kap), self.h)
             u_free = xs - x_apex_free
             s_pred = np.array(
-                [limb_arc_sagitta(float(ui), tx, self.f_px, r_t, self.h)
-                 for ui in u_free]
+                [
+                    limb_arc_sagitta(float(ui), tx, self.f_px, r_t, self.h)
+                    for ui in u_free
+                ]
             )
             s0 = float(np.mean(ys - s_pred))
             return float(np.sum((ys - s0 - s_pred) ** 2))
@@ -1017,8 +1026,10 @@ class SagittaFitter(BaseFitter):
         # only the coordinate frame of u must be consistent.
         u = xs - x_apex_opt
         s_pred_opt = np.array(
-            [limb_arc_sagitta(float(ui), theta_x_opt, self.f_px, r_opt, self.h)
-             for ui in u]
+            [
+                limb_arc_sagitta(float(ui), theta_x_opt, self.f_px, r_opt, self.h)
+                for ui in u
+            ]
         )
         s = ys - float(np.mean(ys - s_pred_opt))
 
