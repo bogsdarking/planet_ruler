@@ -25,7 +25,12 @@ from planet_ruler.image import (
     bilinear_interpolate,
     gradient_field,
 )
-from planet_ruler.geometry import _r_from_K, limb_arc_sagitta, limb_arc
+from planet_ruler.geometry import (
+    _r_from_K,
+    limb_arc_sagitta,
+    limb_arc,
+    limb_camera_angle,
+)
 from typing import Callable
 import logging
 
@@ -133,12 +138,23 @@ class L2CostFunction(BaseCostFunction):
         free_parameters: list,
         init_parameter_values: dict,
         loss_function: str = "l2",
+        concavity_penalty: bool = True,
+        concavity_penalty_scale: float = 100.0,
     ):
         _VALID = {"l2", "l1", "log-l1"}
         if loss_function not in _VALID:
             raise ValueError(f"Unrecognized loss function: {loss_function!r}")
         super().__init__(target, function, free_parameters, init_parameter_values)
         self.loss_function = loss_function
+        self.concavity_penalty = concavity_penalty
+        self.concavity_penalty_scale = concavity_penalty_scale
+        # Auto-detect expected arc curvature from theta_z.
+        # When theta_z ≈ π (standard airplane/smartphone orientation) the arc
+        # is ∩-shaped; penalise ∪.  When theta_z ≈ 0 (some ISS / telescope
+        # configurations) the arc is ∪-shaped; penalise ∩ instead (invert).
+        # cos(theta_z) > 0 ↔ theta_z closer to 0 than to π ↔ invert.
+        theta_z = float(init_parameter_values.get("theta_z", np.pi))
+        self._invert_concavity = bool(np.cos(theta_z) > 0)
         valid_mask = ~np.isnan(target)
         self.x = np.where(valid_mask)[0]
         self.target = target[valid_mask]
@@ -154,13 +170,114 @@ class L2CostFunction(BaseCostFunction):
         if self.is_sparse and y is not None and len(y) != len(self.target):
             y = y[self.x]
         if self.loss_function == "l2":
-            return np.mean((y - self.target) ** 2)
+            l2 = float(np.mean((y - self.target) ** 2))
+            penalty = (
+                _chord_sagitta_penalty(
+                    y,
+                    self.x,
+                    self.concavity_penalty_scale,
+                    invert=self._invert_concavity,
+                )
+                if self.concavity_penalty
+                else 0.0
+            )
+            return l2 + penalty
         elif self.loss_function == "l1":
             return np.mean(np.abs(y - self.target))
         elif self.loss_function == "log-l1":
             abs_diff = np.abs(y - self.target)
             return np.mean([math.log(float(v) + 1) for v in abs_diff.flatten()])
         raise ValueError(f"Unrecognized loss function: {self.loss_function}")
+
+
+def _chord_sagitta_penalty(
+    y: np.ndarray,
+    x: np.ndarray,
+    scale: float = 100.0,
+    invert: bool = False,
+) -> float:
+    """Penalise an incorrectly curved arc prediction in the L2 cost function.
+
+    For a correctly curved planetary limb in the standard orientation
+    (theta_z ≈ π), the arc peaks toward the top of the image (∩ shape in
+    image coordinates where y increases downward): the arc centre has a
+    *smaller* y-value than the chord connecting the leftmost and rightmost
+    annotation points.
+
+    When the optimiser converges to the mirror basin the L2 residuals can be
+    arbitrarily small yet the geometry is physically wrong.  This penalty
+    detects that case and adds a large additive cost so differential evolution
+    escapes.
+
+    The ``invert`` flag handles viewing geometries where the correct arc is
+    ∪-shaped (e.g. theta_z ≈ 0 for some ISS or telescope configurations).
+    L2CostFunction sets this automatically from theta_z in
+    init_parameter_values.
+
+    Algorithm:
+        1. Guard: fewer than 3 points or any non-finite prediction → 0.
+        2. Guard: max(y) − min(y) < 0.5 px (flat proxy-mode arc, entirely
+           outside the FOV) → 1e6 (heavy penalty for degenerate basin).
+        3. Sort annotation points by x; define chord between leftmost and
+           rightmost (x, y_predicted) pairs.
+        4. For each point compute d = y_predicted − chord_y.
+           d > 0: arc is below chord (∪ shape).
+           d < 0: arc is above chord (∩ shape).
+        5. sum_raw = Σ d.
+           invert=False: penalise if sum_raw > 0  (∪ shape, wrong for θz≈π).
+           invert=True:  penalise if sum_raw < 0  (∩ shape, wrong for θz≈0).
+           Penalty = scale × mean(d²).
+
+    Args:
+        y: Predicted y-pixel values at the annotated x-coordinates.
+        x: Annotated x-pixel coordinates (parallel to y).
+        scale: Multiplicative weight applied to mean(d²) when the arc is in
+            the wrong basin.  Defaults to 100.0, which keeps the penalty
+            roughly two orders of magnitude above the typical L2 cost (O(1)
+            px²) so the optimiser reliably avoids the wrong basin.
+        invert: If False (default), penalise ∪-shaped arcs (correct when
+            theta_z ≈ π).  If True, penalise ∩-shaped arcs (correct when
+            theta_z ≈ 0).
+
+    Returns:
+        Non-negative penalty term to be added to the L2 cost.
+    """
+    n = len(x)
+    if n < 3:
+        return 0.0
+    if not np.all(np.isfinite(y)):
+        return 0.0
+
+    # Flat arc: limbArc returns a near-constant when the arc is entirely
+    # outside the FOV, creating a false basin with finite but meaningless cost.
+    if float(np.max(y) - np.min(y)) < 0.5:
+        return 1e6
+
+    order = np.argsort(x)
+    xs = x[order]
+    ys = y[order]
+
+    x_l, y_l = float(xs[0]), float(ys[0])
+    x_r, y_r = float(xs[-1]), float(ys[-1])
+    dx = x_r - x_l
+    if dx < 1e-6:
+        return 0.0
+
+    # d > 0: arc is below the chord in image space (∪ shape).
+    # d < 0: arc is above the chord (∩ shape).
+    chord_y = y_l + (y_r - y_l) * (xs - x_l) / dx
+    d = ys - chord_y
+    sum_raw = float(np.sum(d))
+
+    if invert:
+        # Expected arc is ∪-shaped (theta_z ≈ 0): penalise ∩ (sum_raw < 0).
+        if sum_raw >= 0.0:
+            return 0.0
+    else:
+        # Expected arc is ∩-shaped (theta_z ≈ π): penalise ∪ (sum_raw > 0).
+        if sum_raw <= 0.0:
+            return 0.0
+    return scale * float(np.mean(d**2))
 
 
 class GradientFieldCostFunction(BaseCostFunction):
@@ -383,6 +500,8 @@ class LimbFitter(BaseFitter):
         directional_decay_rate: float = 0.15,
         prefer_direction=None,
         n_jobs: int = 1,
+        concavity_penalty: bool = True,
+        concavity_penalty_scale: float = 100.0,
     ):
         self.target = target
         self.free_parameters = free_parameters
@@ -399,6 +518,8 @@ class LimbFitter(BaseFitter):
         self.directional_decay_rate = directional_decay_rate
         self.prefer_direction = prefer_direction
         self.n_jobs = n_jobs
+        self.concavity_penalty = concavity_penalty
+        self.concavity_penalty_scale = concavity_penalty_scale
 
     def fit(self) -> dict:
         working_parameters = dict(self.init_parameter_values)
@@ -421,6 +542,8 @@ class LimbFitter(BaseFitter):
                 free_parameters=self.free_parameters,
                 init_parameter_values=working_parameters,
                 loss_function=self.loss_function,
+                concavity_penalty=self.concavity_penalty,
+                concavity_penalty_scale=self.concavity_penalty_scale,
             )
         else:
             cost_fn = GradientFieldCostFunction(
@@ -846,9 +969,8 @@ class SagittaFitter(BaseFitter):
 
         xs = np.where(~np.isnan(self.limb))[0].astype(float)
         ys = self.limb[~np.isnan(self.limb)].astype(float)
-        u = xs - float(est["x_apex"])
-        s = ys - float(est["y_apex"])
 
+        x_apex0 = float(est["x_apex"])
         K0 = float(est["K"]) if np.isfinite(est["K"]) else 100.0
         tx0 = float(est["theta_x_est"]) if np.isfinite(est["theta_x_est"]) else 0.0
         log_kappa0 = np.log(1.0 / max(K0, 1e-12))
@@ -857,32 +979,59 @@ class SagittaFitter(BaseFitter):
         log_kappa_bounds = (-3.0, 3.0)
         tx_bounds = (float(tx_lo), float(tx_hi))
 
-        # Step 2: 2-D L-BFGS-B over [log_kappa, theta_x]
-        def cost_2d(params: np.ndarray) -> float:
-            log_kap, tx = params
+        x_min, x_max = float(xs.min()), float(xs.max())
+        x_range = x_max - x_min
+        # Allow apex to range 3× the annotation width beyond either edge so that
+        # asymmetric arcs with an off-frame apex are handled correctly.
+        x_apex_bounds = (x_min - 3.0 * x_range, x_max + 3.0 * x_range)
+
+        # Step 2: 3-D L-BFGS-B over [log_kappa, theta_x, x_apex].
+        # Freeing x_apex avoids a systematic bias when the true arc apex lies
+        # outside the annotated region.  The y-apex offset is absorbed by the
+        # floating intercept s0 computed analytically inside the cost.
+        def cost_3d(params: np.ndarray) -> float:
+            log_kap, tx, x_apex_free = params
             r_t = _r_from_K(1.0 / np.exp(log_kap), self.h)
+            u_free = xs - x_apex_free
             s_pred = np.array(
-                [limb_arc_sagitta(float(ui), tx, self.f_px, r_t, self.h) for ui in u]
+                [
+                    limb_arc_sagitta(float(ui), tx, self.f_px, r_t, self.h)
+                    for ui in u_free
+                ]
             )
-            s0 = float(np.mean(s - s_pred))
-            return float(np.sum((s - s0 - s_pred) ** 2))
+            s0 = float(np.mean(ys - s_pred))
+            return float(np.sum((ys - s0 - s_pred) ** 2))
 
         try:
-            res2d = minimize(
-                cost_2d,
-                x0=[log_kappa0, tx0],
+            res3d = minimize(
+                cost_3d,
+                x0=[log_kappa0, tx0, x_apex0],
                 method="L-BFGS-B",
-                bounds=[log_kappa_bounds, tx_bounds],
+                bounds=[log_kappa_bounds, tx_bounds, x_apex_bounds],
                 options={"maxiter": 500, "ftol": 1e-12},
             )
-            K_opt = 1.0 / float(np.exp(res2d.x[0]))
-            theta_x_opt = float(res2d.x[1])
+            K_opt = 1.0 / float(np.exp(res3d.x[0]))
+            theta_x_opt = float(res3d.x[1])
+            x_apex_opt = float(res3d.x[2])
         except Exception as exc:
-            warn.append(f"SagittaFitter 2-D minimisation failed: {exc}")
+            warn.append(f"SagittaFitter 3-D minimisation failed: {exc}")
             K_opt = K0
             theta_x_opt = tx0
+            x_apex_opt = x_apex0
 
         r_opt = float(_r_from_K(K_opt, self.h))
+
+        # Recompute u and s in the optimised x_apex frame for the jackknife loop.
+        # The jackknife re-derives its own floating intercept s0 internally, so
+        # only the coordinate frame of u must be consistent.
+        u = xs - x_apex_opt
+        s_pred_opt = np.array(
+            [
+                limb_arc_sagitta(float(ui), theta_x_opt, self.f_px, r_opt, self.h)
+                for ui in u
+            ]
+        )
+        s = ys - float(np.mean(ys - s_pred_opt))
 
         # Step 3: uncertainty bounds — jackknife (theta_x fixed) or OLS fallback
         K_sigma_ols = float(est.get("K_sigma", 0.0))
@@ -953,7 +1102,16 @@ class SagittaFitter(BaseFitter):
             "theta_x_est": theta_x_opt,
             "theta_x_sigma": float("nan"),
             "K_sigma_jack": K_sigma_jack,
-            "updated_init": {"r": r_opt, "theta_x": theta_x_opt},
+            # Use the geometric dip angle as the theta_x warm-start rather than
+            # theta_x_opt from the sagitta fit.  limb_arc_sagitta is nearly
+            # degenerate between alpha and pi-alpha for small kappa*sin(theta_x)
+            # values typical at cruising altitude, so the 3-D minimiser may
+            # converge to the wrong basin.  limb_camera_angle(r, h) = arccos(r/(r+h))
+            # is always the correct geometric estimate given a reliable r.
+            "updated_init": {
+                "r": r_opt,
+                "theta_x": limb_camera_angle(r_opt, self.h),
+            },
             "updated_limits": {"r": [r_low, r_high]},
             "status": "ok",
             "warnings": warn,

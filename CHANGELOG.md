@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-06-03
+
+### Added
+
+- Concavity penalty for the L2 annotation cost function. The optimizer can occasionally
+  converge to a physically wrong, inverted arc — a failure mode on off-apex images or with
+  loose parameter bounds. The penalty detects this by checking whether the predicted arc
+  curves in the correct direction relative to its chord, and adds a large cost when it does
+  not. Enabled by default; configurable via `concavity_penalty` (bool) and
+  `concavity_penalty_scale` (float) kwargs in `fit_arc()`. The correct curvature direction
+  is auto-detected from `theta_z`, so non-standard viewing geometries (e.g. camera pointing
+  away from nadir) are handled correctly without any user configuration.
+
+### Changed
+
+- Sagitta pre-fitter (`fit_sagitta`) upgraded from a 2-D to a 3-D optimisation: the arc
+  apex x-position is now a free parameter alongside curvature and camera angle. This removes
+  a systematic radius bias on asymmetric arcs whose true apex falls outside the annotated
+  region.
+- Sagitta pre-fitter now seeds the differential-evolution warm-start with a geometrically
+  computed camera angle (`arccos(r / (r + h))`) rather than the raw optimiser estimate,
+  avoiding a near-degeneracy that could misguide the final fit.
+
 ## [2.0.0] - 2026-05-07
 
 ### Added

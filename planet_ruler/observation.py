@@ -1025,6 +1025,8 @@ class LimbObservation(PlanetObservation):
         seed: int = 0,
         verbose: bool = False,
         n_jobs: int = 1,
+        concavity_penalty: bool = True,
+        concavity_penalty_scale: float = 100.0,
         _dashboard=None,
     ) -> "LimbObservation":
         """
@@ -1044,6 +1046,16 @@ class LimbObservation(PlanetObservation):
             verbose: Print progress.
             n_jobs: Parallel workers. Effective only for differential-evolution
                 and shgo; emits a UserWarning for other minimizers.
+            concavity_penalty: If True (default), add a chord-relative sagitta
+                penalty to the l2 cost that discourages ∪-shaped (inverted) arc
+                solutions.  The penalty fires only when the predicted arc sags
+                below the chord connecting the leftmost and rightmost annotation
+                points, which is geometrically wrong for a planetary limb.
+                Disable if the optimizer is reliably finding the correct ∩-shaped
+                basin and the penalty overhead is unwanted.
+            concavity_penalty_scale: Multiplicative weight applied to the
+                mean-squared chord deviation when the arc is inverted.  Defaults
+                to 100.0.  Has no effect when concavity_penalty is False.
             _dashboard: Internal — FitDashboard instance passed by fit_limb.
 
         Returns:
@@ -1102,6 +1114,8 @@ class LimbObservation(PlanetObservation):
             seed=seed,
             verbose=verbose,
             n_jobs=n_jobs,
+            concavity_penalty=concavity_penalty,
+            concavity_penalty_scale=concavity_penalty_scale,
         )
 
         result = fitter.fit()
@@ -1125,6 +1139,8 @@ class LimbObservation(PlanetObservation):
                 "loss_function": loss_function,
                 "minimizer": effective_minimizer,
                 "minimizer_preset": minimizer_preset,
+                "concavity_penalty": concavity_penalty,
+                "concavity_penalty_scale": concavity_penalty_scale,
                 "best_parameters": self.best_parameters,
                 "fit_results": self.fit_results,
                 "status": result.get("status", "ok"),
