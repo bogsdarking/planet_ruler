@@ -57,15 +57,40 @@ then search parameter space to minimize this cost.
 Parameter Bounds and Optimization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Physical constraints provide bounds on free parameters. Earth's radius is approximately 6371 km 
-(±50 km for various reference models). Altitude for aircraft photography ranges from 5-20 km. 
-Camera pitch typically ranges from -90° to +90°, roll from -180° to +180°. Focal length can 
+Physical constraints provide bounds on free parameters. Earth's radius is approximately 6371 km
+(±50 km for various reference models). Altitude for aircraft photography ranges from 5-20 km.
+Camera pitch typically ranges from -90° to +90°, roll from -180° to +180°. Focal length can
 often be constrained from EXIF metadata to within ±10%.
 
-Global optimization algorithms (differential evolution, basin-hopping, dual annealing) search this 
-bounded parameter space to find the best-fit solution. Multi-resolution strategies for gradient-field 
-optimization start with coarse image resolution (fast evaluation) and progressively refine to full 
+Global optimization algorithms (differential evolution, basin-hopping, dual annealing) search this
+bounded parameter space to find the best-fit solution. Multi-resolution strategies for gradient-field
+optimization start with coarse image resolution (fast evaluation) and progressively refine to full
 resolution, helping avoid local minima in the cost landscape.
+
+Cost Function Structure and Curvature Disambiguation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The L2 annotation cost function measures the mean squared pixel distance between predicted
+and observed horizon points. However, because a planetary limb arc and its mirror image
+(with the curvature flipped) can produce nearly identical pixel residuals, the optimizer
+can sometimes converge to a physically wrong solution: a predicted arc that curves in the
+opposite direction from the true limb.
+
+Planet Ruler resolves this ambiguity with an additive *concavity penalty* that fires when
+the predicted arc curves the wrong way. The penalty evaluates the predicted arc at the
+annotated x-coordinates, draws a chord between the leftmost and rightmost predictions,
+and checks whether the interior of the arc lies above or below that chord:
+
+* **∩-shaped arc** (interior above the chord): the limb peaks toward the top of the image —
+  the correct shape for standard high-altitude photography (e.g. an airplane window).
+  Penalty = 0.
+* **∪-shaped arc** (interior below the chord): the limb sags toward the bottom of the image
+  — the wrong-curvature mirror solution. Penalty fires, adding a large cost that steers
+  differential evolution out of that basin.
+
+The penalty is enabled by default. It can be disabled with ``concavity_penalty=False`` in
+:meth:`~planet_ruler.observation.LimbObservation.fit_arc` if needed (for example, when
+the viewing geometry is inverted and the ∪ shape is genuinely correct).
 
 Uncertainty Quantification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

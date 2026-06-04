@@ -418,6 +418,10 @@ Complete workflow class for limb-based planetary radius determination. Default d
 * Multiple uncertainty estimation methods (population spread, Hessian, profile likelihood)
 * Flexible cost functions (gradient-field flux, L1, L2, log-L1)
 * Support for multiple minimizers (differential-evolution, dual-annealing, basinhopping)
+* Concavity penalty on the L2 cost that prevents convergence to wrong-curvature (inverted) arc solutions;
+  configurable via ``concavity_penalty`` and ``concavity_penalty_scale`` in :meth:`fit_arc`
+* Sagitta pre-stage warm-start with 3-D optimizer (``fit_sagitta``) that seeds the differential-evolution
+  search with a geometrically correct ``theta_x`` estimate via :func:`~planet_ruler.geometry.limb_camera_angle`
 
 MaskSegmenter
 ~~~~~~~~~~~~~

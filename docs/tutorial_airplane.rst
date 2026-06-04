@@ -610,6 +610,31 @@ Use the crop tool to remove obstructions:
    # Continue with normal workflow
    obs = pr.LimbObservation("airplane_photo_cropped.jpg", config)
 
+**"The fitted arc curves the wrong way (arc sags downward instead of peaking upward)"**
+
+The optimizer occasionally locks onto a mirror-image solution where the predicted horizon
+curves in the opposite direction from the true limb. Planet Ruler includes a *concavity penalty*
+that prevents this by default, but if you see a clearly wrong fit you can try:
+
+.. code-block:: python
+
+   # Increase the penalty weight (default is 100) to push harder out of the wrong basin
+   obs.fit_arc(
+       minimizer='differential-evolution',
+       max_iter=1000,
+       concavity_penalty_scale=500,
+   )
+
+   # Or re-run with a different random seed
+   obs.fit_arc(minimizer='differential-evolution', max_iter=1000, seed=99)
+
+If you are photographing from an unusual angle where the horizon genuinely curves downward
+(rare outside of ISS or near-vertical imagery), disable the penalty:
+
+.. code-block:: python
+
+   obs.fit_arc(concavity_penalty=False)
+
 **"Result varies between photos"**
 
 Normal! Try:
