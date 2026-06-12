@@ -20,6 +20,7 @@ Uses EXIF data and a phone camera database.
 
 from PIL import Image
 from PIL.ExifTags import TAGS
+import math
 import json
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -323,6 +324,277 @@ CAMERA_DB = {
                 "sensor_width": 2.76,  # Typical 2MP macro
                 "sensor_height": 2.07,
                 "notes": "2MP macro, fixed focus 4cm",
+            },
+        ],
+    },
+    # Samsung friendly-name aliases + recent models. Samsung EXIF reports either
+    # the SM-model code or the marketing name depending on firmware/region, so
+    # both are keyed. Dims marked "nominal" reuse a sibling's sensor class and
+    # should be spot-checked; the calc path (high confidence) is the primary
+    # source, so these only apply when the 35mm-equivalent tag is absent.
+    "Galaxy S22": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.4,
+                "aperture": 1.8,
+                "sensor_width": 7.6,
+                "sensor_height": 5.7,
+                "notes": "50MP main (S22/S22+); alias of SM-S906E",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 7.0,
+                "aperture": 2.4,
+                "sensor_width": 5.16,
+                "sensor_height": 3.87,
+                "notes": "10MP 3x optical zoom",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.2,
+                "aperture": 2.2,
+                "sensor_width": 6.4,
+                "sensor_height": 4.8,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    "Galaxy S22 Ultra": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.4,
+                "aperture": 1.8,
+                "sensor_width": 8.0,
+                "sensor_height": 6.0,
+                "notes": "108MP main; alias of SM-S908E",
+            },
+            {
+                "name": "telephoto_3x",
+                "focal_length_mm": 6.9,
+                "aperture": 2.4,
+                "sensor_width": 5.16,
+                "sensor_height": 3.87,
+                "notes": "10MP 3x optical zoom",
+            },
+            {
+                "name": "telephoto_10x",
+                "focal_length_mm": 23.0,
+                "aperture": 4.9,
+                "sensor_width": 4.32,
+                "sensor_height": 3.24,
+                "notes": "10MP 10x optical zoom",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.2,
+                "aperture": 2.2,
+                "sensor_width": 6.4,
+                "sensor_height": 4.8,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    "Galaxy S23": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.4,
+                "aperture": 1.8,
+                "sensor_width": 7.6,
+                "sensor_height": 5.7,
+                "notes": "50MP main, 1/1.56in (shares S22 main sensor class)",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 7.0,
+                "aperture": 2.4,
+                "sensor_width": 5.16,
+                "sensor_height": 3.87,
+                "notes": "10MP 3x optical zoom",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.2,
+                "aperture": 2.2,
+                "sensor_width": 6.4,
+                "sensor_height": 4.8,
+                "notes": "12MP ultra-wide",
+            },
+        ],
+    },
+    "Galaxy A56": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.5,
+                "aperture": 1.8,
+                "sensor_width": 7.6,
+                "sensor_height": 5.7,
+                "notes": "50MP main, 1/1.56in (nominal - shares S22 main sensor class)",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 2.2,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide (nominal)",
+            },
+        ],
+    },
+    "Galaxy A54": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 5.2,
+                "aperture": 1.8,
+                "sensor_width": 7.6,
+                "sensor_height": 5.7,
+                "notes": "50MP main, 1/1.56in (nominal - shares S22 main sensor class)",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 2.2,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide (nominal)",
+            },
+        ],
+    },
+    "Pixel 8": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.9,
+                "aperture": 1.68,
+                "sensor_width": 8.0,
+                "sensor_height": 6.0,
+                "notes": "50MP main (nominal - shares Pixel main sensor class)",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.2,
+                "aperture": 2.2,
+                "sensor_width": 6.4,
+                "sensor_height": 4.8,
+                "notes": "12MP ultra-wide (nominal)",
+            },
+        ],
+    },
+    "Pixel 8 Pro": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.9,
+                "aperture": 1.68,
+                "sensor_width": 8.0,
+                "sensor_height": 6.0,
+                "notes": "50MP main (nominal - shares Pixel main sensor class)",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 12.0,
+                "aperture": 2.8,
+                "sensor_width": 5.76,
+                "sensor_height": 4.29,
+                "notes": "48MP 5x optical zoom (nominal)",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.2,
+                "aperture": 1.95,
+                "sensor_width": 6.4,
+                "sensor_height": 4.8,
+                "notes": "48MP ultra-wide (nominal)",
+            },
+        ],
+    },
+    "Pixel 9 Pro": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.9,
+                "aperture": 1.68,
+                "sensor_width": 8.0,
+                "sensor_height": 6.0,
+                "notes": "50MP main (nominal - shares Pixel main sensor class)",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 12.0,
+                "aperture": 2.8,
+                "sensor_width": 5.76,
+                "sensor_height": 4.29,
+                "notes": "48MP 5x optical zoom (nominal)",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.2,
+                "aperture": 1.7,
+                "sensor_width": 6.4,
+                "sensor_height": 4.8,
+                "notes": "48MP ultra-wide (nominal)",
+            },
+        ],
+    },
+    "iPhone 16": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.86,
+                "aperture": 1.6,
+                "sensor_width": 9.8,
+                "sensor_height": 7.35,
+                "notes": "48MP main (nominal - iPhone 48MP sensor class)",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 2.2,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP ultra-wide (nominal)",
+            },
+        ],
+    },
+    "iPhone 16 Pro": {
+        "type": "phone",
+        "cameras": [
+            {
+                "name": "main",
+                "focal_length_mm": 6.86,
+                "aperture": 1.78,
+                "sensor_width": 9.8,
+                "sensor_height": 7.35,
+                "notes": "48MP main (nominal - iPhone 48MP sensor class)",
+            },
+            {
+                "name": "telephoto",
+                "focal_length_mm": 15.0,
+                "aperture": 2.8,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "12MP 5x optical zoom (nominal)",
+            },
+            {
+                "name": "ultrawide",
+                "focal_length_mm": 2.0,
+                "aperture": 2.2,
+                "sensor_width": 5.68,
+                "sensor_height": 4.26,
+                "notes": "48MP ultra-wide (nominal)",
             },
         ],
     },
@@ -771,22 +1043,39 @@ def apply_orientation_correction(
 
 
 def calculate_sensor_dimensions(
-    focal_length_mm: float, focal_length_35mm: float
+    focal_length_mm: float,
+    focal_length_35mm: float,
+    image_aspect_ratio: Optional[float] = None,
 ) -> Tuple[float, float]:
     """
-    Calculate sensor dimensions from focal length ratio.
-    Uses the relationship: focal_length_mm / sensor_width = focal_length_35mm / 36mm
+    Calculate sensor dimensions from the 35mm-equivalent focal length.
+
+    A 35mm-equivalent focal length encodes the DIAGONAL angle of view, so the
+    crop factor is a diagonal ratio. This recovers the sensor diagonal and
+    splits it at the image's aspect ratio to obtain width and height.
+
+    Args:
+        focal_length_mm: Physical focal length (mm).
+        focal_length_35mm: 35mm-equivalent focal length (mm).
+        image_aspect_ratio: long_side / short_side of the captured image (e.g.
+            1.5 for a 3:2 DSLR frame, 1.333 for a 4:3 phone frame). When None,
+            defaults to 3:2, so a unity crop factor reproduces the 36 × 24 mm
+            full-frame reference sensor.
+
+    Returns:
+        Tuple of (sensor_width_mm, sensor_height_mm), width on the long axis.
     """
-    # 35mm film dimensions
-    full_frame_width = 36.0  # mm
-    full_frame_height = 24.0  # mm
+    full_frame_diag = math.hypot(36.0, 24.0)  # 43.267 mm
 
-    # Calculate crop factor
+    # Crop factor is a diagonal ratio (the standard EXIF "equivalent" convention).
     crop_factor = focal_length_35mm / focal_length_mm
+    sensor_diag = full_frame_diag / crop_factor
 
-    # Calculate sensor dimensions
-    sensor_width = full_frame_width / crop_factor
-    sensor_height = full_frame_height / crop_factor
+    # Split the diagonal at the image's aspect ratio (long axis = width).
+    aspect = image_aspect_ratio if image_aspect_ratio else 36.0 / 24.0
+    norm = math.hypot(aspect, 1.0)
+    sensor_width = sensor_diag * aspect / norm
+    sensor_height = sensor_diag / norm
 
     return sensor_width, sensor_height
 
@@ -877,6 +1166,90 @@ def infer_camera_type(exif_data: Dict) -> Optional[str]:
     return None
 
 
+NATIVE_ASPECT_RATIOS = (4.0 / 3.0, 3.0 / 2.0)
+ASPECT_TOLERANCE = 0.04
+
+
+def _exif_float(value) -> Optional[float]:
+    """Coerce an EXIF value (rational tuple, str, or number) to float."""
+    if value is None:
+        return None
+    if isinstance(value, tuple) and len(value) == 2 and value[1]:
+        return value[0] / value[1]
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def camera_sanity_warnings(
+    exif_data: Dict,
+    image_width_px: Optional[int],
+    image_height_px: Optional[int],
+) -> List[str]:
+    """
+    Flag conditions that make the EXIF-derived field of view unreliable.
+
+    The derived sensor width assumes the image uses the full sensor at its
+    native aspect ratio with no zoom. This checks the cases that break that:
+    digital zoom, a non-native capture aspect ratio, and a decoded aspect ratio
+    that disagrees with the camera-recorded EXIF dimensions (a sign the image
+    was cropped after capture).
+
+    Args:
+        exif_data: Parsed EXIF dictionary.
+        image_width_px: Decoded image width in pixels.
+        image_height_px: Decoded image height in pixels.
+
+    Returns:
+        A list of human-readable warnings (empty if nothing looked wrong).
+    """
+    warnings: List[str] = []
+
+    # Digital zoom changes the field of view without updating the focal-length
+    # tags, so the derived field of view no longer matches the image.
+    zoom = _exif_float(exif_data.get("DigitalZoomRatio"))
+    if zoom is not None and zoom > 1.01:
+        warnings.append(
+            f"Digital zoom {zoom:.1f}x detected - EXIF focal length / field "
+            "of view is unreliable."
+        )
+
+    if not image_width_px or not image_height_px:
+        return warnings
+
+    # A non-native capture aspect ratio means a cropped or non-standard mode,
+    # so the full-sensor width overstates the field of view.
+    aspect = max(image_width_px, image_height_px) / min(image_width_px, image_height_px)
+    is_native = any(
+        abs(aspect / ratio - 1.0) < ASPECT_TOLERANCE for ratio in NATIVE_ASPECT_RATIOS
+    )
+    if not is_native:
+        warnings.append(
+            f"Unusual aspect ratio {aspect:.3f}:1 - image may be cropped or "
+            "shot in a non-native mode; EXIF field of view may be too wide."
+        )
+
+    # If the camera recorded its own output dimensions, a different decoded
+    # aspect means the image was cropped after capture.
+    exif_w = _exif_float(exif_data.get("PixelXDimension")) or _exif_float(
+        exif_data.get("ExifImageWidth")
+    )
+    exif_h = _exif_float(exif_data.get("PixelYDimension")) or _exif_float(
+        exif_data.get("ExifImageHeight")
+    )
+    if exif_w and exif_h:
+        exif_aspect = max(exif_w, exif_h) / min(exif_w, exif_h)
+        if abs(exif_aspect / aspect - 1.0) > ASPECT_TOLERANCE:
+            warnings.append(
+                "Decoded aspect differs from the camera-recorded EXIF "
+                "dimensions - likely cropped after capture; EXIF field of "
+                "view will be too wide."
+            )
+
+    return warnings
+
+
 def extract_camera_parameters(image_path: str) -> Dict:
     """
     Automatically extract all camera parameters from any camera image.
@@ -908,6 +1281,7 @@ def extract_camera_parameters(image_path: str) -> Dict:
         "camera_model": None,
         "camera_type": None,
         "confidence": "low",
+        "warnings": [],
     }
 
     # Get image dimensions (always available)
@@ -931,7 +1305,35 @@ def extract_camera_parameters(image_path: str) -> Dict:
     focal_length_35mm = get_focal_length_35mm_equiv(exif_data)
     params["focal_length_mm"] = focal_length_mm
 
-    # Strategy 1: Known camera model (highest confidence)
+    # Reliability checks on the EXIF field of view (zoom, crop, odd aspect).
+    params["warnings"] = camera_sanity_warnings(
+        exif_data, params["image_width_px"], params["image_height_px"]
+    )
+
+    # Strategy 1: Calculate from the 35mm-equivalent focal length — the camera's
+    # own reported field of view. Preferred over the DB so per-device EXIF wins.
+    if focal_length_mm and focal_length_35mm:
+        image_aspect_ratio = None
+        if params["image_width_px"] and params["image_height_px"]:
+            image_aspect_ratio = max(
+                params["image_width_px"], params["image_height_px"]
+            ) / min(params["image_width_px"], params["image_height_px"])
+        sensor_width, sensor_height = calculate_sensor_dimensions(
+            focal_length_mm, focal_length_35mm, image_aspect_ratio
+        )
+        params["sensor_width_mm"] = sensor_width
+        params["sensor_height_mm"] = sensor_height
+        params["camera_type"] = "calculated"
+        # High confidence: this uses the camera's own reported field of view
+        # (the diagonal 35mm-equivalent), preferred over the generic DB.
+        params["confidence"] = "high"
+        logger.info(
+            f"Calculated sensor dimensions from focal length ratio: {sensor_width:.1f}mm × {sensor_height:.1f}mm"
+        )
+        return apply_orientation_correction(params, exif_data)
+
+    # Strategy 2: Known camera model — used when the 35mm-equivalent tag is
+    # absent (common on DSLRs and older compacts).
     if camera_model and camera_model in CAMERA_DB:
         camera_data = CAMERA_DB[camera_model]
 
@@ -975,26 +1377,19 @@ def extract_camera_parameters(image_path: str) -> Dict:
                     * params["image_width_px"]
                 )
 
+            module_name = camera_module.get("name") or ""
+            if "ultra" in module_name.lower() or "wide" in module_name.lower():
+                params["warnings"].append(
+                    f"Matched the '{module_name}' lens - wide-angle distortion "
+                    "may bias the limb curvature."
+                )
+
             params["camera_type"] = camera_data["type"]
             params["confidence"] = "high"
             logger.info(
                 f"Detected known camera: {camera_model} ({camera_data['type']})"
             )
             return apply_orientation_correction(params, exif_data)
-
-    # Strategy 2: Calculate from focal length ratio (medium-high confidence)
-    if focal_length_mm and focal_length_35mm:
-        sensor_width, sensor_height = calculate_sensor_dimensions(
-            focal_length_mm, focal_length_35mm
-        )
-        params["sensor_width_mm"] = sensor_width
-        params["sensor_height_mm"] = sensor_height
-        params["camera_type"] = "calculated"
-        params["confidence"] = "medium"
-        logger.info(
-            f"Calculated sensor dimensions from focal length ratio: {sensor_width:.1f}mm × {sensor_height:.1f}mm"
-        )
-        return apply_orientation_correction(params, exif_data)
 
     # Strategy 3: Infer from camera type (medium-low confidence)
     inferred_type = infer_camera_type(exif_data)

@@ -54,6 +54,7 @@ get_gps_altitude = camera_module.get_gps_altitude
 get_initial_radius = camera_module.get_initial_radius
 create_config_from_image = camera_module.create_config_from_image
 calculate_sensor_dimensions = camera_module.calculate_sensor_dimensions
+camera_sanity_warnings = camera_module.camera_sanity_warnings
 get_focal_length_mm = camera_module.get_focal_length_mm
 get_focal_length_35mm_equiv = camera_module.get_focal_length_35mm_equiv
 
@@ -176,6 +177,16 @@ class TestGetCameraModel:
         model = get_camera_model(exif)
         assert model == "iPhone 13"
 
+    def test_samsung_friendly_name_resolves(self):
+        """Real Samsung EXIF reports the marketing name, not the SM- code."""
+        exif = {"Make": "samsung", "Model": "Galaxy A56 5G"}
+        assert get_camera_model(exif) == "Galaxy A56"
+
+    def test_longest_partial_match_wins(self):
+        """S22 Ultra must beat the shorter 'Galaxy S22' key."""
+        exif = {"Make": "samsung", "Model": "Galaxy S22 Ultra 5G"}
+        assert get_camera_model(exif) == "Galaxy S22 Ultra"
+
 
 class TestSensorStatistics:
     """Test sensor dimension statistics by camera type."""
@@ -260,6 +271,26 @@ class TestCalculateSensorDimensions:
         width, height = calculate_sensor_dimensions(50.0, 50.0)
         assert abs(width - 36.0) < 0.1
         assert abs(height - 24.0) < 0.1
+
+    def test_aspect_ratio_splits_the_diagonal(self):
+        """A 4:3 frame yields a narrower sensor than the 3:2 default.
+
+        Both share the same recovered diagonal; only the width/height split
+        differs. The 4:3 width must be ~4% under the 3:2 default width.
+        """
+        diag = math.hypot(36.0, 24.0) * 6.86 / 24.0  # crop factor 24/6.86
+
+        w_default, h_default = calculate_sensor_dimensions(6.86, 24.0)
+        w_43, h_43 = calculate_sensor_dimensions(6.86, 24.0, 4.0 / 3.0)
+
+        # Diagonal is preserved regardless of the split.
+        assert abs(math.hypot(w_default, h_default) - diag) < 1e-6
+        assert abs(math.hypot(w_43, h_43) - diag) < 1e-6
+
+        # 4:3 split is narrower (and taller) than the 3:2 default.
+        assert w_43 < w_default
+        assert abs(w_default / w_43 - 1.0) < 0.05  # ~4% narrower
+        assert abs(w_43 - diag * (4.0 / 5.0)) < 1e-6  # 4:3 → width = 0.8·diag
 
 
 class TestGetInitialRadius:
@@ -385,9 +416,56 @@ class TestExtractCameraParameters:
 
         params = extract_camera_parameters("dummy.jpg")
 
-        assert params["confidence"] == "medium"
+        assert params["confidence"] == "high"
         assert params["camera_type"] == "calculated"
         assert 7.0 < params["sensor_width_mm"] < 8.5  # Calculated value
+
+    @patch.object(camera_module, "extract_exif")
+    @patch.object(camera_module, "get_image_dimensions")
+    def test_calc_takes_precedence_over_db(self, mock_dims, mock_exif):
+        """A known camera with a 35mm-equiv tag uses the calc path, not the DB.
+
+        The camera's own reported field of view is preferred over the stored
+        database entry, so camera_type is 'calculated' (not the DB's 'compact').
+        Both paths are high confidence.
+        """
+        mock_dims.return_value = (4000, 3000)
+        mock_exif.return_value = {
+            "Make": "Canon",
+            "Model": "PowerShot G12",  # in CAMERA_DB
+            "FocalLength": (61, 10),
+            "FocalLengthIn35mmFilm": 28,  # ...but the 35mm tag wins
+        }
+
+        params = extract_camera_parameters("dummy.jpg")
+
+        assert params["camera_type"] == "calculated"
+        assert params["confidence"] == "high"
+
+
+class TestCameraSanityWarnings:
+    """Test the EXIF field-of-view reliability guard."""
+
+    def test_clean_4_3_capture_no_warnings(self):
+        assert camera_sanity_warnings({"DigitalZoomRatio": 1}, 4000, 3000) == []
+
+    def test_clean_3_2_capture_no_warnings(self):
+        assert camera_sanity_warnings({}, 6000, 4000) == []
+
+    def test_digital_zoom_flagged(self):
+        warnings = camera_sanity_warnings({"DigitalZoomRatio": (2, 1)}, 4000, 3000)
+        assert any("zoom" in w.lower() for w in warnings)
+
+    def test_non_native_aspect_flagged(self):
+        warnings = camera_sanity_warnings({}, 4000, 2250)  # 16:9
+        assert any("aspect ratio" in w.lower() for w in warnings)
+
+    def test_cropped_after_capture_flagged(self):
+        # Camera recorded 4:3, but the decoded image is 3:2 -> cropped.
+        warnings = camera_sanity_warnings(
+            {"PixelXDimension": 4000, "PixelYDimension": 3000}, 6000, 4000
+        )
+        assert any("cropped after capture" in w.lower() for w in warnings)
 
 
 class TestGPSAltitude:
@@ -1047,8 +1125,8 @@ class TestAdditionalEdgeCases:
 
         params = extract_camera_parameters("test.jpg")
 
-        # Should use calculated sensor dimensions
-        assert params["confidence"] == "medium"
+        # Should use calculated sensor dimensions (calc path is high confidence)
+        assert params["confidence"] == "high"
         assert params["camera_type"] == "calculated"
         assert params["sensor_width_mm"] is not None
         assert params["sensor_height_mm"] is not None

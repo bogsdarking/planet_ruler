@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Sensor dimensions calculated from the 35mm-equivalent focal length were ~4% too wide on
+  4:3 sensors. `calculate_sensor_dimensions` split the equivalent focal length as a 3:2 width
+  ratio (`36 / crop_factor`), but the equivalent focal length encodes the *diagonal* field of
+  view. It now recovers the sensor diagonal and splits it at the image's true aspect ratio
+  (taken from the decoded image dimensions, defaulting to the 3:2 full-frame reference).
+
+### Changed
+
+- `extract_camera_parameters` now prefers the 35mm-equivalent calculation over the camera
+  database (the two strategies were reordered). The camera's own reported field of view is
+  trusted ahead of a stored DB entry; the database is the fallback for images lacking the
+  35mm-equivalent tag (common on DSLRs and older compacts).
+- The calculated-sensor path is now reported as `high` confidence rather than `medium`,
+  reflecting that it is the primary source.
+
+### Added
+
+- `camera_sanity_warnings()` flags conditions that make the EXIF-derived field of view
+  unreliable: digital zoom, a non-native capture aspect ratio, and a decoded aspect that
+  disagrees with the camera-recorded EXIF dimensions (cropped after capture). Surfaced via
+  `params["warnings"]` from `extract_camera_parameters`.
+- Camera database now keys Samsung devices by marketing name (e.g. "Galaxy A56",
+  "Galaxy S22 Ultra") in addition to `SM-` model codes, since Samsung EXIF reports the
+  marketing name on many devices. New entries for Galaxy S22 / S22 Ultra / S23 / A54 / A56,
+  Pixel 8 / 8 Pro / 9 Pro, and iPhone 16 / 16 Pro (sensor dimensions for new models reuse a
+  sibling's sensor class and are marked nominal in their notes).
+
 ## [2.0.1] - 2026-06-03
 
 ### Added
